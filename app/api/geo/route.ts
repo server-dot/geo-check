@@ -5,10 +5,15 @@ import {
   type RobotsStatus,
 } from '@/lib/geo-ai-crawlers';
 import { analyzeContentVisibility, type ContentVisibility } from '@/lib/geo-content-visibility';
+import { detectWaf, type WafHint } from '@/lib/geo-waf-fingerprint';
+import { createAuditJob, updateAuditJob, type EngineResult } from '@/lib/geo-audit-jobs';
+import { crawlSite } from '@/lib/geo-audit-crawler';
+import { aggregateAuditChecks } from '@/lib/geo-audit-aggregate';
 
-// GEO 健檢：抓目標網站的 robots.txt 判斷 AI 爬蟲能不能進來，
-// 再抓一次首頁原始 HTML 看 AI 實際讀得到什麼內容（不執行 JS，就是 AI 看到的版本）。
-// 兩個請求並行，同步回應（很快，不用背景 job + 輪詢）。
+// GEO 深度健檢：先跑「AI 引擎可達性」這層（robots.txt、內容可視性、Content Signals、
+// llms.txt——秒級，這是我們的差異化核心），再跑多頁爬蟲＋規則＋AI 語意判斷（Schema、E-E-A-T）
+// 這層要幾十秒到兩分鐘。後面這層太慢不能同步回應，所以整支改成背景 job：
+// POST 立刻回 jobId，實際工作在背景跑，前端輪詢 /api/geo/status 拿進度與結果。
 export const maxDuration = 30;
 
 const UA =
@@ -50,6 +55,7 @@ interface RobotsOutcome {
   text: string;
   url: string;
   note: string;
+  wafHint: WafHint | null;
 }
 
 async function fetchRobots(origin: string): Promise<RobotsOutcome> {
@@ -69,19 +75,21 @@ async function fetchRobots(origin: string): Promise<RobotsOutcome> {
         text: '',
         url,
         note: `伺服器回傳 HTML 而不是純文字（HTTP ${res.status}），這不是有效的 robots.txt`,
+        wafHint: detectWaf(res.headers),
       };
     }
-    return { status: 'found', text, url, note: '' };
+    return { status: 'found', text, url, note: '', wafHint: null };
   }
 
   if (res.status === 404 || res.status === 410) {
     // 真的沒有 robots.txt。依規範代表不設限，這時候的綠燈是正確的
-    return { status: 'none', text: '', url, note: `HTTP ${res.status}，網站確實沒有放 robots.txt` };
+    return { status: 'none', text: '', url, note: `HTTP ${res.status}，網站確實沒有放 robots.txt`, wafHint: null };
   }
 
   // 403 / 429 / 5xx：讀不到不等於沒設限。台灣不少網站（104、天下）用 WAF 擋掉
   // server-side fetch，若當成「沒有 robots.txt」就會給出「AI 全部可存取」的假綠燈，
   // 而實際上它們是 Disallow: / 擋掉所有 AI bot，結論完全相反。
+  // 這裡順手從 response headers 辨識是哪家 WAF/CDN，把「無法判定」變成具體可操作的建議。
   return {
     status: 'unreachable',
     text: '',
@@ -90,6 +98,7 @@ async function fetchRobots(origin: string): Promise<RobotsOutcome> {
       res.status === 403 || res.status === 429
         ? `HTTP ${res.status}，網站的防爬／WAF 機制擋下了我們的檢測`
         : `HTTP ${res.status}，伺服器沒有正常回應`,
+    wafHint: detectWaf(res.headers),
   };
 }
 
@@ -122,6 +131,35 @@ async function checkLlmsTxt(origin: string): Promise<boolean | null> {
   }
 }
 
+// 「AI 引擎可達性」這層：robots.txt bot 存取、內容可視性、Content Signals、llms.txt。
+// 秒級跑完，是原本 geo-check MVP 的四項檢測，維持同一套邏輯不變。
+async function runEngineChecks(origin: string): Promise<EngineResult> {
+  const [robots, homepage, hasLlmsTxt] = await Promise.all([
+    fetchRobots(origin),
+    fetchHomepage(origin),
+    checkLlmsTxt(origin),
+  ]);
+
+  const results = checkAiCrawlerAccess(robots.text, robots.status);
+  const visibility: ContentVisibility | null = homepage.html
+    ? analyzeContentVisibility(homepage.html)
+    : null;
+  const contentSignals = robots.status === 'unreachable' ? null : parseContentSignals(robots.text);
+
+  return {
+    origin,
+    robotsUrl: robots.url,
+    robotsStatus: robots.status,
+    robotsNote: robots.note,
+    wafHint: robots.wafHint,
+    results,
+    visibility,
+    visibilityNote: homepage.note,
+    contentSignals,
+    hasLlmsTxt,
+  };
+}
+
 export async function POST(req: NextRequest) {
   let input: string | undefined;
   try {
@@ -144,39 +182,40 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '網址格式不正確' }, { status: 400 });
   }
 
-  let robots: RobotsOutcome;
-  let homepage: { html: string | null; note: string };
-  let hasLlmsTxt: boolean | null;
+  // 先跑一次快速的連線檢查：robots.txt 連線層都失敗代表整個網站連不上，
+  // 沒有必要開一個註定失敗的背景 job 讓使用者空等。
+  let engine: EngineResult;
   try {
-    [robots, homepage, hasLlmsTxt] = await Promise.all([
-      fetchRobots(origin),
-      fetchHomepage(origin),
-      checkLlmsTxt(origin),
-    ]);
+    engine = await runEngineChecks(origin);
   } catch (err) {
-    // robots.txt 連線層就失敗，代表整個網站連不上，沒有什麼可以報告的
     return NextResponse.json({ error: describeFetchError(err, host) }, { status: 502 });
   }
 
-  const results = checkAiCrawlerAccess(robots.text, robots.status);
-  const visibility: ContentVisibility | null = homepage.html
-    ? analyzeContentVisibility(homepage.html)
-    : null;
-  // 只有「讀不到」時才不談 Content-Signal——那是狀態不明，不能說人家沒宣告。
-  // 沒有 robots.txt（none）則確定沒宣告，照樣給出說明。
-  const contentSignals =
-    robots.status === 'unreachable' ? null : parseContentSignals(robots.text);
+  const job = createAuditJob(origin);
+  updateAuditJob(job.id, { status: 'crawling', message: '開始爬取網站…', engine });
 
-  return NextResponse.json({
-    ok: true,
-    origin,
-    robotsUrl: robots.url,
-    robotsStatus: robots.status,
-    robotsNote: robots.note,
-    results,
-    visibility,
-    visibilityNote: homepage.note,
-    contentSignals,
-    hasLlmsTxt,
-  });
+  // ── 背景執行（不 await，讓請求先回 jobId）──
+  void (async () => {
+    try {
+      const crawl = await crawlSite(origin, {
+        onProgress: (p) =>
+          updateAuditJob(job.id, {
+            status: 'crawling',
+            progress: p,
+            message: `爬取中：已爬 ${p.crawled} 頁（發現 ${p.discovered} 頁，上限 ${p.cap}）`,
+          }),
+      });
+      updateAuditJob(job.id, { status: 'analyzing', message: `已爬 ${crawl.pages.length} 頁，彙總分析中…` });
+      const audit = await aggregateAuditChecks(crawl, (msg) => updateAuditJob(job.id, { status: 'analyzing', message: msg }));
+      updateAuditJob(job.id, {
+        status: 'completed',
+        result: audit,
+        message: `完成，爬取 ${crawl.pages.length} 頁、產出 ${audit.length} 項深度檢測`,
+      });
+    } catch (e) {
+      updateAuditJob(job.id, { status: 'failed', error: e instanceof Error ? e.message : String(e), message: '深度健檢失敗' });
+    }
+  })();
+
+  return NextResponse.json({ ok: true, jobId: job.id });
 }
