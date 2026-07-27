@@ -6,6 +6,8 @@ import {
 } from '@/lib/geo-ai-crawlers';
 import { analyzeContentVisibility, type ContentVisibility } from '@/lib/geo-content-visibility';
 import { detectWaf, type WafHint } from '@/lib/geo-waf-fingerprint';
+import { probeBotAccess, type ProbeResult } from '@/lib/geo-bot-probe';
+import { checkBrandVisibility } from '@/lib/geo-brand-visibility';
 import { createAuditJob, updateAuditJob, type EngineResult } from '@/lib/geo-audit-jobs';
 import { crawlSite } from '@/lib/geo-audit-crawler';
 import { aggregateAuditChecks } from '@/lib/geo-audit-aggregate';
@@ -140,10 +142,34 @@ async function runEngineChecks(origin: string): Promise<EngineResult> {
     checkLlmsTxt(origin),
   ]);
 
-  const results = checkAiCrawlerAccess(robots.text, robots.status);
+  const policyResults = checkAiCrawlerAccess(robots.text, robots.status);
   const visibility: ContentVisibility | null = homepage.html
     ? analyzeContentVisibility(homepage.html)
     : null;
+
+  // 兩個都要打外部網路、彼此不相依，並行跑省時間：
+  // 1. 政策層判定「允許」的 bot，真的用它的 User-Agent 打一次網站，把推論變成實測
+  //    （政策已經擋掉的不用測——守規矩的爬蟲本來就不會硬闖）
+  // 2. 拿偵測到的品牌名稱去問 Perplexity「你知道這是誰嗎」，看回答有沒有引用自己的網站——
+  //    比「AI 讀不讀得到」更進一步：「AI 真的知不知道你」
+  const toVerify = policyResults.filter((r) => r.status === 'allowed');
+  const [probes, brandVisibility] = await Promise.all([
+    toVerify.length > 0 ? probeBotAccess(origin, toVerify.map((r) => r.ua)) : Promise.resolve(new Map<string, ProbeResult>()),
+    checkBrandVisibility(visibility?.title ?? '', origin),
+  ]);
+
+  const results = policyResults.map((r) => {
+    const probe = probes.get(r.ua);
+    if (!probe) return r;
+    if (probe.reachable === false) {
+      return { ...r, status: 'mismatch' as const, matchedRule: `${r.matchedRule}；${probe.note}——robots.txt 允許，但 WAF 實際擋下` };
+    }
+    if (probe.reachable === true) {
+      return { ...r, matchedRule: `${r.matchedRule}（已實測驗證可達）` };
+    }
+    return { ...r, matchedRule: `${r.matchedRule}（${probe.note}）` };
+  });
+
   const contentSignals = robots.status === 'unreachable' ? null : parseContentSignals(robots.text);
 
   return {
@@ -157,6 +183,7 @@ async function runEngineChecks(origin: string): Promise<EngineResult> {
     visibilityNote: homepage.note,
     contentSignals,
     hasLlmsTxt,
+    brandVisibility,
   };
 }
 

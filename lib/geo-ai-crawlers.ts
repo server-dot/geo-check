@@ -6,7 +6,11 @@
 // 三態而非布林：讀不到 robots.txt 時必須能表達「無法判定」。
 // 若只有 allowed true/false，抓不到的情況會被迫歸到其中一邊，
 // 而歸到 allowed 就是給假綠燈——這正是 104、天下這類 WAF 網站會踩到的坑。
-export type BotStatus = 'allowed' | 'blocked' | 'unknown';
+//
+// mismatch 是第四種狀態，這個檔案本身（純函式、只讀 robots.txt 文字）不會產生它——
+// 是 route 層拿 bot 的實際 User-Agent 去打網站驗證後才可能出現的落差：
+// robots.txt 說允許，但 WAF 實際上把這個 UA 擋在門外，網站主自己可能都不知道。
+export type BotStatus = 'allowed' | 'blocked' | 'unknown' | 'mismatch';
 
 // robots.txt 的抓取結果：真的沒有（none）跟我們讀不到（unreachable）意義完全不同，不能混為一談。
 export type RobotsStatus = 'found' | 'none' | 'unreachable';

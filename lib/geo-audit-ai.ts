@@ -54,15 +54,20 @@ ${input.mainText || '（抓不到內文）'}
 
 請判斷：
 1. schema（結構化數據是否足夠）：檢查是否具備常見且必要的 Schema（如電商應有 Product、在地商家應有 LocalBusiness 且欄位完整、文章頁應有 Article、導覽應有 BreadcrumbList）。缺關鍵 Schema 或內容明顯不足→"fail"；有但可再補強→"warn"；充足→"ok"。
-2. eeat（E-E-A-T 權威訊號）：檢查內文是否有作者資訊、專業證照、獲獎紀錄、媒體報導、真實客戶評論、關於我們等信任訊號。幾乎沒有→"fail"；有一些但薄弱→"warn"；充足→"ok"。
+2. eeat（E-E-A-T 權威訊號）：逐項檢查內文是否出現以下四類信任訊號，每項標記「有」或「無」——
+   - 作者資訊（真實姓名、職稱、簡介）
+   - 專業證照／資格
+   - 媒體報導／外部第三方引用
+   - 可查證的客戶評論／實績（不是自我宣稱的「成功案例」文案，要有具體、可核實的細節）
+   「有」的項目要引用內文原句當證據；「無」的項目直接寫「無」。四項都無或幾乎都無→"fail"；有一兩項但薄弱→"warn"；多數項目充足→"ok"。
 
-只回傳 JSON，格式如下（message 用繁體中文、一句話、具體指出依據）：
-{"schema":{"status":"ok|warn|fail","message":"..."},"eeat":{"status":"ok|warn|fail","message":"..."}}`;
+只回傳 JSON，格式如下（message 用繁體中文、一句話總結；eeat 的 evidence 用「項目：有/無（證據或說明）」逐項列出，四項用「｜」分隔）：
+{"schema":{"status":"ok|warn|fail","message":"..."},"eeat":{"status":"ok|warn|fail","message":"...","evidence":"作者資訊：無｜專業證照：無｜媒體報導：無｜客戶評論：無（僅自稱『成功案例』，無可查證細節）"}}`;
 }
 
 function parseAiJson(text: string): {
   schema?: { status?: string; message?: string };
-  eeat?: { status?: string; message?: string };
+  eeat?: { status?: string; message?: string; evidence?: string };
 } | null {
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) return null;
@@ -111,6 +116,7 @@ export async function runAiChecks(input: AiAuditInput): Promise<CheckResult[]> {
       ...EEAT,
       status: normStatus(parsed.eeat?.status),
       advice: parsed.eeat?.message ?? '（AI 未提供說明）',
+      evidence: parsed.eeat?.evidence,
     },
   ];
 }

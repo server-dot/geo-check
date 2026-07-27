@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-type BotStatus = "allowed" | "blocked" | "unknown";
+type BotStatus = "allowed" | "blocked" | "unknown" | "mismatch";
 
 interface AiBotResult {
   ua: string;
@@ -46,6 +46,15 @@ interface WafHint {
   advice: string;
 }
 
+interface BrandVisibilityResult {
+  brandName: string;
+  query: string;
+  answer: string;
+  citedSelf: boolean;
+  citations: { url: string; title: string; isSelf: boolean }[];
+  advice: string;
+}
+
 interface EngineResult {
   origin: string;
   robotsUrl: string;
@@ -57,6 +66,7 @@ interface EngineResult {
   visibilityNote: string;
   contentSignals: ContentSignals | null;
   hasLlmsTxt: boolean | null;
+  brandVisibility: BrandVisibilityResult | null;
 }
 
 // 深度健檢單項（對應後端 CheckResult）
@@ -101,6 +111,7 @@ const BADGE: Record<BotStatus, { text: string; className: string }> = {
   allowed: { text: "可存取", className: "border-green-200 bg-green-50 text-green-700" },
   blocked: { text: "被擋", className: "border-red-200 bg-red-50 text-red-700" },
   unknown: { text: "無法判定", className: "border-gray-200 bg-gray-50 text-gray-500" },
+  mismatch: { text: "政策允許但實測被擋", className: "border-orange-200 bg-orange-50 text-orange-700" },
 };
 
 const CHECK_UI: Record<CheckStatus, { badge: string; text: string }> = {
@@ -108,6 +119,102 @@ const CHECK_UI: Record<CheckStatus, { badge: string; text: string }> = {
   warn: { badge: "bg-amber-50 text-amber-700 border-amber-200", text: "可優化" },
   fail: { badge: "bg-red-50 text-red-700 border-red-200", text: "需處理" },
 };
+
+// 狀態色（dataviz 技能的固定 status palette，不跟著品牌色跑）
+const STATUS_COLOR = { ok: "#0ca30c", warn: "#fab219", fail: "#d03b3b" } as const;
+const STATUS_LABEL = { ok: "正常", warn: "可優化", fail: "需處理" } as const;
+
+interface CategoryRow {
+  name: string;
+  ok: number;
+  warn: number;
+  fail: number;
+}
+
+// 把「AI 引擎」層（bot 存取、內容可視性、Content Signals、llms.txt）跟深度健檢
+// 的分類收斂成同一組列，每列一個分類的 ok/warn/fail 計數——用來畫總覽長條圖。
+function buildCategoryRows(engine?: EngineResult, audit?: CheckItem[]): CategoryRow[] {
+  const rows = new Map<string, CategoryRow>();
+  const bump = (name: string, status: CheckStatus) => {
+    const r = rows.get(name) ?? { name, ok: 0, warn: 0, fail: 0 };
+    r[status] += 1;
+    rows.set(name, r);
+  };
+
+  if (engine) {
+    const AI = "AI 引擎可達性";
+    for (const b of engine.results) {
+      bump(AI, b.status === "allowed" ? "ok" : b.status === "blocked" ? "fail" : "warn");
+    }
+    if (engine.visibility) {
+      bump(AI, engine.visibility.status === "ok" ? "ok" : engine.visibility.status === "thin" ? "warn" : "fail");
+    }
+    if (engine.contentSignals) {
+      bump(AI, engine.contentSignals.declared ? "ok" : "warn");
+    }
+    if (engine.hasLlmsTxt !== null && engine.hasLlmsTxt !== undefined) {
+      bump(AI, engine.hasLlmsTxt ? "ok" : "warn");
+    }
+  }
+
+  if (audit) {
+    for (const c of audit) bump(c.category, c.status);
+  }
+
+  // 問題最多的分類排最上面：一眼看出哪裡弱，不用逐條找
+  return [...rows.values()].sort((a, b) => b.fail - a.fail || b.warn - a.warn);
+}
+
+// 分類總覽：橫向堆疊長條，狀態色（不是分類色）。取代雷達圖——
+// 雷達圖的面積會失真，這裡改用有驗證過的形式做同樣的事：一眼看出哪個分類弱。
+function CategoryOverview({ rows }: { rows: CategoryRow[] }) {
+  const visible = rows.filter((r) => r.ok + r.warn + r.fail > 0);
+  if (visible.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-gray-500">檢測總覽</h2>
+        <div className="flex items-center gap-3 text-xs text-gray-500">
+          {(["ok", "warn", "fail"] as const).map((s) => (
+            <span key={s} className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: STATUS_COLOR[s] }} />
+              {STATUS_LABEL[s]}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="space-y-2.5">
+        {visible.map((row) => {
+          const total = row.ok + row.warn + row.fail;
+          const segs = (["fail", "warn", "ok"] as const).map((s) => ({ status: s, count: row[s] }));
+          return (
+            <div key={row.name} className="flex items-center gap-3">
+              <p className="w-28 shrink-0 truncate text-xs text-gray-600" title={row.name}>
+                {row.name}
+              </p>
+              <div className="flex h-4 flex-1 gap-[2px] overflow-hidden rounded-r bg-white">
+                {segs.map(
+                  (s) =>
+                    s.count > 0 && (
+                      <div
+                        key={s.status}
+                        tabIndex={0}
+                        title={`${row.name} · ${STATUS_LABEL[s.status]} ${s.count} 項`}
+                        className="h-full outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                        style={{ width: `${(s.count / total) * 100}%`, backgroundColor: STATUS_COLOR[s.status] }}
+                      />
+                    ),
+                )}
+              </div>
+              <p className="w-10 shrink-0 text-right text-xs tabular-nums text-gray-400">{total} 項</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function urlToPath(u: string) {
   return u.replace(/^https?:\/\/[^/]+/, "") || "/";
@@ -199,7 +306,7 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
       {[...groups.entries()].map(([category, rows]) => (
         <div key={category} className="mb-4">
           <p className="mb-1.5 text-xs font-semibold text-gray-400">{category}</p>
-          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
             <table className="w-full border-collapse text-sm">
               <tbody>
                 {rows.map((c) => {
@@ -229,6 +336,120 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// 各家 AI 爬蟲存取權限：全部結果一致時（常見情況——多數網站的 robots.txt
+// 對所有 bot 一視同仁）收成一行摘要，不要 8 列一字不差的重複；
+// 有落差時（真正有故事可講——部分被擋、政策跟實測不一致）才展開逐項列表。
+// 收合只是預設呈現方式，不是藏資訊——一鍵可以展開看明細。
+function BotAccessList({ results }: { results: AiBotResult[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const uniform = results.length > 0 && results.every((r) => r.status === results[0].status);
+
+  if (uniform && !expanded) {
+    const status = results[0].status;
+    return (
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm text-gray-700">
+            {results.length} 個 AI 爬蟲的結果一致：
+            <span className={`ml-2 rounded-full border px-3 py-1 text-sm font-medium ${BADGE[status].className}`}>
+              {BADGE[status].text}
+            </span>
+          </p>
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="shrink-0 text-xs text-blue-600 hover:underline"
+          >
+            查看逐項明細
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white shadow-sm">
+      {uniform && (
+        <div className="flex justify-end px-5 py-2">
+          <button
+            type="button"
+            onClick={() => setExpanded(false)}
+            className="text-xs text-blue-600 hover:underline"
+          >
+            收合
+          </button>
+        </div>
+      )}
+      {results.map((r) => (
+        <div key={r.ua} className="flex items-center justify-between px-5 py-4">
+          <div>
+            <p className="font-medium text-gray-900">{r.label}</p>
+            <p className="text-xs text-gray-400">
+              {r.ua} · {r.matchedRule}
+            </p>
+          </div>
+          <span className={`shrink-0 rounded-full border px-3 py-1 text-sm font-medium ${BADGE[r.status].className}`}>
+            {BADGE[r.status].text}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// 品牌能見度：不只講「AI 讀不讀得到你的網站」，而是真的去問 Perplexity
+// 「你知道這個品牌嗎」，讓使用者看到實際的回答文字跟引用來源——
+// 有沒有引用到自己的網域，是這整份健檢裡最直接的「有沒有效」證據。
+function BrandVisibilityCard({ result }: { result: BrandVisibilityResult }) {
+  return (
+    <div
+      className={`rounded-xl border p-6 shadow-sm ${
+        result.citedSelf ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"
+      }`}
+    >
+      <p className="text-lg font-bold text-gray-900">
+        {result.citedSelf ? "🟢 Perplexity 引用了你自己的網站" : "🟡 Perplexity 沒有引用你自己的網站"}
+      </p>
+      <p className="mt-2 text-sm leading-relaxed text-gray-600">{result.advice}</p>
+
+      <div className="mt-4">
+        <p className="text-xs font-medium text-gray-500">我們實際問的問題：</p>
+        <p className="mt-1 text-sm text-gray-800">「{result.query}」</p>
+      </div>
+
+      <div className="mt-4">
+        <p className="text-xs font-medium text-gray-500">Perplexity 的實際回答：</p>
+        <div className="mt-1 rounded-lg border border-gray-200 bg-white/70 p-3 text-sm leading-relaxed whitespace-pre-wrap text-gray-700">
+          {result.answer}
+        </div>
+      </div>
+
+      {result.citations.length > 0 && (
+        <div className="mt-4">
+          <p className="text-xs font-medium text-gray-500">引用來源：</p>
+          <ul className="mt-1 space-y-1">
+            {result.citations.map((c, i) => (
+              <li key={i} className="text-xs">
+                <a
+                  href={c.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`break-all underline underline-offset-2 ${
+                    c.isSelf ? "font-medium text-green-700" : "text-blue-600"
+                  }`}
+                >
+                  {c.isSelf && "★ "}
+                  {c.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
@@ -283,8 +504,11 @@ export default function GeoPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-      <div className="mx-auto max-w-2xl px-4 py-16">
-        <h1 className="text-center text-3xl font-bold text-gray-900">AI 搜尋能見度健檢</h1>
+      <div className="mx-auto max-w-3xl px-4 py-16">
+        <p className="text-center text-xs font-semibold tracking-wide text-blue-600 uppercase">
+          AI Search Visibility
+        </p>
+        <h1 className="mt-2 text-center text-3xl font-bold text-gray-900">AI 搜尋能見度健檢</h1>
         <p className="mt-3 text-center text-gray-500">
           檢測你的網站對 ChatGPT、Claude、Perplexity 等 AI 搜尋引擎是否開放，並跑一次多頁深度健檢
         </p>
@@ -295,12 +519,12 @@ export default function GeoPage() {
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="輸入網址，例如 example.com"
-            className="flex-1 rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 rounded-lg border border-gray-300 px-4 py-3 text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
             type="submit"
             disabled={loading}
-            className="rounded-lg bg-blue-600 px-6 py-3 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-lg bg-blue-600 px-6 py-3 font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
           >
             {loading ? "檢測中…" : "開始檢測"}
           </button>
@@ -312,7 +536,7 @@ export default function GeoPage() {
           <div className="mt-10">
             {/* 判定不出來時必須明講。給假綠燈比不給答案傷害更大 */}
             <div
-              className={`rounded-xl border p-6 text-center ${
+              className={`rounded-xl border p-6 text-center shadow-sm ${
                 unknownCount > 0
                   ? "border-gray-300 bg-gray-50"
                   : blockedCount === 0
@@ -369,10 +593,23 @@ export default function GeoPage() {
               )}
             </div>
 
+            <div className="mt-6">
+              <CategoryOverview rows={buildCategoryRows(engine, status?.audit)} />
+            </div>
+
+            {engine.brandVisibility && (
+              <div className="mt-6">
+                <h2 className="mb-3 text-sm font-semibold text-gray-500">
+                  AI 認不認得你？（實際問 Perplexity）
+                </h2>
+                <BrandVisibilityCard result={engine.brandVisibility} />
+              </div>
+            )}
+
             {engine.visibility && (
               <div className="mt-6">
                 <h2 className="mb-3 text-sm font-semibold text-gray-500">AI 眼中的你</h2>
-                <div className={`rounded-xl border p-6 ${VISIBILITY[engine.visibility.status].className}`}>
+                <div className={`rounded-xl border p-6 shadow-sm ${VISIBILITY[engine.visibility.status].className}`}>
                   <p className="text-lg font-bold text-gray-900">{VISIBILITY[engine.visibility.status].label}</p>
                   <p className="mt-2 text-sm leading-relaxed text-gray-600">{engine.visibility.advice}</p>
                   <div className="mt-4">
@@ -410,26 +647,12 @@ export default function GeoPage() {
             {engine.visibilityNote && <p className="mt-4 text-center text-sm text-gray-400">{engine.visibilityNote}</p>}
 
             <h2 className="mt-8 mb-3 text-sm font-semibold text-gray-500">各家 AI 爬蟲的存取權限</h2>
-            <div className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
-              {engine.results.map((r) => (
-                <div key={r.ua} className="flex items-center justify-between px-5 py-4">
-                  <div>
-                    <p className="font-medium text-gray-900">{r.label}</p>
-                    <p className="text-xs text-gray-400">
-                      {r.ua} · {r.matchedRule}
-                    </p>
-                  </div>
-                  <span className={`shrink-0 rounded-full border px-3 py-1 text-sm font-medium ${BADGE[r.status].className}`}>
-                    {BADGE[r.status].text}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <BotAccessList results={engine.results} />
 
             {engine.contentSignals && (
               <div className="mt-8">
                 <h2 className="mb-3 text-sm font-semibold text-gray-500">內容使用授權（Content Signals）</h2>
-                <div className="rounded-xl border border-gray-200 bg-white p-5">
+                <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                   {engine.contentSignals.declared ? (
                     <>
                       <p className="text-sm text-gray-600">這個網站有表態，宣告內容可以被拿去做什麼用途：</p>
@@ -464,7 +687,7 @@ export default function GeoPage() {
             )}
 
             {engine.hasLlmsTxt !== null && (
-              <div className="mt-4 flex items-center justify-between rounded-xl border border-gray-200 bg-white px-5 py-4">
+              <div className="mt-4 flex items-center justify-between rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
                 <div>
                   <p className="font-medium text-gray-900">llms.txt</p>
                   <p className="text-xs text-gray-400">
@@ -488,7 +711,7 @@ export default function GeoPage() {
             {/* 深度健檢：多頁爬蟲＋規則＋AI 語意判斷，跑得比上面慢，進度誠實顯示 */}
             <div className="mt-10">
               {status && (status.status === "crawling" || status.status === "analyzing") && (
-                <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-5 py-4">
+                <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-5 py-4 shadow-sm">
                   <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-300 border-t-blue-600" />
                   <p className="text-sm text-blue-800">{status.message}</p>
                 </div>

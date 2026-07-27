@@ -2,6 +2,7 @@ import type { CheckResult } from './geo-audit-rules';
 import type { RobotsStatus, AiBotResult, ContentSignals } from './geo-ai-crawlers';
 import type { ContentVisibility } from './geo-content-visibility';
 import type { WafHint } from './geo-waf-fingerprint';
+import type { BrandVisibilityResult } from './geo-brand-visibility';
 
 // ── GEO 深度健檢：背景工作進度存放（module 內 in-memory Map）────────────
 // 多頁爬蟲＋AI 語意判斷跑起來要幾十秒到一兩分鐘，改成背景 job：
@@ -24,6 +25,7 @@ export interface EngineResult {
   visibilityNote: string;
   contentSignals: ContentSignals | null;
   hasLlmsTxt: boolean | null;
+  brandVisibility: BrandVisibilityResult | null;
 }
 
 export interface AuditJob {
