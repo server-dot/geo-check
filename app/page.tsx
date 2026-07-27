@@ -47,11 +47,27 @@ interface WafHint {
 }
 
 interface BrandVisibilityResult {
+  engine: string;
   brandName: string;
   query: string;
   answer: string;
   citedSelf: boolean;
   citations: { url: string; title: string; isSelf: boolean }[];
+  advice: string;
+}
+
+interface LlmsTxtLink {
+  text: string;
+  url: string;
+  description: string;
+}
+
+interface LlmsTxtQuality {
+  status: "thin" | "ok";
+  title: string;
+  summary: string;
+  links: LlmsTxtLink[];
+  charCount: number;
   advice: string;
 }
 
@@ -65,8 +81,8 @@ interface EngineResult {
   visibility: ContentVisibility | null;
   visibilityNote: string;
   contentSignals: ContentSignals | null;
-  hasLlmsTxt: boolean | null;
-  brandVisibility: BrandVisibilityResult | null;
+  llmsTxt: { exists: boolean | null; quality: LlmsTxtQuality | null };
+  brandVisibility: BrandVisibilityResult[];
 }
 
 // 深度健檢單項（對應後端 CheckResult）
@@ -152,8 +168,8 @@ function buildCategoryRows(engine?: EngineResult, audit?: CheckItem[]): Category
     if (engine.contentSignals) {
       bump(AI, engine.contentSignals.declared ? "ok" : "warn");
     }
-    if (engine.hasLlmsTxt !== null && engine.hasLlmsTxt !== undefined) {
-      bump(AI, engine.hasLlmsTxt ? "ok" : "warn");
+    if (engine.llmsTxt.exists !== null) {
+      bump(AI, engine.llmsTxt.exists ? (engine.llmsTxt.quality?.status === "ok" ? "ok" : "warn") : "warn");
     }
   }
 
@@ -348,7 +364,10 @@ function BotAccessList({ results }: { results: AiBotResult[] }) {
   const [expanded, setExpanded] = useState(false);
   const uniform = results.length > 0 && results.every((r) => r.status === results[0].status);
 
-  if (uniform && !expanded) {
+  // 結果一致時，逐項列表本身沒有參考價值——每一列除了名字以外全部一樣，
+  // 展開只是把同一句話複製 8 次。這裡改成展開一份「我們檢查了哪些爬蟲」的
+  // 名稱清單（不重複貼狀態徽章），單純給對照用，不假裝有診斷意義。
+  if (uniform) {
     const status = results[0].status;
     return (
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -361,29 +380,32 @@ function BotAccessList({ results }: { results: AiBotResult[] }) {
           </p>
           <button
             type="button"
-            onClick={() => setExpanded(true)}
+            onClick={() => setExpanded((v) => !v)}
             className="shrink-0 text-xs text-blue-600 hover:underline"
           >
-            查看逐項明細
+            {expanded ? "收合" : "這是哪幾個爬蟲？"}
           </button>
         </div>
+        {expanded && (
+          <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-100 pt-4">
+            {results.map((r) => (
+              <span
+                key={r.ua}
+                title={`${r.ua} · ${r.matchedRule}`}
+                className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-600"
+              >
+                {r.label}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
 
+  // 不一致才是真正有故事可講的情況（部分被擋、政策跟實測不一致），逐項列表才有意義
   return (
     <div className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white shadow-sm">
-      {uniform && (
-        <div className="flex justify-end px-5 py-2">
-          <button
-            type="button"
-            onClick={() => setExpanded(false)}
-            className="text-xs text-blue-600 hover:underline"
-          >
-            收合
-          </button>
-        </div>
-      )}
       {results.map((r) => (
         <div key={r.ua} className="flex items-center justify-between px-5 py-4">
           <div>
@@ -401,6 +423,57 @@ function BotAccessList({ results }: { results: AiBotResult[] }) {
   );
 }
 
+// Perplexity／GPT-4o 回傳的答案本身是 markdown（**粗體**、[1] 這種引用角標），
+// 直接塞進 <div> 只會看到一堆星號跟中括號。這裡不上完整 markdown 套件
+// （答案就是一段話，不需要標題、清單、表格那些),自己解析這兩種語法就夠：
+// **粗體** 轉真的粗體，[N] 轉成連去對應引用來源的角標連結。
+function renderAnswerMarkdown(text: string, citations: { url: string }[]): React.ReactNode {
+  const paragraphs = text.split(/\n{2,}/).filter((p) => p.trim());
+  return paragraphs.map((para, pi) => (
+    <p key={pi} className={pi > 0 ? "mt-2" : undefined}>
+      {renderInlineMarkdown(para, citations)}
+    </p>
+  ));
+}
+
+function renderInlineMarkdown(text: string, citations: { url: string }[]): React.ReactNode[] {
+  const tokens: React.ReactNode[] = [];
+  const pattern = /\*\*([^*]+)\*\*|\[(\d+)\]/g;
+  let last = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  while ((m = pattern.exec(text))) {
+    if (m.index > last) tokens.push(text.slice(last, m.index));
+    if (m[1] !== undefined) {
+      tokens.push(
+        <strong key={key++} className="font-semibold text-gray-900">
+          {m[1]}
+        </strong>,
+      );
+    } else if (m[2] !== undefined) {
+      const url = citations[Number(m[2]) - 1]?.url;
+      tokens.push(
+        url ? (
+          <a
+            key={key++}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-0.5 align-super text-[10px] text-blue-600 hover:underline"
+          >
+            [{m[2]}]
+          </a>
+        ) : (
+          `[${m[2]}]`
+        ),
+      );
+    }
+    last = pattern.lastIndex;
+  }
+  if (last < text.length) tokens.push(text.slice(last));
+  return tokens;
+}
+
 // 品牌能見度：不只講「AI 讀不讀得到你的網站」，而是真的去問 Perplexity
 // 「你知道這個品牌嗎」，讓使用者看到實際的回答文字跟引用來源——
 // 有沒有引用到自己的網域，是這整份健檢裡最直接的「有沒有效」證據。
@@ -411,8 +484,9 @@ function BrandVisibilityCard({ result }: { result: BrandVisibilityResult }) {
         result.citedSelf ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"
       }`}
     >
-      <p className="text-lg font-bold text-gray-900">
-        {result.citedSelf ? "🟢 Perplexity 引用了你自己的網站" : "🟡 Perplexity 沒有引用你自己的網站"}
+      <p className="text-xs font-semibold tracking-wide text-gray-500 uppercase">{result.engine}</p>
+      <p className="mt-1 text-lg font-bold text-gray-900">
+        {result.citedSelf ? "🟢 引用了你自己的網站" : "🟡 沒有引用你自己的網站"}
       </p>
       <p className="mt-2 text-sm leading-relaxed text-gray-600">{result.advice}</p>
 
@@ -422,9 +496,9 @@ function BrandVisibilityCard({ result }: { result: BrandVisibilityResult }) {
       </div>
 
       <div className="mt-4">
-        <p className="text-xs font-medium text-gray-500">Perplexity 的實際回答：</p>
-        <div className="mt-1 rounded-lg border border-gray-200 bg-white/70 p-3 text-sm leading-relaxed whitespace-pre-wrap text-gray-700">
-          {result.answer}
+        <p className="text-xs font-medium text-gray-500">{result.engine} 的實際回答：</p>
+        <div className="mt-1 rounded-lg border border-gray-200 bg-white/70 p-3 text-sm leading-relaxed text-gray-700">
+          {renderAnswerMarkdown(result.answer, result.citations)}
         </div>
       </div>
 
@@ -449,6 +523,77 @@ function BrandVisibilityCard({ result }: { result: BrandVisibilityResult }) {
             ))}
           </ul>
         </div>
+      )}
+    </div>
+  );
+}
+
+// llms.txt 卡片：不只給「格式完整」的判決，把實際解析出來的標題、摘要、
+// 連結清單都亮出來，讓人自己看得到底稿裡寫了什麼、哪些連結有說明、哪些沒有。
+function LlmsTxtCard({ llmsTxt }: { llmsTxt: { exists: boolean | null; quality: LlmsTxtQuality | null } }) {
+  const [expanded, setExpanded] = useState(false);
+  const quality = llmsTxt.quality;
+
+  return (
+    <div className="mt-4 rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
+      <div className="flex items-center justify-between gap-4">
+        <p className="font-medium text-gray-900">llms.txt</p>
+        <span
+          className={`shrink-0 rounded-full border px-3 py-1 text-sm font-medium ${
+            llmsTxt.exists && quality?.status === "ok"
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-amber-200 bg-amber-50 text-amber-700"
+          }`}
+        >
+          {!llmsTxt.exists ? "沒有" : quality?.status === "ok" ? "格式完整" : "內容單薄"}
+        </span>
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-gray-500">
+        {llmsTxt.exists
+          ? quality?.advice
+          : "尚未部署。這是給 AI 讀的網站地圖，能主動告訴 AI 你有哪些重要內容。"}
+      </p>
+
+      {quality && (
+        <>
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="mt-2 text-xs text-blue-600 hover:underline"
+          >
+            {expanded ? "收合" : `看實際內容（${quality.links.length} 個連結）`}
+          </button>
+          {expanded && (
+            <div className="mt-3 space-y-3 border-t border-gray-100 pt-3">
+              <div>
+                <p className="text-xs font-medium text-gray-500"># 標題</p>
+                <p className="mt-0.5 text-sm text-gray-800">{quality.title || "（缺）"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-500">摘要引言</p>
+                <p className="mt-0.5 text-sm text-gray-800">{quality.summary || "（缺）"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-500">頁面連結（{quality.links.length} 個，共 {quality.charCount} 字）</p>
+                <div className="mt-1 max-h-64 space-y-1.5 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50 p-2">
+                  {quality.links.map((l, i) => (
+                    <div key={i} className="text-xs">
+                      <a
+                        href={l.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-blue-600 hover:underline"
+                      >
+                        {l.text}
+                      </a>
+                      <p className="text-gray-500">{l.description || "（沒有附說明）"}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -597,12 +742,14 @@ export default function GeoPage() {
               <CategoryOverview rows={buildCategoryRows(engine, status?.audit)} />
             </div>
 
-            {engine.brandVisibility && (
+            {engine.brandVisibility.length > 0 && (
               <div className="mt-6">
-                <h2 className="mb-3 text-sm font-semibold text-gray-500">
-                  AI 認不認得你？（實際問 Perplexity）
-                </h2>
-                <BrandVisibilityCard result={engine.brandVisibility} />
+                <h2 className="mb-3 text-sm font-semibold text-gray-500">AI 認不認得你？（實際去問）</h2>
+                <div className="space-y-4">
+                  {engine.brandVisibility.map((r) => (
+                    <BrandVisibilityCard key={r.engine} result={r} />
+                  ))}
+                </div>
               </div>
             )}
 
@@ -686,27 +833,7 @@ export default function GeoPage() {
               </div>
             )}
 
-            {engine.hasLlmsTxt !== null && (
-              <div className="mt-4 flex items-center justify-between rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
-                <div>
-                  <p className="font-medium text-gray-900">llms.txt</p>
-                  <p className="text-xs text-gray-400">
-                    {engine.hasLlmsTxt
-                      ? "已部署，AI 有一份你親自寫的網站導覽可以參考"
-                      : "尚未部署。這是給 AI 讀的網站地圖，能主動告訴 AI 你有哪些重要內容"}
-                  </p>
-                </div>
-                <span
-                  className={`shrink-0 rounded-full border px-3 py-1 text-sm font-medium ${
-                    engine.hasLlmsTxt
-                      ? "border-green-200 bg-green-50 text-green-700"
-                      : "border-amber-200 bg-amber-50 text-amber-700"
-                  }`}
-                >
-                  {engine.hasLlmsTxt ? "有" : "沒有"}
-                </span>
-              </div>
-            )}
+            {engine.llmsTxt.exists !== null && <LlmsTxtCard llmsTxt={engine.llmsTxt} />}
 
             {/* 深度健檢：多頁爬蟲＋規則＋AI 語意判斷，跑得比上面慢，進度誠實顯示 */}
             <div className="mt-10">

@@ -34,6 +34,17 @@ function charLen(s: string): number {
   return [...s].length;
 }
 
+// node-html-parser 的 textContent 跟瀏覽器 DOM 一樣，直接把所有文字節點黏在一起，
+// 中間不會補空格——<a>Q kangber</a><a>服務</a> 會變成「Q kangber服務」，
+// 巢狀選單、卡片一多，整段預覽就變成分不出詞界的字串湯，看起來像壞掉，
+// 但那其實只是我們「秀給人看」這一步的問題，AI 爬蟲原始讀到的內容本身沒事。
+// 這裡改成逐節點遞迴、用空格接每個節點，避免相鄰標籤的文字黏在一起。
+function extractText(node: { nodeType: number; rawText?: string; childNodes?: unknown[] }): string {
+  if (node.nodeType === 3) return node.rawText ?? '';
+  const children = (node.childNodes ?? []) as typeof node[];
+  return children.map(extractText).join(' ');
+}
+
 export function analyzeContentVisibility(html: string): ContentVisibility {
   const root = parse(html);
   const htmlLength = html.length;
@@ -70,7 +81,7 @@ export function analyzeContentVisibility(html: string): ContentVisibility {
   const body = root.querySelector('body') ?? root;
   const clone = parse(body.innerHTML);
   clone.querySelectorAll('script, style, noscript, template, svg').forEach((el) => el.remove());
-  const text = clone.textContent.replace(/\s+/g, ' ').trim();
+  const text = extractText(clone).replace(/\s+/g, ' ').trim();
   const textLength = charLen(text);
 
   let status: VisibilityStatus;

@@ -8,6 +8,7 @@ import { analyzeContentVisibility, type ContentVisibility } from '@/lib/geo-cont
 import { detectWaf, type WafHint } from '@/lib/geo-waf-fingerprint';
 import { probeBotAccess, type ProbeResult } from '@/lib/geo-bot-probe';
 import { checkBrandVisibility } from '@/lib/geo-brand-visibility';
+import { analyzeLlmsTxt } from '@/lib/geo-llms-txt';
 import { createAuditJob, updateAuditJob, type EngineResult } from '@/lib/geo-audit-jobs';
 import { crawlSite } from '@/lib/geo-audit-crawler';
 import { aggregateAuditChecks } from '@/lib/geo-audit-aggregate';
@@ -117,30 +118,36 @@ async function fetchHomepage(origin: string): Promise<{ html: string | null; not
 }
 
 // llms.txt（llmstxt.org）：放在根目錄、給 AI 看的網站導覽。
-// 回傳 null 代表「不確定」——跟 robots.txt 同一個原則：被 WAF 擋下時不能說人家沒有。
-// 只有明確的 404/410 才算真的沒部署。
-async function checkLlmsTxt(origin: string): Promise<boolean | null> {
+// exists 為 null 代表「不確定」——跟 robots.txt 同一個原則：被 WAF 擋下時不能說人家沒有。
+// 只有明確的 404/410 才算真的沒部署。連內容一起帶回去，才能判斷「寫得好不好」，
+// 不是只看「有沒有這個檔案」——空殼 llms.txt 跟沒有部署對 AI 來說沒兩樣。
+async function checkLlmsTxt(origin: string): Promise<{ exists: boolean | null; text: string }> {
   try {
     const res = await fetchWithTimeout(`${origin}/llms.txt`, 'text/plain,text/markdown,*/*');
-    if (res.status === 404 || res.status === 410) return false;
-    if (!res.ok) return null; // 403 / 5xx：讀不到，不代表沒有
+    if (res.status === 404 || res.status === 410) return { exists: false, text: '' };
+    if (!res.ok) return { exists: null, text: '' }; // 403 / 5xx：讀不到，不代表沒有
     const contentType = res.headers.get('content-type') ?? '';
-    if (/text\/html/i.test(contentType)) return false; // soft-404：回首頁 HTML 當作沒有
+    if (/text\/html/i.test(contentType)) return { exists: false, text: '' }; // soft-404：回首頁 HTML 當作沒有
     const text = await res.text();
-    return !/^\s*<(!doctype|html)/i.test(text);
+    if (/^\s*<(!doctype|html)/i.test(text)) return { exists: false, text: '' };
+    return { exists: true, text };
   } catch {
-    return null; // 抓不到就別亂講有或沒有
+    return { exists: null, text: '' }; // 抓不到就別亂講有或沒有
   }
 }
 
 // 「AI 引擎可達性」這層：robots.txt bot 存取、內容可視性、Content Signals、llms.txt。
 // 秒級跑完，是原本 geo-check MVP 的四項檢測，維持同一套邏輯不變。
 async function runEngineChecks(origin: string): Promise<EngineResult> {
-  const [robots, homepage, hasLlmsTxt] = await Promise.all([
+  const [robots, homepage, llmsTxtFetch] = await Promise.all([
     fetchRobots(origin),
     fetchHomepage(origin),
     checkLlmsTxt(origin),
   ]);
+  const llmsTxt = {
+    exists: llmsTxtFetch.exists,
+    quality: llmsTxtFetch.exists ? analyzeLlmsTxt(llmsTxtFetch.text) : null,
+  };
 
   const policyResults = checkAiCrawlerAccess(robots.text, robots.status);
   const visibility: ContentVisibility | null = homepage.html
@@ -182,7 +189,7 @@ async function runEngineChecks(origin: string): Promise<EngineResult> {
     visibility,
     visibilityNote: homepage.note,
     contentSignals,
-    hasLlmsTxt,
+    llmsTxt,
     brandVisibility,
   };
 }
