@@ -41,6 +41,7 @@ export interface PageFacts {
   imgAltEmptyNames: string[];
   imgLegacy: number;
   jsonLdTypes: string[];
+  jsonLdNodes: Record<string, unknown>[];
   hasBreadcrumb: boolean;
   canonical: string;
   noindex: boolean;
@@ -98,19 +99,24 @@ function isCrawlableHref(raw: string): boolean {
   return true;
 }
 
-function extractJsonLdTypes(root: NHTMLElement): string[] {
+// 回傳全站抓到的 JSON-LD 節點（完整物件，供 geo-schema-check.ts 核對欄位完整度）
+// 以及攤平出的型別清單（供既有「有沒有這個型別」的判斷沿用）
+function extractJsonLd(root: NHTMLElement): { types: string[]; nodes: Record<string, unknown>[] } {
   const types = new Set<string>();
+  const nodes: Record<string, unknown>[] = [];
   for (const script of root.querySelectorAll('script[type="application/ld+json"]')) {
     const text = script.rawText?.trim();
     if (!text) continue;
     try {
       const data = JSON.parse(text);
-      const nodes: unknown[] = Array.isArray(data)
+      const items: unknown[] = Array.isArray(data)
         ? data
         : Array.isArray((data as { '@graph'?: unknown[] })['@graph'])
           ? (data as { '@graph': unknown[] })['@graph']
           : [data];
-      for (const node of nodes) {
+      for (const node of items) {
+        if (!node || typeof node !== 'object') continue;
+        nodes.push(node as Record<string, unknown>);
         const t = (node as { '@type'?: unknown })?.['@type'];
         if (typeof t === 'string') types.add(t);
         else if (Array.isArray(t)) t.forEach((x) => typeof x === 'string' && types.add(x));
@@ -119,7 +125,7 @@ function extractJsonLdTypes(root: NHTMLElement): string[] {
       /* 解析失敗略過 */
     }
   }
-  return [...types];
+  return { types: [...types], nodes };
 }
 
 function extractPageFacts(html: string, url: string, depth: number, status: number, ok: boolean, origin: string, viaSitemap = false): PageFacts {
@@ -144,7 +150,7 @@ function extractPageFacts(html: string, url: string, depth: number, status: numb
     return src && !/\.(webp|avif)$/.test(src);
   }).length;
 
-  const jsonLdTypes = extractJsonLdTypes(root);
+  const { types: jsonLdTypes, nodes: jsonLdNodes } = extractJsonLd(root);
   const hasBreadcrumb =
     jsonLdTypes.includes('BreadcrumbList') ||
     !!root.querySelector('nav[aria-label*="breadcrumb" i], nav[class*="breadcrumb" i], [class*="breadcrumb" i]');
@@ -199,6 +205,7 @@ function extractPageFacts(html: string, url: string, depth: number, status: numb
     imgAltEmptyNames,
     imgLegacy: legacy,
     jsonLdTypes,
+    jsonLdNodes,
     hasBreadcrumb,
     canonical: (root.querySelector('link[rel="canonical"]')?.getAttribute('href') ?? '').trim(),
     noindex: /noindex/.test(robots) || /noindex/.test(googlebot),
@@ -361,7 +368,7 @@ function emptyFacts(url: string, depth: number, status: number, ok: boolean, ori
     url, depth, ok, status,
     title: '', description: '', h1: 0, h2: 0,
     imgTotal: 0, imgAltEmpty: 0, imgAltEmptyNames: [], imgLegacy: 0,
-    jsonLdTypes: [], hasBreadcrumb: false, canonical: '', noindex: false, hasViewport: false,
+    jsonLdTypes: [], jsonLdNodes: [], hasBreadcrumb: false, canonical: '', noindex: false, hasViewport: false,
     analytics: [], internalLinks: [], externalCount: 0, isHome, mainText: '', viaSitemap,
   };
 }

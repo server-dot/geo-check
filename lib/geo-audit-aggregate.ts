@@ -1,5 +1,6 @@
 import { LEVEL, CATEGORY, sortByOrder, type CheckResult } from './geo-audit-rules';
 import { runAiChecks } from './geo-audit-ai';
+import { buildLocalBizCheck, buildSchemaCompletenessCheck } from './geo-schema-check';
 import { normalizeUrl, type CrawlResult } from './geo-audit-crawler';
 
 // ── GEO 深度健檢：全站彙總層 ────────────────────────────
@@ -8,8 +9,6 @@ import { normalizeUrl, type CrawlResult } from './geo-audit-crawler';
 // geo-check 檢測的是陌生網址，沒有對方的 Google Search Console 授權，
 // 所以這裡全部用爬蟲能拿到的事實判斷，準確度會比有 GSC 加持的內部工具低一些，
 // 這是先天限制，不是沒做好；報告裡該註明的地方會註明。
-
-const LOCAL_TYPES = ['LocalBusiness', 'Store', 'Restaurant', 'Dentist', 'MedicalClinic', 'HealthAndBeautyBusiness', 'ProfessionalService', 'HomeAndConstructionBusiness', 'JewelryStore'];
 
 function toPath(origin: string, u: string): string {
   return normalizeUrl(u).replace(origin, '') || '/';
@@ -56,13 +55,8 @@ export async function aggregateAuditChecks(
       : { key: 'indexing', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '有無建立索引', status: 'warn', advice: `爬取頁面未發現 noindex；實際收錄狀況需另外用 GSC 或 site: 查詢確認${rangeNote}`, evidence: `0/${Y} 頁 noindex` });
   }
 
-  // 5. Local Business
-  {
-    const hit = [...new Set(pages.flatMap((p) => p.jsonLdTypes).filter((t) => LOCAL_TYPES.includes(t)))];
-    out.push(hit.length
-      ? { key: 'localbiz', level: LEVEL.EFFICIENCY, category: CATEGORY.LOCAL_BRAND, item: 'Local Business 標籤設定', status: 'warn', advice: `全站已部署 ${hit.join('、')} 標籤，欄位完整度（地址、電話、營業時間）建議人工複核`, evidence: hit.join('、') }
-      : { key: 'localbiz', level: LEVEL.EFFICIENCY, category: CATEGORY.LOCAL_BRAND, item: 'Local Business 標籤設定', status: 'fail', advice: '全站未偵測到 LocalBusiness 標籤，建議於後台基本資料設定並部署', evidence: '（無）' });
-  }
+  // 5. Local Business：純規則核對欄位完整度（地址／電話／營業時間），不再是「建議人工複核」的空話
+  out.push(buildLocalBizCheck(pages.map((p) => ({ url: p.url, jsonLdNodes: p.jsonLdNodes }))));
 
   // 6. 麵包屑
   {
@@ -156,18 +150,15 @@ export async function aggregateAuditChecks(
       : { key: 'headings', level: LEVEL.RANK, category: CATEGORY.TECH, item: 'h1、h2 使用', status: 'ok', advice: `爬取 ${Y} 頁標題結構完整`, evidence: `共 ${Y} 頁皆正常` });
   }
 
-  // 12. Schema、E-E-A-T：語意判斷交給 AI（GPT-4o via OpenRouter），取樣首頁＋前幾頁
+  // 12a. Schema：純規則核對全站 JSON-LD 欄位完整度，不用 AI 猜
+  out.push(buildSchemaCompletenessCheck(pages.map((p) => ({ url: p.url, jsonLdNodes: p.jsonLdNodes }))));
+
+  // 12b. E-E-A-T：規則判不了的語意題，交給 AI（GPT-4o via OpenRouter），取樣首頁＋前幾頁
   {
     const home = htmlPages.find((p) => p.isHome) ?? htmlPages[0];
-    const allTypes = [...new Set(pages.flatMap((p) => p.jsonLdTypes))];
     const sampleText = htmlPages.slice(0, 3).map((p) => p.mainText).join('\n\n').slice(0, 3000);
-    onProgress?.('AI 語意判斷中（Schema、E-E-A-T）…');
-    const ai = await runAiChecks({
-      url: home?.url ?? origin,
-      jsonLdTypes: allTypes,
-      jsonLdRaw: allTypes.length ? `全站偵測到的 Schema 型別：${allTypes.join('、')}` : '',
-      mainText: sampleText,
-    });
+    onProgress?.('AI 語意判斷中（E-E-A-T）…');
+    const ai = await runAiChecks({ url: home?.url ?? origin, mainText: sampleText });
     out.push(...ai);
   }
 
