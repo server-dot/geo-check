@@ -161,18 +161,24 @@ export async function aggregateAuditChecks(
   // 純憑內文猜測（見 [[geo-check 待辦]] 的 bug 記錄）。
   {
     const home = htmlPages.find((p) => p.isHome) ?? htmlPages[0];
+    // 關於頁最可能寫學經歷；活動/作品頁最可能有講座、案例這類可佐證的實績——
+    // 兩種都優先排進取樣，AI 才給得出「把 XX 放到更明顯位置」這種具體建議，
+    // 不是只能給「補一段簡介」這種看不到內容就只能講的空泛話。
     const ABOUT_URL_PATTERN = /\/(about|team|profile|bio|founder|author|關於|个人)/i;
+    const PROOF_URL_PATTERN = /\/(activities|portfolio|case|works|speaking|press|作品|活動)/i;
     const aboutPages = htmlPages.filter((p) => ABOUT_URL_PATTERN.test(p.url));
-    const otherPages = htmlPages.filter((p) => !ABOUT_URL_PATTERN.test(p.url));
-    // 關於頁排最前面，且每頁各自限額截斷（而不是全部接起來最後才砍）——
-    // 不然首頁的內文本身就很長，會把接在後面的關於頁擠到 4000 字上限外面，
-    // AI 實際上根本沒看到關於頁的內容。
-    const sampledPages = [...aboutPages, home, ...otherPages].filter(
+    const proofPages = htmlPages.filter((p) => PROOF_URL_PATTERN.test(p.url));
+    const otherPages = htmlPages.filter(
+      (p) => !ABOUT_URL_PATTERN.test(p.url) && !PROOF_URL_PATTERN.test(p.url)
+    );
+    // 每頁各自限額截斷（而不是全部接起來最後才砍）——不然首頁的內文本身就很
+    // 長，會把接在後面的頁面擠到字數上限外面，AI 實際上根本沒看到那些內容。
+    const sampledPages = [...aboutPages, ...proofPages, home, ...otherPages].filter(
       (p, i, arr) => p && arr.findIndex((q) => q?.url === p.url) === i
     );
-    const PER_PAGE_CHAR_CAP = 1500;
+    const PER_PAGE_CHAR_CAP = 1200;
     const sampleText = sampledPages
-      .slice(0, 4)
+      .slice(0, 5)
       .map((p) => p!.mainText.slice(0, PER_PAGE_CHAR_CAP))
       .join('\n\n');
 

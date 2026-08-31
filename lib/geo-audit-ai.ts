@@ -55,14 +55,16 @@ ${input.mainText || '（抓不到內文）'}
 - 可查證的客戶評論／實績（不是自我宣稱的「成功案例」文案，要有具體、可核實的細節）
 「有」的項目要引用內文原句當證據；「無」的項目直接寫「無」，不要編造理由。四項都無或幾乎都無→"fail"；有一兩項但薄弱→"warn"；多數項目充足→"ok"。
 
-重要：evidence 的每一項都必須是你根據上面【頁面內文摘要】實際判斷出來的結果，不可以套用任何範例句子或制式說法交差；如果摘要裡真的找不到某一項的具體內容，就只寫「無」，不要杜撰細節。
+針對「無」或薄弱的項目，給一句具體、可執行的改善建議——要根據這個頁面實際寫了什麼去建議，不能是「加強內容」這種空泛的話。例如：如果內文提到參與過講座、擔任業師、有具體專案案例，但沒有明顯寫出來或沒有外部連結佐證，就建議「把 XX 這個身份/連結放到更明顯的位置」；如果完全沒有任何線索，才建議「補上一段作者簡介」這類從零開始的建議。如果四項都已經足夠（status 是 "ok"），suggestion 可以留空字串。
+
+重要：evidence 跟 suggestion 都必須是你根據上面【頁面內文摘要】實際判斷出來的結果，不可以套用任何範例句子或制式說法交差；如果摘要裡真的找不到某一項的具體內容，evidence 就只寫「無」，不要杜撰細節。
 
 只回傳 JSON，格式如下（<> 內是需要你自己填入的內容，不是可以照抄的範例文字）：
-{"eeat":{"status":"<ok|warn|fail>","message":"<繁體中文一句話總結>","evidence":"作者資訊：<有/無>（<你判斷出的證據或留白>）｜專業證照：<有/無>（<證據或留白>）｜媒體報導：<有/無>（<證據或留白>）｜客戶評論：<有/無>（<證據或留白>）"}}`;
+{"eeat":{"status":"<ok|warn|fail>","message":"<繁體中文一句話總結現況>","evidence":"作者資訊：<有/無>（<你判斷出的證據或留白>）｜專業證照：<有/無>（<證據或留白>）｜媒體報導：<有/無>（<證據或留白>）｜客戶評論：<有/無>（<證據或留白>）","suggestion":"<針對缺口的具體改善建議，或空字串>"}}`;
 }
 
 function parseAiJson(text: string): {
-  eeat?: { status?: string; message?: string; evidence?: string };
+  eeat?: { status?: string; message?: string; evidence?: string; suggestion?: string };
 } | null {
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) return null;
@@ -98,11 +100,14 @@ export async function runAiChecks(input: AiAuditInput): Promise<CheckResult[]> {
   const parsed = parseAiJson(text);
   if (!parsed) return fallback('AI 回覆無法解析');
 
+  const message = parsed.eeat?.message ?? '（AI 未提供說明）';
+  const suggestion = parsed.eeat?.suggestion?.trim();
+
   return [
     {
       ...EEAT,
       status: normStatus(parsed.eeat?.status),
-      advice: parsed.eeat?.message ?? '（AI 未提供說明）',
+      advice: suggestion ? `${message} 建議：${suggestion}` : message,
       evidence: parsed.eeat?.evidence,
     },
   ];
