@@ -887,7 +887,7 @@ export default function GeoPage() {
                       }
                     }}
                     placeholder="輸入自己的關鍵字…"
-                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none"
                   />
                   <button
                     type="button"
