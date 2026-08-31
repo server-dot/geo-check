@@ -153,12 +153,39 @@ export async function aggregateAuditChecks(
   // 12a. Schema：純規則核對全站 JSON-LD 欄位完整度，不用 AI 猜
   out.push(buildSchemaCompletenessCheck(pages.map((p) => ({ url: p.url, jsonLdNodes: p.jsonLdNodes }))));
 
-  // 12b. E-E-A-T：規則判不了的語意題，交給 AI（GPT-4o via OpenRouter），取樣首頁＋前幾頁
+  // 12b. E-E-A-T：規則判不了的語意題，交給 AI（GPT-4o via OpenRouter）判斷。
+  // 取樣頁面改成優先挑「關於／團隊／個人簡介」這類最可能寫信任訊號的頁面，
+  // 不再只抓爬蟲順序的前三頁——原本常常抓到首頁＋服務頁，漏掉真正放學歷／
+  // 經歷的「關於我」頁，AI 看不到證據就用 prompt 裡的範例句子亂填。同時把
+  // 結構化資料裡查得到的 author／Person 標記當既有事實一併丟給 AI，減少它
+  // 純憑內文猜測（見 [[geo-check 待辦]] 的 bug 記錄）。
   {
     const home = htmlPages.find((p) => p.isHome) ?? htmlPages[0];
-    const sampleText = htmlPages.slice(0, 3).map((p) => p.mainText).join('\n\n').slice(0, 3000);
+    const ABOUT_URL_PATTERN = /\/(about|team|profile|bio|founder|author|關於|个人)/i;
+    const aboutPages = htmlPages.filter((p) => ABOUT_URL_PATTERN.test(p.url));
+    const otherPages = htmlPages.filter((p) => !ABOUT_URL_PATTERN.test(p.url));
+    // 關於頁排最前面，且每頁各自限額截斷（而不是全部接起來最後才砍）——
+    // 不然首頁的內文本身就很長，會把接在後面的關於頁擠到 4000 字上限外面，
+    // AI 實際上根本沒看到關於頁的內容。
+    const sampledPages = [...aboutPages, home, ...otherPages].filter(
+      (p, i, arr) => p && arr.findIndex((q) => q?.url === p.url) === i
+    );
+    const PER_PAGE_CHAR_CAP = 1500;
+    const sampleText = sampledPages
+      .slice(0, 4)
+      .map((p) => p!.mainText.slice(0, PER_PAGE_CHAR_CAP))
+      .join('\n\n');
+
+    const hasAuthorSchema = pages.some((p) =>
+      p.jsonLdNodes.some((n) => {
+        const type = (n as { '@type'?: unknown })['@type'];
+        const types = Array.isArray(type) ? type : [type];
+        return types.includes('Person') || 'author' in n;
+      })
+    );
+
     onProgress?.('AI 語意判斷中（E-E-A-T）…');
-    const ai = await runAiChecks({ url: home?.url ?? origin, mainText: sampleText });
+    const ai = await runAiChecks({ url: home?.url ?? origin, mainText: sampleText, hasAuthorSchema });
     out.push(...ai);
   }
 

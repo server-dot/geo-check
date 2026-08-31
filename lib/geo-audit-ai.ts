@@ -12,6 +12,7 @@ const MODEL = 'openai/gpt-4o';
 export type AiAuditInput = {
   url: string;
   mainText: string;
+  hasAuthorSchema: boolean; // 結構化資料裡是否查得到 author／Person 標記，當作既有事實給 AI 參考
 };
 
 async function askOpenRouter(prompt: string, apiKey: string): Promise<string> {
@@ -42,6 +43,8 @@ function buildPrompt(input: AiAuditInput): string {
 
 【頁面網址】${input.url}
 
+【已知事實】網站的結構化資料（JSON-LD）中${input.hasAuthorSchema ? '偵測到' : '沒有偵測到'} author／Person 標記。這只代表有沒有機器可讀的作者標記，不代表內文本身寫得夠不夠清楚——仍要以下面的內文摘要為準逐項判斷，不能只憑這一點下結論。
+
 【頁面內文摘要】
 ${input.mainText || '（抓不到內文）'}
 
@@ -50,10 +53,12 @@ ${input.mainText || '（抓不到內文）'}
 - 專業證照／資格
 - 媒體報導／外部第三方引用
 - 可查證的客戶評論／實績（不是自我宣稱的「成功案例」文案，要有具體、可核實的細節）
-「有」的項目要引用內文原句當證據；「無」的項目直接寫「無」。四項都無或幾乎都無→"fail"；有一兩項但薄弱→"warn"；多數項目充足→"ok"。
+「有」的項目要引用內文原句當證據；「無」的項目直接寫「無」，不要編造理由。四項都無或幾乎都無→"fail"；有一兩項但薄弱→"warn"；多數項目充足→"ok"。
 
-只回傳 JSON，格式如下（message 用繁體中文、一句話總結；evidence 用「項目：有/無（證據或說明）」逐項列出，四項用「｜」分隔）：
-{"eeat":{"status":"ok|warn|fail","message":"...","evidence":"作者資訊：無｜專業證照：無｜媒體報導：無｜客戶評論：無（僅自稱『成功案例』，無可查證細節）"}}`;
+重要：evidence 的每一項都必須是你根據上面【頁面內文摘要】實際判斷出來的結果，不可以套用任何範例句子或制式說法交差；如果摘要裡真的找不到某一項的具體內容，就只寫「無」，不要杜撰細節。
+
+只回傳 JSON，格式如下（<> 內是需要你自己填入的內容，不是可以照抄的範例文字）：
+{"eeat":{"status":"<ok|warn|fail>","message":"<繁體中文一句話總結>","evidence":"作者資訊：<有/無>（<你判斷出的證據或留白>）｜專業證照：<有/無>（<證據或留白>）｜媒體報導：<有/無>（<證據或留白>）｜客戶評論：<有/無>（<證據或留白>）"}}`;
 }
 
 function parseAiJson(text: string): {
