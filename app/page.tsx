@@ -415,7 +415,7 @@ function DetailsToggle({ title, details }: { title: string; details: { url: stri
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mono whitespace-nowrap text-xs text-ink3 underline decoration-limeDark decoration-2 underline-offset-2 hover:text-ink"
+        className="mono text-xs text-ink3 underline decoration-limeDark decoration-2 underline-offset-2 hover:text-ink"
       >
         查看更多（{details.length} 頁）
       </button>
