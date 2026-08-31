@@ -83,7 +83,30 @@ export function buildLocalBizCheck(pages: SchemaPage[]): CheckResult {
   }
 
   if (deployedPages === 0) {
-    return { ...base, status: 'fail', advice: '全站未偵測到 LocalBusiness 標籤，建議於後台基本資料設定並部署，讓 Google 理解品牌', evidence: '（無）' };
+    // 沒有 LocalBusiness 家族標籤不等於網站有問題——LocalBusiness 是給
+    // 「有實體可到訪地點」的商家用的加分標籤，純線上服務／無店面業者本來
+    // 就不適用，硬加反而是語意上不準確的宣告。這裡不直接判定失敗：
+    // 如果 Organization 已經帶 address（純粹揭露聯絡地址，不等於「這裡是
+    // 商家可到訪地點」），代表聯絡資訊這件事已經做了，直接算過關；完全
+    // 查不到任何地址，才用 warn 提醒（不是 fail），把「要不要加」的判斷
+    // 留給網站經營者自己決定業務型態。
+    const hasOrgAddress = pages.some((p) =>
+      p.jsonLdNodes.some((n) => nodeTypes(n).includes('Organization') && truthy(n.address))
+    );
+    if (hasOrgAddress) {
+      return {
+        ...base,
+        status: 'ok',
+        advice: '未部署 LocalBusiness 標籤，但 Organization 已帶聯絡地址——LocalBusiness 是給有實體可到訪地點的商家用的加分標籤，純線上服務不需要加',
+        evidence: 'Organization 已含 address',
+      };
+    }
+    return {
+      ...base,
+      status: 'warn',
+      advice: '全站未偵測到 LocalBusiness 標籤，也沒有其他管道揭露聯絡地址。如果有實體門市或可到訪地點，建議部署 LocalBusiness 標籤方便在地搜尋收錄；純線上服務可以不用理會這項',
+      evidence: '（無）',
+    };
   }
   const typesText = [...foundTypes].join('、');
   if (completePages === deployedPages) {
