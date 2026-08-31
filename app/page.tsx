@@ -34,6 +34,36 @@ interface ContentVisibility {
   duplicateBlockChars: number;
 }
 
+// 跟 lib/geo-keyword-visibility.ts 的 guessKeywordCandidates() 同一套邏輯，
+// 這裡另外放一份純字串版本給前端即時算候選字（不需要打 API），純函式沒有
+// fetch/env，跟後端那份保持邏輯一致但各自獨立維護，避免把伺服器端模組
+// 拉進前端 bundle。
+function guessKeywordCandidates(title: string, description: string, h1: string[]): string[] {
+  const KEYWORD_MIN_CHARS = 2;
+  const KEYWORD_MAX_CHARS = 16;
+  const MAX_CANDIDATES = 5;
+  const charLen = (s: string) => [...s].length;
+
+  const pool: string[] = [];
+  const titleParts = title.split(/[|｜\-–—:：]/).map((s) => s.trim()).filter(Boolean);
+  const positioningText = [...titleParts.slice(1), ...h1].join(" ");
+  pool.push(...positioningText.split(/[×xX,，、\s]+/));
+  pool.push(...description.split(/[，,、。]/).slice(0, 4));
+
+  const seen = new Set<string>();
+  const candidates: string[] = [];
+  for (const raw of pool) {
+    const clean = raw.replace(/\s+/g, " ").trim();
+    const len = charLen(clean);
+    if (len < KEYWORD_MIN_CHARS || len > KEYWORD_MAX_CHARS) continue;
+    if (seen.has(clean)) continue;
+    seen.add(clean);
+    candidates.push(clean);
+    if (candidates.length >= MAX_CANDIDATES) break;
+  }
+  return candidates;
+}
+
 type SignalValue = "yes" | "no" | "unset";
 
 interface ContentSignalItem {
@@ -54,14 +84,21 @@ interface WafHint {
   advice: string;
 }
 
-interface BrandVisibilityResult {
+interface VisibilityCardData {
   engine: string;
-  brandName: string;
   query: string;
   answer: string;
   citedSelf: boolean;
   citations: { url: string; title: string; isSelf: boolean }[];
   advice: string;
+}
+
+interface BrandVisibilityResult extends VisibilityCardData {
+  brandName: string;
+}
+
+interface KeywordVisibilityResult extends VisibilityCardData {
+  keyword: string;
 }
 
 interface LlmsTxtLink {
@@ -485,7 +522,7 @@ function renderInlineMarkdown(text: string, citations: { url: string }[]): React
 // 品牌能見度：不只講「AI 讀不讀得到你的網站」，而是真的去問 Perplexity
 // 「你知道這個品牌嗎」，讓使用者看到實際的回答文字跟引用來源——
 // 有沒有引用到自己的網域，是這整份健檢裡最直接的「有沒有效」證據。
-function BrandVisibilityCard({ result }: { result: BrandVisibilityResult }) {
+function BrandVisibilityCard({ result }: { result: VisibilityCardData }) {
   return (
     <div
       className={`rounded-xl border p-6 shadow-sm ${
@@ -613,6 +650,12 @@ export default function GeoPage() {
   const [error, setError] = useState("");
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [showRawContent, setShowRawContent] = useState(false);
+  const [customKeywords, setCustomKeywords] = useState<string[]>([]);
+  const [removedSuggestions, setRemovedSuggestions] = useState<string[]>([]);
+  const [keywordInput, setKeywordInput] = useState("");
+  const [keywordResults, setKeywordResults] = useState<Record<string, KeywordVisibilityResult[]>>({});
+  const [keywordLoading, setKeywordLoading] = useState(false);
+  const [keywordError, setKeywordError] = useState("");
 
   async function handleCheck(e?: React.FormEvent) {
     e?.preventDefault();
@@ -655,6 +698,48 @@ export default function GeoPage() {
   const engine = status?.engine;
   const blockedCount = engine?.results.filter((r) => r.status === "blocked").length ?? 0;
   const unknownCount = engine?.results.filter((r) => r.status === "unknown").length ?? 0;
+
+  const suggestedKeywords = engine?.visibility
+    ? guessKeywordCandidates(engine.visibility.title, engine.visibility.description, engine.visibility.h1).filter(
+        (k) => !removedSuggestions.includes(k)
+      )
+    : [];
+  const activeKeywords = [...suggestedKeywords, ...customKeywords];
+
+  function removeKeyword(k: string) {
+    if (suggestedKeywords.includes(k)) setRemovedSuggestions((prev) => [...prev, k]);
+    else setCustomKeywords((prev) => prev.filter((x) => x !== k));
+  }
+
+  function addCustomKeyword() {
+    const v = keywordInput.trim();
+    if (v && !activeKeywords.includes(v)) setCustomKeywords((prev) => [...prev, v]);
+    setKeywordInput("");
+  }
+
+  async function runKeywordCheck() {
+    if (activeKeywords.length === 0 || !url.trim()) return;
+    setKeywordLoading(true);
+    setKeywordError("");
+    try {
+      const res = await fetch("/api/geo/keywords", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keywords: activeKeywords, url }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "查詢失敗");
+      const map: Record<string, KeywordVisibilityResult[]> = {};
+      for (const r of data.results as { keyword: string; results: KeywordVisibilityResult[] }[]) {
+        map[r.keyword] = r.results;
+      }
+      setKeywordResults(map);
+    } catch (err) {
+      setKeywordError(err instanceof Error ? err.message : "查詢失敗");
+    } finally {
+      setKeywordLoading(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
@@ -761,6 +846,89 @@ export default function GeoPage() {
                 </div>
               </div>
             )}
+
+            <div className="mt-6">
+              <h2 className="mb-1 text-sm font-semibold text-gray-500">
+                關鍵字 AI 能見度（你想搶的主題，AI 推薦名單裡有你嗎？）
+              </h2>
+              <p className="mb-3 text-xs text-gray-400">
+                上面看的是「AI 知不知道你」；這裡看的是「有人拿某個主題去問 AI，AI 會不會推薦到你」——這才是大部分人真正在意的問題。以下是從標題／描述自動抓的候選字，可以刪掉不要的，或自己加。
+              </p>
+              <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                <div className="flex flex-wrap gap-2">
+                  {activeKeywords.map((k) => (
+                    <span
+                      key={k}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm text-blue-800"
+                    >
+                      {k}
+                      <button
+                        type="button"
+                        onClick={() => removeKeyword(k)}
+                        className="text-blue-400 hover:text-blue-700"
+                        aria-label={`移除 ${k}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  {activeKeywords.length === 0 && (
+                    <span className="text-sm text-gray-400">（沒有抓到候選關鍵字，自己加一個試試）</span>
+                  )}
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <input
+                    value={keywordInput}
+                    onChange={(e) => setKeywordInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addCustomKeyword();
+                      }
+                    }}
+                    placeholder="輸入自己的關鍵字…"
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={addCustomKeyword}
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    新增
+                  </button>
+                  <button
+                    type="button"
+                    onClick={runKeywordCheck}
+                    disabled={keywordLoading || activeKeywords.length === 0}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  >
+                    {keywordLoading ? "查詢中…" : `查詢（${activeKeywords.length} 個關鍵字 × 2 引擎）`}
+                  </button>
+                </div>
+                {keywordError && <p className="mt-2 text-sm text-red-600">{keywordError}</p>}
+              </div>
+
+              {Object.keys(keywordResults).length > 0 && (
+                <div className="mt-4 space-y-6">
+                  {activeKeywords
+                    .filter((k) => keywordResults[k])
+                    .map((k) => (
+                      <div key={k}>
+                        <p className="mb-2 text-sm font-semibold text-gray-700">「{k}」</p>
+                        <div className="space-y-3">
+                          {keywordResults[k].length === 0 ? (
+                            <p className="text-sm text-gray-400">
+                              這個關鍵字沒有查到結果（可能沒設 API key 或呼叫失敗）
+                            </p>
+                          ) : (
+                            keywordResults[k].map((r) => <BrandVisibilityCard key={r.engine} result={r} />)
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
 
             {engine.visibility && (
               <div className="mt-6">

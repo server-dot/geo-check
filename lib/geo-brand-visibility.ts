@@ -8,14 +8,21 @@
 //
 // 老實講的限制：這只代表這幾個引擎當下的回答，不是「所有 AI 都這樣」；
 // 沒設 API key、抓不到品牌名稱、或呼叫失敗時該引擎回 null，不硬湊一個答案出來。
+//
+// 這一層的查詢邏輯（呼叫引擎、解析引用來源）跟 geo-keyword-visibility.ts
+// 共用——差別只在問的問題內容跟怎麼解讀結果，所以下面把「問一個引擎、拿引用
+// 結果」這件事抽成可以共用的 runVisibilityQueries()。
 
-export interface BrandVisibilityResult {
-  engine: string; // 給人看的引擎名稱，例如「Perplexity」「ChatGPT（GPT-4o 搜尋）」
-  brandName: string;
+export interface VisibilityAnswer {
+  engine: string;
   query: string;
   answer: string;
   citedSelf: boolean;
   citations: { url: string; title: string; isSelf: boolean }[];
+}
+
+export interface BrandVisibilityResult extends VisibilityAnswer {
+  brandName: string;
   advice: string;
 }
 
@@ -43,7 +50,7 @@ async function askModel(model: string, query: string, apiKey: string): Promise<{
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': 'https://geo-check.app',
-      'X-Title': 'GEO Check Brand Visibility',
+      'X-Title': 'GEO Check Visibility Query',
     },
     body: JSON.stringify({
       model,
@@ -61,14 +68,7 @@ async function askModel(model: string, query: string, apiKey: string): Promise<{
   return { content: msg.content ?? '', citations: msg.annotations ?? [] };
 }
 
-// 從頁面標題猜一個能拿去問 AI 的品牌名稱：中文站標題常見「品牌｜賣點｜賣點」這種疊法，
-// 取第一段最接近真實品牌名稱；標題本身沒有分隔符就整段用（截斷避免整句拿去問）。
-export function guessBrandName(title: string): string {
-  const first = title.split(/[|｜\-–—:：]/)[0]?.trim() ?? '';
-  return (first || title.trim()).slice(0, 30);
-}
-
-function hostnameOf(url: string): string {
+export function hostnameOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
   } catch {
@@ -76,14 +76,7 @@ function hostnameOf(url: string): string {
   }
 }
 
-async function checkOne(
-  engine: string,
-  model: string,
-  brandName: string,
-  query: string,
-  domain: string,
-  apiKey: string,
-): Promise<BrandVisibilityResult | null> {
+async function runOne(engine: string, model: string, query: string, domain: string, apiKey: string): Promise<VisibilityAnswer | null> {
   let content: string;
   let rawCitations: UrlCitation[];
   try {
@@ -103,30 +96,42 @@ async function checkOne(
       isSelf: hostnameOf(c.url_citation.url!) === domain,
     }));
 
-  const citedSelf = citations.some((c) => c.isSelf);
-  const mentionsBrand = content.includes(brandName);
-
-  const advice = citedSelf
-    ? `${engine} 回答時直接引用了你自己的網站，代表它找得到你、也願意拿你的內容當答案來源。`
-    : mentionsBrand
-      ? `${engine} 認得這個名字，但回答時引用的是別的網站，不是你自己的——內容可能是從別處轉述來的，不是第一手引用你。`
-      : `${engine} 沒有把這次搜尋跟你的品牌連在一起，代表你目前不在它找得到的範圍內。`;
-
-  return { engine, brandName, query, answer: content, citedSelf, citations, advice };
+  return { engine, query, answer: content, citedSelf: citations.some((c) => c.isSelf), citations };
 }
 
-// 對每個接好的引擎並行查詢同一個品牌，個別失敗不影響其他引擎——
-// 一家 API 掛了，使用者還是看得到另一家的結果，不會整組開天窗。
-export async function checkBrandVisibility(title: string, origin: string): Promise<BrandVisibilityResult[]> {
+// 對每個接好的引擎並行查詢同一個問題，個別失敗不影響其他引擎——
+// 一家 API 掛了，使用者還是看得到另一家的結果，不會整組開天窗。回傳
+// null 代表沒設 API key，呼叫端要自己決定怎麼呈現「沒查」跟「查了沒結果」的差別。
+export async function runVisibilityQueries(query: string, origin: string): Promise<VisibilityAnswer[] | null> {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  const brandName = guessBrandName(title);
-  if (!apiKey || !brandName) return [];
-
+  if (!apiKey) return null;
   const domain = hostnameOf(origin);
-  const query = `「${brandName}」是做什麼的？請簡短介紹，如果知道的話請說明它的官方網站。`;
+  const results = await Promise.all(ENGINES.map((e) => runOne(e.engine, e.model, query, domain, apiKey)));
+  return results.filter((r): r is VisibilityAnswer => r !== null);
+}
 
-  const results = await Promise.all(
-    ENGINES.map((e) => checkOne(e.engine, e.model, brandName, query, domain, apiKey)),
-  );
-  return results.filter((r): r is BrandVisibilityResult => r !== null);
+// 從頁面標題猜一個能拿去問 AI 的品牌名稱：中文站標題常見「品牌｜賣點｜賣點」這種疊法，
+// 取第一段最接近真實品牌名稱；標題本身沒有分隔符就整段用（截斷避免整句拿去問）。
+export function guessBrandName(title: string): string {
+  const first = title.split(/[|｜\-–—:：]/)[0]?.trim() ?? '';
+  return (first || title.trim()).slice(0, 30);
+}
+
+export async function checkBrandVisibility(title: string, origin: string): Promise<BrandVisibilityResult[]> {
+  const brandName = guessBrandName(title);
+  if (!brandName) return [];
+
+  const query = `「${brandName}」是做什麼的？請簡短介紹，如果知道的話請說明它的官方網站。`;
+  const answers = await runVisibilityQueries(query, origin);
+  if (!answers) return [];
+
+  return answers.map((a) => {
+    const mentionsBrand = a.answer.includes(brandName);
+    const advice = a.citedSelf
+      ? `${a.engine} 回答時直接引用了你自己的網站，代表它找得到你、也願意拿你的內容當答案來源。`
+      : mentionsBrand
+        ? `${a.engine} 認得這個名字，但回答時引用的是別的網站，不是你自己的——內容可能是從別處轉述來的，不是第一手引用你。`
+        : `${a.engine} 沒有把這次搜尋跟你的品牌連在一起，代表你目前不在它找得到的範圍內。`;
+    return { ...a, brandName, advice };
+  });
 }
