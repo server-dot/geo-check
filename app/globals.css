@@ -1,26 +1,230 @@
 @import "tailwindcss";
 
+/* GEO Check 報告頁設計系統：墨綠 × 酸萊姆，取代 Tailwind 預設藍/灰。
+   token 值跟元件樣式沿用設計 handoff 的 lime-base.css，是刻意照抄的規格，
+   不是隨便配色——細節見 /Users/kc/.claude/plans/async-pondering-pizza.md */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #f3f2ea;
+  --card: #fffefa;
+  --inset: #eeede3;
+  --ink: #101a14;
+  --ink2: #4e5a51;
+  --ink3: #8a938a;
+  --line: #dcded1;
+  --line2: #eaebe0;
+  --lime: #c9f24a;
+  --limeDark: #a8d128;
+  --ok: #2f6b45;
+  --warn: #8a6410;
+  --fail: #9e3529;
+  --gray: #8a938a;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-inset: var(--inset);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink2);
+  --color-ink3: var(--ink3);
+  --color-line: var(--line);
+  --color-line2: var(--line2);
+  --color-lime: var(--lime);
+  --color-lime-dark: var(--limeDark);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-fail: var(--fail);
+  --color-gray: var(--gray);
+  --font-sans: var(--font-archivo);
+  --font-mono: var(--font-plex-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-archivo), "Noto Sans TC", "PingFang TC", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  text-wrap: pretty;
+}
+
+h1, h2, h3, h4 {
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.mono {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+.eyebrow {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+
+a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--limeDark);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+a:hover {
+  color: #000;
+  text-decoration-color: var(--ink);
+}
+
+code {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 13px;
+  background: var(--inset);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.t-ok { color: var(--ok); }
+.t-warn { color: var(--warn); }
+.t-fail { color: var(--fail); }
+.t-gray { color: var(--gray); }
+
+.btn-lime {
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  border: 0;
+  background: var(--lime);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 10px 18px;
+  cursor: pointer;
+  letter-spacing: -0.01em;
+}
+.btn-lime:hover { background: var(--limeDark); }
+.btn-lime:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-line {
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  border: 0;
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 10px 18px;
+  cursor: pointer;
+}
+.btn-line:hover { background: var(--card); }
+
+.input-mono {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 14px;
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--line);
+  background: var(--card);
+  border-radius: 8px;
+  padding: 10px 13px;
+  color: var(--ink);
+  width: 100%;
+}
+.input-mono::placeholder { color: var(--ink3); }
+.input-mono:focus {
+  outline: 0;
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+
+.figs {
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  text-align: center;
+}
+.figs > div { background: var(--paper); padding: 16px 0 18px; }
+.figs b { display: block; font-size: 32px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; }
+.figs span { font-family: var(--font-plex-mono), monospace; font-size: 11px; letter-spacing: 0.08em; color: var(--ink3); }
+
+.list-row {
+  display: grid;
+  grid-template-columns: 1.1fr 1.4fr 96px;
+  column-gap: 20px;
+  align-items: baseline;
+  padding: 13px 0;
+  border-top: 1px solid var(--line2);
+}
+.list-row:first-child { border-top: 0; }
+.list-row .nm { font-size: 15px; font-weight: 500; }
+.list-row .why { font-family: var(--font-plex-mono), monospace; font-size: 12.5px; color: var(--ink3); }
+.list-row .st { text-align: right; font-family: var(--font-plex-mono), monospace; font-size: 12px; }
+
+.excerpt {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 13px;
+  color: var(--ink2);
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+  border-radius: 8px;
+  padding: 16px 18px;
+  line-height: 1.75;
+}
+
+.todo-row {
+  list-style: none;
+  border-top: 1px solid var(--line);
+  padding: 22px 0;
+  display: grid;
+  grid-template-columns: 1fr 96px;
+  column-gap: 28px;
+  align-items: start;
+}
+.todo-row:last-child { border-bottom: 1px solid var(--line); }
+.todo-row h4 { font-size: 19px; }
+.todo-row p { font-size: 15px; color: var(--ink2); margin-top: 6px; max-width: 38em; }
+.todo-row .st { text-align: right; font-family: var(--font-plex-mono), monospace; font-size: 12px; padding-top: 5px; }
+
+.report-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.report-table th {
+  text-align: left;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink3);
+  font-weight: 500;
+  padding: 0 16px 10px 0;
+  border-bottom: 1px solid var(--ink);
+}
+.report-table td { padding: 14px 16px 14px 0; border-top: 1px solid var(--line2); vertical-align: top; }
+.report-table th:last-child,
+.report-table td:last-child:not([colspan]) {
+  padding-right: 0;
+  text-align: right;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 13px;
+  color: var(--ink2);
+}
+.report-table tr.grp td {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink3);
+  padding: 24px 0 8px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+.report-table td .fix { display: block; font-size: 14px; color: var(--ink3); margin-top: 3px; }
+.report-table td.item { font-weight: 500; }
+
+mark.lime-highlight {
+  background: linear-gradient(transparent 62%, var(--lime) 62%);
+  color: inherit;
 }

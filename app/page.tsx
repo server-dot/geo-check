@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 type BotStatus = "allowed" | "blocked" | "unknown" | "mismatch";
 
@@ -62,6 +62,62 @@ function guessKeywordCandidates(title: string, description: string, h1: string[]
     if (candidates.length >= MAX_CANDIDATES) break;
   }
   return candidates;
+}
+
+type PillarStatus = "ok" | "warn" | "fail";
+
+interface Pillar {
+  code: string;
+  name: string;
+  status: PillarStatus;
+  headline: string;
+  detail: string;
+}
+
+// 四支柱：把散落的區塊收斂成「進得來／讀得到／說得清／記得住」四個問題，
+// 依重要程度排列——進不來，後面都沒意義。階段 A 先只算狀態（ok/warn/fail），
+// 不算 0–100 分數；分數公式待階段 B（需要跟總分公式一起定案）。
+function computePillars(engine: EngineResult): Pillar[] {
+  const total = engine.results.length || 1;
+  const blocked = engine.results.filter((r) => r.status === "blocked").length;
+  const allowed = engine.results.filter((r) => r.status === "allowed").length;
+  const accessStatus: PillarStatus = blocked === 0 ? "ok" : blocked >= total / 2 ? "fail" : "warn";
+  const accessHeadline = blocked === 0 ? `${allowed}/${total} 家全部可存取` : `${blocked}/${total} 家被擋`;
+
+  let readableStatus: PillarStatus = "warn";
+  let readableHeadline = "尚未判定";
+  if (engine.visibility) {
+    readableStatus =
+      engine.visibility.status === "ok" ? "ok" : engine.visibility.status === "thin" ? "warn" : "fail";
+    readableHeadline =
+      engine.visibility.status === "empty"
+        ? "AI 讀到的幾乎是空的"
+        : `${engine.visibility.textLength} 字可讀`;
+  }
+
+  const signalsOk = engine.contentSignals?.declared ?? false;
+  const llmsOk = engine.llmsTxt.exists === true;
+  const declaredStatus: PillarStatus = signalsOk && llmsOk ? "ok" : "warn";
+  const declaredHeadline =
+    signalsOk && llmsOk
+      ? "Content Signals 與 llms.txt 都到位"
+      : signalsOk
+        ? "Content Signals 已宣告，llms.txt 待補"
+        : llmsOk
+          ? "llms.txt 已部署，Content Signals 待宣告"
+          : "兩項都還沒宣告";
+
+  const bvTotal = engine.brandVisibility.length;
+  const bvCited = engine.brandVisibility.filter((r) => r.citedSelf).length;
+  const knownStatus: PillarStatus = bvTotal === 0 ? "warn" : bvCited === bvTotal ? "ok" : bvCited > 0 ? "warn" : "fail";
+  const knownHeadline = bvTotal === 0 ? "尚未實測詢問" : `${bvCited}/${bvTotal} 個引擎引用你`;
+
+  return [
+    { code: "01 ACCESS", name: "進得來", status: accessStatus, headline: accessHeadline, detail: "AI 爬蟲能不能存取你的網站，是後面一切的前提。" },
+    { code: "02 READABLE", name: "讀得到", status: readableStatus, headline: readableHeadline, detail: "存取到之後，讀到的內容夠不夠讓 AI 理解你在做什麼。" },
+    { code: "03 DECLARED", name: "說得清", status: declaredStatus, headline: declaredHeadline, detail: "有沒有主動告訴 AI，你的內容可以被怎麼使用。" },
+    { code: "04 KNOWN", name: "記得住", status: knownStatus, headline: knownHeadline, detail: "實際被問到時，AI 認不認得你、願不願意引用你。" },
+  ];
 }
 
 type SignalValue = "yes" | "no" | "unset";
@@ -157,32 +213,39 @@ interface StatusResponse {
 }
 
 const SIGNAL_BADGE: Record<SignalValue, { text: string; className: string }> = {
-  yes: { text: "允許", className: "border-green-200 bg-green-50 text-green-700" },
-  no: { text: "不允許", className: "border-red-200 bg-red-50 text-red-700" },
-  unset: { text: "未表態", className: "border-gray-200 bg-gray-50 text-gray-500" },
+  yes: { text: "允許", className: "border-ok/30 bg-ok/10 text-ok" },
+  no: { text: "不允許", className: "border-fail/30 bg-fail/10 text-fail" },
+  unset: { text: "未表態", className: "border-gray/30 bg-gray/10 text-gray" },
 };
 
 const VISIBILITY: Record<VisibilityStatus, { label: string; className: string }> = {
-  ok: { label: "🟢 AI 讀得到你的內容", className: "border-green-200 bg-green-50" },
-  thin: { label: "🟡 AI 讀到的內容偏少", className: "border-amber-200 bg-amber-50" },
-  empty: { label: "🔴 AI 讀到的是一片空白", className: "border-red-200 bg-red-50" },
+  ok: { label: "🟢 AI 讀得到你的內容", className: "border-ok/25 bg-ok/[.06]" },
+  thin: { label: "🟡 AI 讀到的內容偏少", className: "border-warn/25 bg-warn/[.06]" },
+  empty: { label: "🔴 AI 讀到的是一片空白", className: "border-fail/25 bg-fail/[.06]" },
 };
 
 const BADGE: Record<BotStatus, { text: string; className: string }> = {
-  allowed: { text: "可存取", className: "border-green-200 bg-green-50 text-green-700" },
-  blocked: { text: "被擋", className: "border-red-200 bg-red-50 text-red-700" },
-  unknown: { text: "無法判定", className: "border-gray-200 bg-gray-50 text-gray-500" },
-  mismatch: { text: "政策允許但實測被擋", className: "border-orange-200 bg-orange-50 text-orange-700" },
+  allowed: { text: "可存取", className: "border-ok/30 bg-ok/10 text-ok" },
+  blocked: { text: "被擋", className: "border-fail/30 bg-fail/10 text-fail" },
+  unknown: { text: "無法判定", className: "border-gray/30 bg-gray/10 text-gray" },
+  mismatch: { text: "政策允許但實測被擋", className: "border-warn/30 bg-warn/10 text-warn" },
 };
 
 const CHECK_UI: Record<CheckStatus, { badge: string; text: string }> = {
-  ok: { badge: "bg-green-50 text-green-700 border-green-200", text: "正常" },
-  warn: { badge: "bg-amber-50 text-amber-700 border-amber-200", text: "可優化" },
-  fail: { badge: "bg-red-50 text-red-700 border-red-200", text: "需處理" },
+  ok: { badge: "bg-ok/10 text-ok border-ok/30", text: "正常" },
+  warn: { badge: "bg-warn/10 text-warn border-warn/30", text: "可優化" },
+  fail: { badge: "bg-fail/10 text-fail border-fail/30", text: "需處理" },
 };
 
-// 狀態色（dataviz 技能的固定 status palette，不跟著品牌色跑）
-const STATUS_COLOR = { ok: "#0ca30c", warn: "#fab219", fail: "#d03b3b" } as const;
+const PILLAR_UI: Record<PillarStatus, { emoji: string; className: string; barClassName: string }> = {
+  ok: { emoji: "🟢", className: "text-ok", barClassName: "bg-ok" },
+  warn: { emoji: "🟡", className: "text-warn", barClassName: "bg-warn" },
+  fail: { emoji: "🔴", className: "text-fail", barClassName: "bg-fail" },
+};
+
+// 狀態色（dataviz 技能的固定 status palette，不跟著品牌色跑）——CategoryOverview
+// 用內嵌 style 畫長條，跟新 token 的十六進位值保持一致。
+const STATUS_COLOR = { ok: "#2f6b45", warn: "#8a6410", fail: "#9e3529" } as const;
 const STATUS_LABEL = { ok: "正常", warn: "可優化", fail: "需處理" } as const;
 
 interface CategoryRow {
@@ -233,10 +296,10 @@ function CategoryOverview({ rows }: { rows: CategoryRow[] }) {
   if (visible.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="rounded-[10px] border border-line bg-card p-5">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-500">檢測總覽</h2>
-        <div className="flex items-center gap-3 text-xs text-gray-500">
+        <h2 className="eyebrow">檢測總覽</h2>
+        <div className="flex items-center gap-3 text-xs text-ink3">
           {(["ok", "warn", "fail"] as const).map((s) => (
             <span key={s} className="flex items-center gap-1.5">
               <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: STATUS_COLOR[s] }} />
@@ -251,10 +314,10 @@ function CategoryOverview({ rows }: { rows: CategoryRow[] }) {
           const segs = (["fail", "warn", "ok"] as const).map((s) => ({ status: s, count: row[s] }));
           return (
             <div key={row.name} className="flex items-center gap-3">
-              <p className="w-28 shrink-0 truncate text-xs text-gray-600" title={row.name}>
+              <p className="w-28 shrink-0 truncate text-xs text-ink2" title={row.name}>
                 {row.name}
               </p>
-              <div className="flex h-4 flex-1 gap-[2px] overflow-hidden rounded-r bg-white">
+              <div className="flex h-4 flex-1 gap-[2px] overflow-hidden rounded-r bg-card">
                 {segs.map(
                   (s) =>
                     s.count > 0 && (
@@ -262,13 +325,13 @@ function CategoryOverview({ rows }: { rows: CategoryRow[] }) {
                         key={s.status}
                         tabIndex={0}
                         title={`${row.name} · ${STATUS_LABEL[s.status]} ${s.count} 項`}
-                        className="h-full outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                        className="h-full outline-none focus-visible:ring-2 focus-visible:ring-ink/40"
                         style={{ width: `${(s.count / total) * 100}%`, backgroundColor: STATUS_COLOR[s.status] }}
                       />
                     ),
                 )}
               </div>
-              <p className="w-10 shrink-0 text-right text-xs tabular-nums text-gray-400">{total} 項</p>
+              <p className="w-10 shrink-0 text-right text-xs tabular-nums text-ink3">{total} 項</p>
             </div>
           );
         })}
@@ -289,47 +352,47 @@ function DetailsToggle({ title, details }: { title: string; details: { url: stri
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-xs text-blue-600 hover:text-blue-700 hover:underline whitespace-nowrap"
+        className="mono whitespace-nowrap text-xs text-ink3 underline decoration-limeDark decoration-2 underline-offset-2 hover:text-ink"
       >
         查看更多（{details.length} 頁）
       </button>
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
           onClick={() => setOpen(false)}
         >
           <div
-            className="flex max-h-[75vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+            className="flex max-h-[75vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-card shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-3.5">
-              <p className="text-sm font-semibold text-gray-800">
+            <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3.5">
+              <p className="text-sm font-semibold text-ink">
                 {title}
-                <span className="ml-2 text-xs font-normal text-gray-400">{details.length} 個問題頁面</span>
+                <span className="ml-2 text-xs font-normal text-ink3">{details.length} 個問題頁面</span>
               </p>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="px-1 text-lg leading-none text-gray-400 hover:text-gray-700"
+                className="px-1 text-lg leading-none text-ink3 hover:text-ink"
               >
                 ✕
               </button>
             </div>
-            <div className="divide-y divide-gray-50 overflow-y-auto overflow-x-hidden px-5 py-2">
+            <div className="divide-y divide-line2 overflow-y-auto overflow-x-hidden px-5 py-2">
               {details.map((d, i) => (
                 <div key={i} className="flex gap-3 py-2.5 text-xs leading-relaxed">
-                  <span className="w-6 shrink-0 text-right tabular-nums text-gray-300">{i + 1}</span>
+                  <span className="mono w-6 shrink-0 text-right tabular-nums text-ink3/60">{i + 1}</span>
                   <div className="min-w-0 flex-1">
                     <a
                       href={d.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block break-all font-mono text-blue-600 hover:underline"
+                      className="mono block break-all text-ink"
                       title={d.url}
                     >
                       {urlToPath(d.url)}
                     </a>
-                    <p className="mt-0.5 break-all text-gray-400">{d.note}</p>
+                    <p className="mt-0.5 break-all text-ink3">{d.note}</p>
                   </div>
                 </div>
               ))}
@@ -356,47 +419,59 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-gray-500">深度健檢（{checks.length} 項）</h2>
-        <div className="flex gap-3 text-xs">
-          <span className="text-red-600">需處理 {sc.fail}</span>
-          <span className="text-amber-600">可優化 {sc.warn}</span>
-          <span className="text-green-600">正常 {sc.ok}</span>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="eyebrow">深度健檢（{checks.length} 項）</h2>
+        <div className="mono flex gap-3 text-xs">
+          <span className="text-fail">需處理 {sc.fail}</span>
+          <span className="text-warn">可優化 {sc.warn}</span>
+          <span className="text-ok">正常 {sc.ok}</span>
         </div>
       </div>
-      {[...groups.entries()].map(([category, rows]) => (
-        <div key={category} className="mb-4">
-          <p className="mb-1.5 text-xs font-semibold text-gray-400">{category}</p>
-          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-            <table className="w-full border-collapse text-sm">
-              <tbody>
+      <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
+        <table className="report-table min-w-[640px]">
+          <thead>
+            <tr>
+              <th style={{ width: "11%" }}>狀態</th>
+              <th style={{ width: "24%" }}>項目</th>
+              <th>建議</th>
+              <th style={{ width: "13%" }}>問題頁面</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...groups.entries()].map(([category, rows]) => (
+              <Fragment key={category}>
+                <tr className="grp">
+                  <td colSpan={4}>{category}</td>
+                </tr>
                 {rows.map((c) => {
                   const ui = CHECK_UI[c.status];
                   return (
-                    <tr key={c.key} className="border-t border-gray-100 align-top first:border-t-0">
-                      <td className="whitespace-nowrap px-3 py-2.5">
-                        <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${ui.badge}`}>{ui.text}</span>
+                    <tr key={c.key}>
+                      <td>
+                        <span className={`mono rounded-full border px-2 py-0.5 text-xs font-medium ${ui.badge}`}>
+                          {ui.text}
+                        </span>
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 font-medium text-gray-800">{c.item}</td>
-                      <td className="px-3 py-2.5 text-gray-600">
+                      <td className="item">{c.item}</td>
+                      <td className="text-ink2">
                         {c.advice}
-                        {c.evidence && <div className="mt-1 break-all text-xs text-gray-400">{c.evidence}</div>}
+                        {c.evidence && <div className="fix mono break-all">{c.evidence}</div>}
                       </td>
-                      <td className="px-3 py-2.5 align-top">
+                      <td>
                         {c.details && c.details.length > 0 ? (
                           <DetailsToggle title={c.item} details={c.details} />
                         ) : (
-                          <span className="text-xs text-gray-300">—</span>
+                          <span className="text-ink3/50">—</span>
                         )}
                       </td>
                     </tr>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ))}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -415,9 +490,9 @@ function BotAccessList({ results }: { results: AiBotResult[] }) {
   if (uniform) {
     const status = results[0].status;
     return (
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="rounded-[10px] border border-line bg-card p-5">
         <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-gray-700">
+          <p className="text-sm text-ink2">
             {results.length} 個 AI 爬蟲的結果一致：
             <span className={`ml-2 rounded-full border px-3 py-1 text-sm font-medium ${BADGE[status].className}`}>
               {BADGE[status].text}
@@ -426,18 +501,18 @@ function BotAccessList({ results }: { results: AiBotResult[] }) {
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="shrink-0 text-xs text-blue-600 hover:underline"
+            className="mono shrink-0 text-xs text-ink3 underline decoration-limeDark decoration-2 underline-offset-2 hover:text-ink"
           >
             {expanded ? "收合" : "這是哪幾個爬蟲？"}
           </button>
         </div>
         {expanded && (
-          <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-100 pt-4">
+          <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
             {results.map((r) => (
               <span
                 key={r.ua}
                 title={`${r.ua} · ${r.matchedRule}`}
-                className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-600"
+                className="mono rounded-full border border-line px-3 py-1 text-xs text-ink2"
               >
                 {r.label}
               </span>
@@ -450,12 +525,12 @@ function BotAccessList({ results }: { results: AiBotResult[] }) {
 
   // 不一致才是真正有故事可講的情況（部分被擋、政策跟實測不一致），逐項列表才有意義
   return (
-    <div className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white shadow-sm">
+    <div className="divide-y divide-line rounded-[10px] border border-line bg-card">
       {results.map((r) => (
         <div key={r.ua} className="flex items-center justify-between px-5 py-4">
           <div>
-            <p className="font-medium text-gray-900">{r.label}</p>
-            <p className="text-xs text-gray-400">
+            <p className="font-medium text-ink">{r.label}</p>
+            <p className="mono text-xs text-ink3">
               {r.ua} · {r.matchedRule}
             </p>
           </div>
@@ -524,42 +599,36 @@ function renderInlineMarkdown(text: string, citations: { url: string }[]): React
 // 有沒有引用到自己的網域，是這整份健檢裡最直接的「有沒有效」證據。
 function BrandVisibilityCard({ result }: { result: VisibilityCardData }) {
   return (
-    <div
-      className={`rounded-xl border p-6 shadow-sm ${
-        result.citedSelf ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"
-      }`}
-    >
-      <p className="text-xs font-semibold tracking-wide text-gray-500 uppercase">{result.engine}</p>
-      <p className="mt-1 text-lg font-bold text-gray-900">
+    <div className="rounded-[10px] border border-line bg-card p-6">
+      <p className="mono text-[11px] font-medium tracking-wide text-ink3 uppercase">{result.engine}</p>
+      <p className="mt-1 text-lg font-bold text-ink">
         {result.citedSelf ? "🟢 引用了你自己的網站" : "🟡 沒有引用你自己的網站"}
       </p>
-      <p className="mt-2 text-sm leading-relaxed text-gray-600">{result.advice}</p>
+      <p className="mt-2 text-sm leading-relaxed text-ink2">{result.advice}</p>
 
-      <div className="mt-4">
-        <p className="text-xs font-medium text-gray-500">我們實際問的問題：</p>
-        <p className="mt-1 text-sm text-gray-800">「{result.query}」</p>
+      <div className="quote-block mt-4 border-l-[3px] border-lime pl-4">
+        <p className="text-xs font-medium text-ink3">我們實際問的問題：</p>
+        <p className="mt-1 text-sm text-ink">「{result.query}」</p>
       </div>
 
       <div className="mt-4">
-        <p className="text-xs font-medium text-gray-500">{result.engine} 的實際回答：</p>
-        <div className="mt-1 rounded-lg border border-gray-200 bg-white/70 p-3 text-sm leading-relaxed text-gray-700">
+        <p className="text-xs font-medium text-ink3">{result.engine} 的實際回答：</p>
+        <div className="mt-1 rounded-lg border border-line bg-paper p-3 text-[14.5px] leading-relaxed text-ink2">
           {renderAnswerMarkdown(result.answer, result.citations)}
         </div>
       </div>
 
       {result.citations.length > 0 && (
         <div className="mt-4">
-          <p className="text-xs font-medium text-gray-500">引用來源：</p>
+          <p className="text-xs font-medium text-ink3">引用來源：</p>
           <ul className="mt-1 space-y-1">
             {result.citations.map((c, i) => (
-              <li key={i} className="text-xs">
+              <li key={i} className="text-[13.5px]">
                 <a
                   href={c.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`break-all underline underline-offset-2 ${
-                    c.isSelf ? "font-medium text-green-700" : "text-blue-600"
-                  }`}
+                  className={`break-all underline-offset-2 ${c.isSelf ? "font-semibold decoration-limeDark" : ""}`}
                 >
                   {c.isSelf && "★ "}
                   {c.title}
@@ -580,20 +649,20 @@ function LlmsTxtCard({ llmsTxt }: { llmsTxt: { exists: boolean | null; quality: 
   const quality = llmsTxt.quality;
 
   return (
-    <div className="mt-4 rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
+    <div className="mt-4 rounded-[10px] border border-line bg-card px-5 py-4">
       <div className="flex items-center justify-between gap-4">
-        <p className="font-medium text-gray-900">llms.txt</p>
+        <p className="font-medium text-ink">llms.txt</p>
         <span
           className={`shrink-0 rounded-full border px-3 py-1 text-sm font-medium ${
             llmsTxt.exists && quality?.status === "ok"
-              ? "border-green-200 bg-green-50 text-green-700"
-              : "border-amber-200 bg-amber-50 text-amber-700"
+              ? "border-ok/30 bg-ok/10 text-ok"
+              : "border-warn/30 bg-warn/10 text-warn"
           }`}
         >
           {!llmsTxt.exists ? "沒有" : quality?.status === "ok" ? "格式完整" : "內容單薄"}
         </span>
       </div>
-      <p className="mt-2 text-xs leading-relaxed text-gray-500">
+      <p className="mt-2 text-xs leading-relaxed text-ink3">
         {llmsTxt.exists
           ? quality?.advice
           : "尚未部署。這是給 AI 讀的網站地圖，能主動告訴 AI 你有哪些重要內容。"}
@@ -604,34 +673,29 @@ function LlmsTxtCard({ llmsTxt }: { llmsTxt: { exists: boolean | null; quality: 
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="mt-2 text-xs text-blue-600 hover:underline"
+            className="mono mt-2 text-xs text-ink3 underline decoration-limeDark decoration-2 underline-offset-2 hover:text-ink"
           >
             {expanded ? "收合" : `看實際內容（${quality.links.length} 個連結）`}
           </button>
           {expanded && (
-            <div className="mt-3 space-y-3 border-t border-gray-100 pt-3">
+            <div className="mt-3 space-y-3 border-t border-line pt-3">
               <div>
-                <p className="text-xs font-medium text-gray-500"># 標題</p>
-                <p className="mt-0.5 text-sm text-gray-800">{quality.title || "（缺）"}</p>
+                <p className="text-xs font-medium text-ink3"># 標題</p>
+                <p className="mt-0.5 text-sm text-ink">{quality.title || "（缺）"}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-gray-500">摘要引言</p>
-                <p className="mt-0.5 text-sm text-gray-800">{quality.summary || "（缺）"}</p>
+                <p className="text-xs font-medium text-ink3">摘要引言</p>
+                <p className="mt-0.5 text-sm text-ink">{quality.summary || "（缺）"}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-gray-500">頁面連結（{quality.links.length} 個，共 {quality.charCount} 字）</p>
-                <div className="mt-1 max-h-64 space-y-1.5 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50 p-2">
+                <p className="text-xs font-medium text-ink3">頁面連結（{quality.links.length} 個，共 {quality.charCount} 字）</p>
+                <div className="mt-1 max-h-64 space-y-1.5 overflow-y-auto rounded-lg border border-line2 bg-paper p-2">
                   {quality.links.map((l, i) => (
                     <div key={i} className="text-xs">
-                      <a
-                        href={l.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-medium text-blue-600 hover:underline"
-                      >
+                      <a href={l.url} target="_blank" rel="noopener noreferrer" className="font-medium">
                         {l.text}
                       </a>
-                      <p className="text-gray-500">{l.description || "（沒有附說明）"}</p>
+                      <p className="text-ink3">{l.description || "（沒有附說明）"}</p>
                     </div>
                   ))}
                 </div>
@@ -696,7 +760,6 @@ export default function GeoPage() {
   }
 
   const engine = status?.engine;
-  const blockedCount = engine?.results.filter((r) => r.status === "blocked").length ?? 0;
   const unknownCount = engine?.results.filter((r) => r.status === "unknown").length ?? 0;
 
   const suggestedKeywords = engine?.visibility
@@ -741,104 +804,181 @@ export default function GeoPage() {
     }
   }
 
+  const pillars = engine ? computePillars(engine) : [];
+  const goodPillars = pillars.filter((p) => p.status === "ok");
+  const restPillars = pillars.filter((p) => p.status !== "ok");
+  const heroPlain = goodPillars.length > 0 ? `AI ${goodPillars.map((p) => p.name).join("、")}。` : "";
+  const heroMarked =
+    restPillars.length === 0
+      ? "全部到位，可以往內容細節優化。"
+      : goodPillars.length === 0
+        ? `AI ${restPillars.map((p) => p.name).join("、")}都還沒做到，這是最優先要處理的地方。`
+        : `剩下${restPillars.map((p) => p.name).join("、")}還需要處理。`;
+
+  const ledeParts: string[] = [];
+  if (engine?.visibility) {
+    ledeParts.push(
+      engine.visibility.status === "empty"
+        ? "內容幾乎讀不到"
+        : `內容不依賴 JavaScript 就讀得到 ${engine.visibility.textLength} 字`
+    );
+  }
+  if (engine?.contentSignals) {
+    ledeParts.push(engine.contentSignals.declared ? "Content Signals 已表態" : "Content Signals 尚未表態");
+  }
+  if (engine && engine.llmsTxt.exists !== null) {
+    ledeParts.push(engine.llmsTxt.exists ? "llms.txt 已部署" : "llms.txt 尚未部署");
+  }
+  if (engine && engine.brandVisibility.length > 0) {
+    const cited = engine.brandVisibility.filter((r) => r.citedSelf).length;
+    ledeParts.push(`${cited}/${engine.brandVisibility.length} 個引擎實際回答時引用了你自己的網站`);
+  }
+  const failCount = status?.audit?.filter((c) => c.status === "fail").length ?? 0;
+  if (status?.audit) ledeParts.push(`深度健檢 ${status.audit.length} 項中有 ${failCount} 項需處理`);
+  const lede = ledeParts.join("，") + "。";
+
+  const failItems = status?.audit?.filter((c) => c.status === "fail") ?? [];
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-      <div className="mx-auto max-w-3xl px-4 py-16">
-        <p className="text-center text-xs font-semibold tracking-wide text-blue-600 uppercase">
-          AI Search Visibility
-        </p>
-        <h1 className="mt-2 text-center text-3xl font-bold text-gray-900">AI 搜尋能見度健檢</h1>
-        <p className="mt-3 text-center text-gray-500">
-          檢測你的網站對 ChatGPT、Claude、Perplexity 等 AI 搜尋引擎是否開放，並跑一次多頁深度健檢
-        </p>
+    <div className="min-h-screen bg-paper">
+      <header className="sticky top-0 z-20 border-b border-line bg-paper/95 backdrop-blur">
+        <div className="mx-auto flex h-[68px] max-w-[1120px] items-center justify-between px-6 sm:px-10">
+          <div className="flex items-center gap-2.5">
+            <span className="relative block h-[26px] w-[26px] shrink-0 rounded-[7px] bg-lime">
+              <span className="absolute bottom-1.5 left-1.5 h-[9px] w-[9px] rounded-full bg-ink" />
+            </span>
+            <b className="text-[17px] font-bold tracking-[-0.02em] text-ink">GEOCHECK</b>
+            <em className="hidden border-l border-line pl-[11px] text-[12.5px] not-italic text-ink3 sm:inline">
+              AI 搜尋能見度健檢
+            </em>
+          </div>
+          <div className="flex items-center gap-3">
+            {engine && <span className="mono hidden text-xs text-ink3 sm:inline">{url}</span>}
+            {engine && (
+              <button type="button" onClick={() => setStatus(null)} className="btn-line">
+                重新檢測
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
 
-        <form onSubmit={handleCheck} className="mt-8 flex gap-2">
-          <input
-            type="text"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="輸入網址，例如 example.com"
-            className="flex-1 rounded-lg border border-gray-300 px-4 py-3 text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-lg bg-blue-600 px-6 py-3 font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading ? "檢測中…" : "開始檢測"}
-          </button>
-        </form>
+      <div className="mx-auto max-w-[1120px] px-6 py-16 sm:px-10">
+        {!engine && (
+          <>
+            <p className="eyebrow text-center">AI SEARCH VISIBILITY</p>
+            <h1 className="mt-2 text-center text-3xl font-bold text-ink">AI 搜尋能見度健檢</h1>
+            <p className="mt-3 text-center text-ink2">
+              檢測你的網站對 ChatGPT、Claude、Perplexity 等 AI 搜尋引擎是否開放，並跑一次多頁深度健檢
+            </p>
 
-        {error && <p className="mt-4 text-center text-red-600">{error}</p>}
+            <form onSubmit={handleCheck} className="mt-8 flex gap-2">
+              <input
+                type="text"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="輸入網址，例如 example.com"
+                className="input-mono flex-1"
+              />
+              <button type="submit" disabled={loading} className="btn-lime">
+                {loading ? "檢測中…" : "開始檢測"}
+              </button>
+            </form>
+
+            {error && <p className="mt-4 text-center text-fail">{error}</p>}
+          </>
+        )}
 
         {engine && (
-          <div className="mt-10">
-            {/* 判定不出來時必須明講。給假綠燈比不給答案傷害更大 */}
-            <div
-              className={`rounded-xl border p-6 text-center shadow-sm ${
-                unknownCount > 0
-                  ? "border-gray-300 bg-gray-50"
-                  : blockedCount === 0
-                    ? "border-green-200 bg-green-50"
-                    : blockedCount >= 4
-                      ? "border-red-200 bg-red-50"
-                      : "border-amber-200 bg-amber-50"
-              }`}
-            >
-              <p className="text-2xl font-bold text-gray-900">
-                {unknownCount > 0
-                  ? "⚪ 無法判定"
-                  : blockedCount === 0
-                    ? "🟢 AI 引擎都能存取你的網站"
-                    : blockedCount >= 4
-                      ? "🔴 主要 AI 引擎被擋住了"
-                      : `🟡 有 ${blockedCount} 個 AI 引擎被擋住`}
+          <div>
+            {/* Hero：結論句 + facts 列 */}
+            <section className="border-b border-line pb-13" style={{ paddingBottom: 52, paddingTop: 8 }}>
+              <p className="eyebrow">
+                AI SEARCH VISIBILITY · {new Date().toISOString().slice(0, 16).replace("T", " ")}
               </p>
+              <h1 className="mt-3 max-w-[19em] text-[32px] leading-[1.18] font-bold tracking-[-0.03em] text-ink sm:text-[40px]">
+                {heroPlain} <mark className="lime-highlight">{heroMarked}</mark>
+              </h1>
+              <p className="mt-4 max-w-[36em] text-[15.5px] leading-relaxed text-ink2">{lede}</p>
+              <div className="mono mt-5 flex flex-wrap gap-x-6 gap-y-2 text-xs text-ink3">
+                <span>爬蟲 {engine.results.length} 家</span>
+                {status?.audit && <span>深度健檢 {status.audit.length} 項</span>}
+                <span>實際詢問 {engine.brandVisibility.length} 個引擎</span>
+                <span>關鍵字查詢 {Object.keys(keywordResults).length} 組</span>
+              </div>
 
               {unknownCount > 0 && (
-                <div className="mt-3 space-y-2 text-sm text-gray-600">
-                  <p>{engine.robotsNote}</p>
+                <div className="mt-5 space-y-2 rounded-[10px] border border-line bg-card p-4 text-sm text-ink2">
+                  <p>⚪ {engine.robotsNote}</p>
                   <p>
                     這<strong>不代表</strong>你的網站對 AI 開放——很可能有 robots.txt
                     但我們讀不到。請直接在瀏覽器打開{" "}
-                    <a
-                      href={engine.robotsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 underline underline-offset-2"
-                    >
+                    <a href={engine.robotsUrl} target="_blank" rel="noopener noreferrer">
                       {engine.robotsUrl}
                     </a>{" "}
                     人工確認。
                   </p>
                   {engine.wafHint && (
-                    <div className="mt-3 rounded-lg border border-gray-200 bg-white/70 p-3 text-left">
-                      <p className="text-xs font-semibold text-gray-500">
-                        偵測到可能的原因：{engine.wafHint.vendor}
-                      </p>
-                      <p className="mt-1 text-sm text-gray-600">{engine.wafHint.advice}</p>
+                    <div className="mt-2 rounded-lg border border-line bg-paper p-3">
+                      <p className="text-xs font-semibold text-ink3">偵測到可能的原因：{engine.wafHint.vendor}</p>
+                      <p className="mt-1 text-sm text-ink2">{engine.wafHint.advice}</p>
                     </div>
                   )}
                 </div>
               )}
+            </section>
 
-              {engine.robotsStatus === "none" && (
-                <p className="mt-2 text-sm text-gray-500">
-                  （這個網站沒有 robots.txt，依規範預設所有爬蟲都能存取）
-                </p>
-              )}
-              {engine.robotsStatus === "found" && (
-                <p className="mt-2 text-xs text-gray-400">規則來源：{engine.robotsUrl}</p>
-              )}
-            </div>
+            {/* 四支柱：進得來／讀得到／說得清／記得住 */}
+            <section className="grid grid-cols-2 gap-px border-b border-line bg-line sm:grid-cols-4">
+              {pillars.map((p) => {
+                const ui = PILLAR_UI[p.status];
+                const barWidth = p.status === "ok" ? "100%" : p.status === "warn" ? "60%" : "25%";
+                return (
+                  <div key={p.code} className="bg-card px-5 pt-[22px] pb-6">
+                    <p className="eyebrow">{p.code}</p>
+                    <p className="mt-1 text-2xl font-bold tracking-[-0.03em] text-ink">{p.name}</p>
+                    <p className={`mt-1.5 text-[13.5px] font-semibold ${ui.className}`}>
+                      {ui.emoji} {p.headline}
+                    </p>
+                    <div className="mt-4 h-[5px] rounded-full bg-line2">
+                      <div className={`h-full rounded-full ${ui.barClassName}`} style={{ width: barWidth }} />
+                    </div>
+                    <p className="mt-3 text-[13.5px] leading-[1.55] text-ink2">{p.detail}</p>
+                  </div>
+                );
+              })}
+            </section>
 
-            <div className="mt-6">
+            {/* 先做這幾件事：只列 fail 項目，API 回傳時已依權威順序排好 */}
+            {failItems.length > 0 && (
+              <section className="border-b border-line py-14" style={{ paddingTop: 56, paddingBottom: 56 }}>
+                <p className="eyebrow">TODO</p>
+                <div className="mt-1 flex items-baseline gap-2">
+                  <h2 className="text-[26px] font-bold text-ink">先做這幾件事</h2>
+                  <span className="mono text-xs text-ink3">依健檢結果排序 · {failItems.length} 項需處理</span>
+                </div>
+                <ul className="mt-2">
+                  {failItems.map((c) => (
+                    <li key={c.key} className="todo-row">
+                      <div>
+                        <h4 className="font-bold text-ink">{c.item}</h4>
+                        <p>{c.advice}</p>
+                      </div>
+                      <span className="st t-fail">需處理</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            <div className="mt-10">
+              {/* 五分類雷達圖上線前的過渡呈現：狀態色堆疊長條，先沿用既有分類邏輯 */}
               <CategoryOverview rows={buildCategoryRows(engine, status?.audit)} />
             </div>
 
             {engine.brandVisibility.length > 0 && (
               <div className="mt-6">
-                <h2 className="mb-3 text-sm font-semibold text-gray-500">AI 認不認得你？（實際去問）</h2>
+                <h2 className="eyebrow mb-3">AI 認不認得你？（實際去問）</h2>
                 <div className="space-y-4">
                   {engine.brandVisibility.map((r) => (
                     <BrandVisibilityCard key={r.engine} result={r} />
@@ -848,24 +988,22 @@ export default function GeoPage() {
             )}
 
             <div className="mt-6">
-              <h2 className="mb-1 text-sm font-semibold text-gray-500">
-                關鍵字 AI 能見度（你想搶的主題，AI 推薦名單裡有你嗎？）
-              </h2>
-              <p className="mb-3 text-xs text-gray-400">
+              <h2 className="eyebrow mb-1">關鍵字 AI 能見度（你想搶的主題，AI 推薦名單裡有你嗎？）</h2>
+              <p className="mb-3 max-w-[34em] text-xs text-ink3">
                 上面看的是「AI 知不知道你」；這裡看的是「有人拿某個主題去問 AI，AI 會不會推薦到你」——這才是大部分人真正在意的問題。以下是從標題／描述自動抓的候選字，可以刪掉不要的，或自己加。
               </p>
-              <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="rounded-[10px] border border-line bg-card p-6">
                 <div className="flex flex-wrap gap-2">
                   {activeKeywords.map((k) => (
                     <span
                       key={k}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm text-blue-800"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-line bg-inset px-3 py-1 text-sm text-ink2"
                     >
                       {k}
                       <button
                         type="button"
                         onClick={() => removeKeyword(k)}
-                        className="text-blue-400 hover:text-blue-700"
+                        className="text-ink3 hover:text-fail"
                         aria-label={`移除 ${k}`}
                       >
                         ×
@@ -873,7 +1011,7 @@ export default function GeoPage() {
                     </span>
                   ))}
                   {activeKeywords.length === 0 && (
-                    <span className="text-sm text-gray-400">（沒有抓到候選關鍵字，自己加一個試試）</span>
+                    <span className="text-sm text-ink3">（沒有抓到候選關鍵字，自己加一個試試）</span>
                   )}
                 </div>
                 <div className="mt-3 flex gap-2">
@@ -887,25 +1025,21 @@ export default function GeoPage() {
                       }
                     }}
                     placeholder="輸入自己的關鍵字…"
-                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none"
+                    className="input-mono flex-1"
                   />
-                  <button
-                    type="button"
-                    onClick={addCustomKeyword}
-                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
+                  <button type="button" onClick={addCustomKeyword} className="btn-line">
                     新增
                   </button>
                   <button
                     type="button"
                     onClick={runKeywordCheck}
                     disabled={keywordLoading || activeKeywords.length === 0}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                    className="btn-lime whitespace-nowrap"
                   >
                     {keywordLoading ? "查詢中…" : `查詢（${activeKeywords.length} 個關鍵字 × 2 引擎）`}
                   </button>
                 </div>
-                {keywordError && <p className="mt-2 text-sm text-red-600">{keywordError}</p>}
+                {keywordError && <p className="mt-2 text-sm text-fail">{keywordError}</p>}
               </div>
 
               {Object.keys(keywordResults).length > 0 && (
@@ -914,10 +1048,10 @@ export default function GeoPage() {
                     .filter((k) => keywordResults[k])
                     .map((k) => (
                       <div key={k}>
-                        <p className="mb-2 text-sm font-semibold text-gray-700">「{k}」</p>
+                        <p className="mb-2 text-sm font-semibold text-ink2">「{k}」</p>
                         <div className="space-y-3">
                           {keywordResults[k].length === 0 ? (
-                            <p className="text-sm text-gray-400">
+                            <p className="text-sm text-ink3">
                               這個關鍵字沒有查到結果（可能沒設 API key 或呼叫失敗）
                             </p>
                           ) : (
@@ -932,11 +1066,11 @@ export default function GeoPage() {
 
             {engine.visibility && (
               <div className="mt-6">
-                <h2 className="mb-3 text-sm font-semibold text-gray-500">AI 眼中的你</h2>
-                <div className={`rounded-xl border p-6 shadow-sm ${VISIBILITY[engine.visibility.status].className}`}>
-                  <p className="text-lg font-bold text-gray-900">{VISIBILITY[engine.visibility.status].label}</p>
-                  <p className="mt-2 text-sm font-medium leading-relaxed text-gray-800">{engine.visibility.summary}</p>
-                  <p className="mt-1 text-xs text-gray-500">
+                <h2 className="eyebrow mb-3">AI 眼中的你</h2>
+                <div className={`rounded-[10px] border p-6 ${VISIBILITY[engine.visibility.status].className}`}>
+                  <p className="text-lg font-bold text-ink">{VISIBILITY[engine.visibility.status].label}</p>
+                  <p className="mt-2 text-sm font-medium leading-relaxed text-ink">{engine.visibility.summary}</p>
+                  <p className="mono mt-1 text-xs text-ink3">
                     共 {engine.visibility.textLength} 字：正文約 {engine.visibility.substantiveChars} 字、選單／標籤約{" "}
                     {engine.visibility.furnitureChars} 字
                     {engine.visibility.textLength > 0
@@ -944,27 +1078,27 @@ export default function GeoPage() {
                       : ""}
                   </p>
 
-                  <div className="mt-4 rounded-lg border border-gray-200 bg-white/70 p-4">
-                    <p className="text-xs font-medium text-gray-500">AI 從這幾項判斷你網站是做什麼的：</p>
-                    <p className="mt-2 text-sm font-semibold text-gray-900">
+                  <div className="mt-4 rounded-lg border border-line bg-paper p-4">
+                    <p className="text-xs font-medium text-ink3">AI 從這幾項判斷你網站是做什麼的：</p>
+                    <p className="mt-2 text-sm font-semibold text-ink">
                       {engine.visibility.title || "（沒有寫標題）"}
                     </p>
                     {engine.visibility.description ? (
-                      <p className="mt-1 text-sm leading-relaxed text-gray-600">{engine.visibility.description}</p>
+                      <p className="mt-1 text-sm leading-relaxed text-ink2">{engine.visibility.description}</p>
                     ) : (
-                      <p className="mt-1 text-sm text-amber-700">
+                      <p className="mt-1 text-sm text-warn">
                         （沒有寫 meta description，AI 只能自己從標題和正文猜，建議補上一段簡短描述）
                       </p>
                     )}
                     {engine.visibility.h1.length > 0 && (
-                      <p className="mt-2 text-xs text-gray-400">H1：{engine.visibility.h1.join("、")}</p>
+                      <p className="mt-2 text-xs text-ink3">H1：{engine.visibility.h1.join("、")}</p>
                     )}
                     {engine.visibility.leadParagraphs.length > 0 && (
-                      <div className="mt-3 border-t border-gray-100 pt-3">
-                        <p className="text-xs text-gray-400">頁面內容摘錄：</p>
+                      <div className="mt-3 border-t border-line2 pt-3">
+                        <p className="text-xs text-ink3">頁面內容摘錄：</p>
                         <div className="mt-1 space-y-2">
                           {engine.visibility.leadParagraphs.map((p, i) => (
-                            <p key={i} className="text-sm leading-relaxed text-gray-700">
+                            <p key={i} className="text-sm leading-relaxed text-ink2">
                               {p}
                             </p>
                           ))}
@@ -974,16 +1108,16 @@ export default function GeoPage() {
                   </div>
 
                   {engine.visibility.duplicateBlockChars > 0 && (
-                    <p className="mt-2 rounded-md bg-amber-50 border border-amber-200 px-2.5 py-1.5 text-xs text-amber-800">
+                    <p className="mt-2 rounded-md border border-warn/30 bg-warn/10 px-2.5 py-1.5 text-xs text-warn">
                       ⚠️ 已排除約 {engine.visibility.duplicateBlockChars} 字的重複內容區塊（可能是跑馬燈效果），建議加上{" "}
-                      <code className="rounded bg-amber-100 px-1 py-0.5">aria-hidden=&quot;true&quot;</code>。
+                      <code>aria-hidden=&quot;true&quot;</code>。
                     </p>
                   )}
 
                   <button
                     type="button"
                     onClick={() => setShowRawContent((v) => !v)}
-                    className="mt-3 text-xs text-blue-600 underline underline-offset-2"
+                    className="mono mt-3 text-xs text-ink3 underline decoration-limeDark decoration-2 underline-offset-2 hover:text-ink"
                   >
                     {showRawContent ? "收起" : "查看"} AI 實際讀到的原始文字片段（技術細節，一般不用看）
                   </button>
@@ -991,15 +1125,15 @@ export default function GeoPage() {
                     (() => {
                       const blocks = engine.visibility.previewBlocks;
                       return (
-                        <div className="mt-2 space-y-3 rounded-lg border border-gray-200 bg-white/70 p-4">
-                          {blocks.length === 0 && <p className="text-sm text-gray-500">（完全沒有可讀的文字）</p>}
+                        <div className="mt-2 space-y-3 rounded-lg border border-line bg-paper p-4">
+                          {blocks.length === 0 && <p className="text-sm text-ink3">（完全沒有可讀的文字）</p>}
                           {blocks.map((block, i) =>
                             block.kind === "tags" ? (
-                              <p key={i} className="border-l-2 border-gray-200 pl-2 text-xs leading-relaxed text-gray-400">
+                              <p key={i} className="border-l-2 border-line2 pl-2 text-xs leading-relaxed text-ink3">
                                 {block.items.join("、")}
                               </p>
                             ) : (
-                              <p key={i} className="text-sm leading-relaxed text-gray-700">
+                              <p key={i} className="text-sm leading-relaxed text-ink2">
                                 {block.text}
                               </p>
                             )
@@ -1008,40 +1142,40 @@ export default function GeoPage() {
                       );
                     })()}
 
-                  <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4">
+                  <dl className="figs mt-4 grid-cols-2 sm:grid-cols-4">
                     <div>
-                      <dt className="text-gray-500">可讀字數</dt>
-                      <dd className="font-medium text-gray-900">{engine.visibility.textLength}</dd>
+                      <b>{engine.visibility.textLength}</b>
+                      <span>可讀字數</span>
                     </div>
                     <div>
-                      <dt className="text-gray-500">結構化資料</dt>
-                      <dd className="font-medium text-gray-900">
+                      <b className="text-[15px]">
                         {engine.visibility.jsonLdTypes.length > 0 ? engine.visibility.jsonLdTypes.join("、") : "（無）"}
-                      </dd>
+                      </b>
+                      <span>結構化資料</span>
                     </div>
                   </dl>
                 </div>
               </div>
             )}
 
-            {engine.visibilityNote && <p className="mt-4 text-center text-sm text-gray-400">{engine.visibilityNote}</p>}
+            {engine.visibilityNote && <p className="mt-4 text-center text-sm text-ink3">{engine.visibilityNote}</p>}
 
-            <h2 className="mt-8 mb-3 text-sm font-semibold text-gray-500">各家 AI 爬蟲的存取權限</h2>
+            <h2 className="eyebrow mt-8 mb-3">各家 AI 爬蟲的存取權限</h2>
             <BotAccessList results={engine.results} />
 
             {engine.contentSignals && (
               <div className="mt-8">
-                <h2 className="mb-3 text-sm font-semibold text-gray-500">內容使用授權（Content Signals）</h2>
-                <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <h2 className="eyebrow mb-3">內容使用授權（Content Signals）</h2>
+                <div className="rounded-[10px] border border-line bg-card p-5">
                   {engine.contentSignals.declared ? (
                     <>
-                      <p className="text-sm text-gray-600">這個網站有表態，宣告內容可以被拿去做什麼用途：</p>
+                      <p className="text-sm text-ink2">這個網站有表態，宣告內容可以被拿去做什麼用途：</p>
                       <div className="mt-4 space-y-3">
                         {engine.contentSignals.items.map((s) => (
                           <div key={s.key} className="flex items-start justify-between gap-4">
                             <div>
-                              <p className="text-sm font-medium text-gray-900">{s.label}</p>
-                              <p className="text-xs text-gray-400">{s.meaning}</p>
+                              <p className="text-sm font-medium text-ink">{s.label}</p>
+                              <p className="text-xs text-ink3">{s.meaning}</p>
                             </div>
                             <span
                               className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${SIGNAL_BADGE[s.value].className}`}
@@ -1051,12 +1185,12 @@ export default function GeoPage() {
                           </div>
                         ))}
                       </div>
-                      <p className="mt-4 font-mono text-xs break-all text-gray-400">
+                      <p className="mono mt-4 text-xs break-all text-ink3">
                         Content-Signal: {engine.contentSignals.raw}
                       </p>
                     </>
                   ) : (
-                    <p className="text-sm leading-relaxed text-gray-600">
+                    <p className="text-sm leading-relaxed text-ink2">
                       這個網站還沒有宣告 Content Signals。這是 Cloudflare 在 2025 年提出、寫在 robots.txt
                       裡的新欄位，可以分別表明你的內容<strong>能不能被搜尋索引、能不能當 AI 回答的來源、能不能拿去訓練模型</strong>
                       ——這三件事是分開的。想擋訓練但保留 AI 引用，就得靠它，光用 Allow / Disallow 表達不了。
@@ -1071,9 +1205,9 @@ export default function GeoPage() {
             {/* 深度健檢：多頁爬蟲＋規則＋AI 語意判斷，跑得比上面慢，進度誠實顯示 */}
             <div className="mt-10">
               {status && (status.status === "crawling" || status.status === "analyzing") && (
-                <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-5 py-4 shadow-sm">
-                  <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-300 border-t-blue-600" />
-                  <p className="text-sm text-blue-800">{status.message}</p>
+                <div className="flex items-center gap-3 rounded-[10px] border border-line bg-card px-5 py-4">
+                  <span className="h-[18px] w-[18px] shrink-0 animate-spin rounded-full border-2 border-line border-t-ink" />
+                  <p className="text-sm text-ink2">{status.message}</p>
                 </div>
               )}
               {status?.status === "completed" && status.audit && <AuditTable checks={status.audit} />}
