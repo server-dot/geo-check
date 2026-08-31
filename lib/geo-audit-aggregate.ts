@@ -80,9 +80,13 @@ export async function aggregateAuditChecks(
   // 4. 有無建立索引：沒有 GSC，退回 noindex 標籤判斷（實際收錄狀況無法在這裡確認）
   {
     const noindex = htmlPages.filter((p) => p.noindex);
+    // 0 個 noindex 是乾淨的結果（沒有東西擋索引），不該跟「真的有 noindex」
+    // 掛同一個 warn 等級——後面那句「需另外用 GSC 複核」只是誠實揭露這裡
+    // 的檢測極限（沒有對方的 GSC 授權，讀不到實際收錄狀況），是註記，不是
+    // 扣分理由。
     out.push(noindex.length
       ? { key: 'indexing', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '有無建立索引', status: 'warn', advice: `${noindex.length}/${Y} 頁設有 noindex（會被排除索引），例如：${noindex.slice(0, 5).map((p) => toPath(origin, p.url)).join('、')}，請確認是否刻意；實際收錄狀況需另外用 GSC 或 site: 查詢複核`, evidence: `${noindex.length}/${Y} 頁 noindex`, details: noindex.map((p) => ({ url: p.url, note: '設有 noindex，會被排除索引' })) }
-      : { key: 'indexing', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '有無建立索引', status: 'warn', advice: `爬取頁面未發現 noindex；實際收錄狀況需另外用 GSC 或 site: 查詢確認${rangeNote}`, evidence: `0/${Y} 頁 noindex` });
+      : { key: 'indexing', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '有無建立索引', status: 'ok', advice: `爬取頁面未發現 noindex，沒有東西在擋搜尋引擎索引；實際收錄狀況建議另外用 GSC 或 site: 查詢複核${rangeNote}`, evidence: `0/${Y} 頁 noindex` });
   }
 
   // 5. Local Business：純規則核對欄位完整度（地址／電話／營業時間），不再是「建議人工複核」的空話
