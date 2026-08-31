@@ -279,9 +279,13 @@ export async function aggregateAuditChecks(
       }
     });
     const maxDepth = depths.length ? Math.max(...depths) : 0;
-    const bc = htmlPages.filter((p) => p.hasBreadcrumb).length;
+    // 跟第 6 項「有無麵包屑」用同一個排除首頁的算法，不然這裡顯示的
+    // 「X/Y 頁有麵包屑」跟上面那項的分母對不起來，看起來像兩個數字打架。
+    const nonHomeForDepth = htmlPages.filter((p) => !p.isHome);
+    const depthDenominator = nonHomeForDepth.length || Y;
+    const bc = (nonHomeForDepth.length ? nonHomeForDepth : htmlPages).filter((p) => p.hasBreadcrumb).length;
     out.push(bc > 0 || maxDepth >= 1
-      ? { key: 'categoryDepth', level: LEVEL.EFFICIENCY, category: CATEGORY.LOCAL_BRAND, item: '分類層級是否清楚', status: 'ok', advice: `網址層級最深 ${maxDepth} 層、${bc}/${Y} 頁有麵包屑，分類尚屬清楚`, evidence: `最深 ${maxDepth} 層｜麵包屑 ${bc}/${Y}` }
+      ? { key: 'categoryDepth', level: LEVEL.EFFICIENCY, category: CATEGORY.LOCAL_BRAND, item: '分類層級是否清楚', status: 'ok', advice: `網址層級最深 ${maxDepth} 層、${bc}/${depthDenominator} 頁有麵包屑（不計首頁），分類尚屬清楚`, evidence: `最深 ${maxDepth} 層｜麵包屑 ${bc}/${depthDenominator}` }
       : { key: 'categoryDepth', level: LEVEL.EFFICIENCY, category: CATEGORY.LOCAL_BRAND, item: '分類層級是否清楚', status: 'warn', advice: '未偵測到明顯分類層級（網址扁平且無麵包屑），建議規劃清楚分類', evidence: `最深 ${maxDepth} 層` });
   }
 
