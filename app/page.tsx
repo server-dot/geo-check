@@ -227,8 +227,133 @@ function buildCategoryRows(engine?: EngineResult, audit?: CheckItem[]): Category
   return [...rows.values()].sort((a, b) => b.fail - a.fail || b.warn - a.warn);
 }
 
-// 分類總覽：橫向堆疊長條，狀態色（不是分類色）。取代雷達圖——
-// 雷達圖的面積會失真，這裡改用有驗證過的形式做同樣的事：一眼看出哪個分類弱。
+interface Category5 {
+  name: string;
+  passRate: number; // (ok×1 + warn×0.5) / total × 100，四捨五入
+  total: number;
+}
+
+// 設計稿提案的五分類合併（依 lib/geo-audit-rules.ts 的 CATEGORY／key 為準，不是
+// 照設計稿範例數字硬套——那組數字是從截圖判讀的，跟實際程式碼的分類邊界對不齊）：
+// AI 可達性＝純 engine 層（bot 存取＋Content Signals＋llms.txt），不動 21 項深度健檢；
+// 其餘四組是 21 項深度健檢依 key 重新分組。
+const CATEGORY5_KEY_MAP: Record<string, string> = {
+  duplicate: "內容與追蹤",
+  externalLinks: "內容與追蹤",
+  analytics: "內容與追蹤",
+  tkd: "內容與追蹤",
+  schema: "結構化資料",
+  localbiz: "結構化資料",
+  sitemap: "技術與索引",
+  robots: "技術與索引",
+  indexing: "技術與索引",
+  headings: "技術與索引",
+  llmsSeo: "技術與索引",
+  page: "技術與索引",
+  viewport: "技術與索引",
+  breadcrumb: "技術與索引",
+  internalLinks: "技術與索引",
+  brokenLinks: "技術與索引",
+  homepage: "技術與索引",
+  imgAlt: "技術與索引",
+  imgFormat: "技術與索引",
+  eeat: "品牌與權威",
+  categoryDepth: "品牌與權威",
+};
+const CATEGORY5_ORDER = ["AI 可達性", "內容與追蹤", "結構化資料", "技術與索引", "品牌與權威"];
+
+function buildCategories5(engine?: EngineResult, audit?: CheckItem[]): Category5[] {
+  const buckets = new Map<string, { ok: number; warn: number; fail: number }>();
+  const bump = (name: string, status: CheckStatus) => {
+    const b = buckets.get(name) ?? { ok: 0, warn: 0, fail: 0 };
+    b[status] += 1;
+    buckets.set(name, b);
+  };
+
+  if (engine) {
+    for (const b of engine.results) {
+      bump("AI 可達性", b.status === "allowed" ? "ok" : b.status === "blocked" ? "fail" : "warn");
+    }
+    if (engine.contentSignals) bump("AI 可達性", engine.contentSignals.declared ? "ok" : "warn");
+    if (engine.llmsTxt.exists !== null) {
+      bump("AI 可達性", engine.llmsTxt.exists ? (engine.llmsTxt.quality?.status === "ok" ? "ok" : "warn") : "warn");
+    }
+  }
+
+  if (audit) {
+    for (const c of audit) {
+      const group = CATEGORY5_KEY_MAP[c.key];
+      if (group) bump(group, c.status);
+    }
+  }
+
+  return CATEGORY5_ORDER.map((name) => {
+    const b = buckets.get(name) ?? { ok: 0, warn: 0, fail: 0 };
+    const total = b.ok + b.warn + b.fail;
+    const passRate = total > 0 ? Math.round(((b.ok + b.warn * 0.5) / total) * 100) : 0;
+    return { name, passRate, total };
+  });
+}
+
+// 五分類雷達圖：純 SVG，座標公式跟設計稿一致，不用圖表函式庫。跟下面的
+// CategoryOverview（狀態色堆疊長條）並存——雷達圖抓「五個面向的整體形狀」，
+// 長條圖抓「哪個分類扣最多分」，兩種閱讀方式互補，不是互相取代。
+function RadarChart({ categories }: { categories: Category5[] }) {
+  const cx = 150;
+  const cy = 150;
+  const radius = 110;
+  const n = categories.length;
+  const angleOf = (i: number) => -Math.PI / 2 + i * ((2 * Math.PI) / n);
+  const pointAt = (i: number, value: number) => {
+    const a = angleOf(i);
+    const r = (radius * value) / 100;
+    return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+  };
+  const fmt = (n: number) => n.toFixed(1);
+
+  const dataPoints = categories.map((c, i) => pointAt(i, c.passRate));
+  const dataPolygon = dataPoints.map((p) => `${fmt(p.x)},${fmt(p.y)}`).join(" ");
+
+  return (
+    <svg viewBox="-70 0 440 300" width="440" height="300" className="mx-auto max-w-full">
+      {[25, 50, 75, 100].map((level) => (
+        <polygon
+          key={level}
+          points={categories.map((_, i) => { const p = pointAt(i, level); return `${fmt(p.x)},${fmt(p.y)}`; }).join(" ")}
+          fill="none"
+          stroke="#eaebe0"
+        />
+      ))}
+      {categories.map((_, i) => {
+        const p = pointAt(i, 100);
+        return <line key={i} x1={cx} y1={cy} x2={fmt(p.x)} y2={fmt(p.y)} stroke="#dcded1" />;
+      })}
+      <polygon points={dataPolygon} fill="rgba(201,242,74,.55)" stroke="#101a14" strokeWidth={2} />
+      {dataPoints.map((p, i) => (
+        <circle key={i} cx={fmt(p.x)} cy={fmt(p.y)} r={3.5} fill="#101a14" />
+      ))}
+      {categories.map((c, i) => {
+        const a = angleOf(i);
+        const cosA = Math.cos(a);
+        const lp = pointAt(i, (132 / radius) * 100);
+        const anchor = Math.abs(cosA) < 0.25 ? "middle" : cosA > 0 ? "start" : "end";
+        return (
+          <g key={i}>
+            <text x={fmt(lp.x)} y={fmt(lp.y)} textAnchor={anchor} fontSize={11.5} className="mono" fill="#4e5a51">
+              {c.name}
+            </text>
+            <text x={fmt(lp.x)} y={fmt(lp.y + 15)} textAnchor={anchor} fontSize={11.5} className="mono" fill="#101a14">
+              {c.total > 0 ? c.passRate : "—"}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// 分類總覽：橫向堆疊長條，狀態色（不是分類色）。跟上面的五分類雷達圖並存——
+// 長條是原本 7 分類的細節版，雷達是五分類的整體形狀，兩種互補不是互相取代。
 function CategoryOverview({ rows }: { rows: CategoryRow[] }) {
   const visible = rows.filter((r) => r.ok + r.warn + r.fail > 0);
   if (visible.length === 0) return null;
@@ -823,6 +948,13 @@ export default function GeoPage() {
                 <p className="mono mt-2 text-xs text-ink3">規則來源：{engine.robotsUrl}</p>
               )}
             </div>
+
+            {status?.audit && (
+              <div className="mt-6 rounded-[10px] border border-line bg-card p-5">
+                <h2 className="eyebrow mb-4">五分類總覽</h2>
+                <RadarChart categories={buildCategories5(engine, status.audit)} />
+              </div>
+            )}
 
             <div className="mt-6">
               <CategoryOverview rows={buildCategoryRows(engine, status?.audit)} />
