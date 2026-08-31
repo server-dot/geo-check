@@ -64,62 +64,6 @@ function guessKeywordCandidates(title: string, description: string, h1: string[]
   return candidates;
 }
 
-type PillarStatus = "ok" | "warn" | "fail";
-
-interface Pillar {
-  code: string;
-  name: string;
-  status: PillarStatus;
-  headline: string;
-  detail: string;
-}
-
-// 四支柱：把散落的區塊收斂成「進得來／讀得到／說得清／記得住」四個問題，
-// 依重要程度排列——進不來，後面都沒意義。階段 A 先只算狀態（ok/warn/fail），
-// 不算 0–100 分數；分數公式待階段 B（需要跟總分公式一起定案）。
-function computePillars(engine: EngineResult): Pillar[] {
-  const total = engine.results.length || 1;
-  const blocked = engine.results.filter((r) => r.status === "blocked").length;
-  const allowed = engine.results.filter((r) => r.status === "allowed").length;
-  const accessStatus: PillarStatus = blocked === 0 ? "ok" : blocked >= total / 2 ? "fail" : "warn";
-  const accessHeadline = blocked === 0 ? `${allowed}/${total} 家全部可存取` : `${blocked}/${total} 家被擋`;
-
-  let readableStatus: PillarStatus = "warn";
-  let readableHeadline = "尚未判定";
-  if (engine.visibility) {
-    readableStatus =
-      engine.visibility.status === "ok" ? "ok" : engine.visibility.status === "thin" ? "warn" : "fail";
-    readableHeadline =
-      engine.visibility.status === "empty"
-        ? "AI 讀到的幾乎是空的"
-        : `${engine.visibility.textLength} 字可讀`;
-  }
-
-  const signalsOk = engine.contentSignals?.declared ?? false;
-  const llmsOk = engine.llmsTxt.exists === true;
-  const declaredStatus: PillarStatus = signalsOk && llmsOk ? "ok" : "warn";
-  const declaredHeadline =
-    signalsOk && llmsOk
-      ? "Content Signals 與 llms.txt 都到位"
-      : signalsOk
-        ? "Content Signals 已宣告，llms.txt 待補"
-        : llmsOk
-          ? "llms.txt 已部署，Content Signals 待宣告"
-          : "兩項都還沒宣告";
-
-  const bvTotal = engine.brandVisibility.length;
-  const bvCited = engine.brandVisibility.filter((r) => r.citedSelf).length;
-  const knownStatus: PillarStatus = bvTotal === 0 ? "warn" : bvCited === bvTotal ? "ok" : bvCited > 0 ? "warn" : "fail";
-  const knownHeadline = bvTotal === 0 ? "尚未實測詢問" : `${bvCited}/${bvTotal} 個引擎引用你`;
-
-  return [
-    { code: "01 ACCESS", name: "進得來", status: accessStatus, headline: accessHeadline, detail: "AI 爬蟲能不能存取你的網站，是後面一切的前提。" },
-    { code: "02 READABLE", name: "讀得到", status: readableStatus, headline: readableHeadline, detail: "存取到之後，讀到的內容夠不夠讓 AI 理解你在做什麼。" },
-    { code: "03 DECLARED", name: "說得清", status: declaredStatus, headline: declaredHeadline, detail: "有沒有主動告訴 AI，你的內容可以被怎麼使用。" },
-    { code: "04 KNOWN", name: "記得住", status: knownStatus, headline: knownHeadline, detail: "實際被問到時，AI 認不認得你、願不願意引用你。" },
-  ];
-}
-
 type SignalValue = "yes" | "no" | "unset";
 
 interface ContentSignalItem {
@@ -235,12 +179,6 @@ const CHECK_UI: Record<CheckStatus, { badge: string; text: string }> = {
   ok: { badge: "bg-ok/10 text-ok border-ok/30", text: "正常" },
   warn: { badge: "bg-warn/10 text-warn border-warn/30", text: "可優化" },
   fail: { badge: "bg-fail/10 text-fail border-fail/30", text: "需處理" },
-};
-
-const PILLAR_UI: Record<PillarStatus, { emoji: string; className: string; barClassName: string }> = {
-  ok: { emoji: "🟢", className: "text-ok", barClassName: "bg-ok" },
-  warn: { emoji: "🟡", className: "text-warn", barClassName: "bg-warn" },
-  fail: { emoji: "🔴", className: "text-fail", barClassName: "bg-fail" },
 };
 
 // 狀態色（dataviz 技能的固定 status palette，不跟著品牌色跑）——CategoryOverview
@@ -804,112 +742,57 @@ export default function GeoPage() {
     }
   }
 
-  const pillars = engine ? computePillars(engine) : [];
-  const goodPillars = pillars.filter((p) => p.status === "ok");
-  const restPillars = pillars.filter((p) => p.status !== "ok");
-  const heroPlain = goodPillars.length > 0 ? `AI ${goodPillars.map((p) => p.name).join("、")}。` : "";
-  const heroMarked =
-    restPillars.length === 0
-      ? "全部到位，可以往內容細節優化。"
-      : goodPillars.length === 0
-        ? `AI ${restPillars.map((p) => p.name).join("、")}都還沒做到，這是最優先要處理的地方。`
-        : `剩下${restPillars.map((p) => p.name).join("、")}還需要處理。`;
-
-  const ledeParts: string[] = [];
-  if (engine?.visibility) {
-    ledeParts.push(
-      engine.visibility.status === "empty"
-        ? "內容幾乎讀不到"
-        : `內容不依賴 JavaScript 就讀得到 ${engine.visibility.textLength} 字`
-    );
-  }
-  if (engine?.contentSignals) {
-    ledeParts.push(engine.contentSignals.declared ? "Content Signals 已表態" : "Content Signals 尚未表態");
-  }
-  if (engine && engine.llmsTxt.exists !== null) {
-    ledeParts.push(engine.llmsTxt.exists ? "llms.txt 已部署" : "llms.txt 尚未部署");
-  }
-  if (engine && engine.brandVisibility.length > 0) {
-    const cited = engine.brandVisibility.filter((r) => r.citedSelf).length;
-    ledeParts.push(`${cited}/${engine.brandVisibility.length} 個引擎實際回答時引用了你自己的網站`);
-  }
-  const failCount = status?.audit?.filter((c) => c.status === "fail").length ?? 0;
-  if (status?.audit) ledeParts.push(`深度健檢 ${status.audit.length} 項中有 ${failCount} 項需處理`);
-  const lede = ledeParts.join("，") + "。";
-
-  const failItems = status?.audit?.filter((c) => c.status === "fail") ?? [];
-
   return (
     <div className="min-h-screen bg-paper">
-      <header className="sticky top-0 z-20 border-b border-line bg-paper/95 backdrop-blur">
-        <div className="mx-auto flex h-[68px] max-w-[1120px] items-center justify-between px-6 sm:px-10">
-          <div className="flex items-center gap-2.5">
-            <span className="relative block h-[26px] w-[26px] shrink-0 rounded-[7px] bg-lime">
-              <span className="absolute bottom-1.5 left-1.5 h-[9px] w-[9px] rounded-full bg-ink" />
-            </span>
-            <b className="text-[17px] font-bold tracking-[-0.02em] text-ink">GEOCHECK</b>
-            <em className="hidden border-l border-line pl-[11px] text-[12.5px] not-italic text-ink3 sm:inline">
-              AI 搜尋能見度健檢
-            </em>
-          </div>
-          <div className="flex items-center gap-3">
-            {engine && <span className="mono hidden text-xs text-ink3 sm:inline">{url}</span>}
-            {engine && (
-              <button type="button" onClick={() => setStatus(null)} className="btn-line">
-                重新檢測
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
+      <div className="mx-auto max-w-3xl px-4 py-16">
+        <p className="eyebrow text-center">AI SEARCH VISIBILITY</p>
+        <h1 className="mt-2 text-center text-3xl font-bold text-ink">AI 搜尋能見度健檢</h1>
+        <p className="mt-3 text-center text-ink2">
+          檢測你的網站對 ChatGPT、Claude、Perplexity 等 AI 搜尋引擎是否開放，並跑一次多頁深度健檢
+        </p>
 
-      <div className="mx-auto max-w-[1120px] px-6 py-16 sm:px-10">
-        {!engine && (
-          <>
-            <p className="eyebrow text-center">AI SEARCH VISIBILITY</p>
-            <h1 className="mt-2 text-center text-3xl font-bold text-ink">AI 搜尋能見度健檢</h1>
-            <p className="mt-3 text-center text-ink2">
-              檢測你的網站對 ChatGPT、Claude、Perplexity 等 AI 搜尋引擎是否開放，並跑一次多頁深度健檢
-            </p>
+        <form onSubmit={handleCheck} className="mt-8 flex gap-2">
+          <input
+            type="text"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="輸入網址，例如 example.com"
+            className="input-mono flex-1"
+          />
+          <button type="submit" disabled={loading} className="btn-lime">
+            {loading ? "檢測中…" : "開始檢測"}
+          </button>
+        </form>
 
-            <form onSubmit={handleCheck} className="mt-8 flex gap-2">
-              <input
-                type="text"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="輸入網址，例如 example.com"
-                className="input-mono flex-1"
-              />
-              <button type="submit" disabled={loading} className="btn-lime">
-                {loading ? "檢測中…" : "開始檢測"}
-              </button>
-            </form>
-
-            {error && <p className="mt-4 text-center text-fail">{error}</p>}
-          </>
-        )}
+        {error && <p className="mt-4 text-center text-fail">{error}</p>}
 
         {engine && (
-          <div>
-            {/* Hero：結論句 + facts 列 */}
-            <section className="border-b border-line pb-13" style={{ paddingBottom: 52, paddingTop: 8 }}>
-              <p className="eyebrow">
-                AI SEARCH VISIBILITY · {new Date().toISOString().slice(0, 16).replace("T", " ")}
+          <div className="mt-10">
+            {/* 判定不出來時必須明講。給假綠燈比不給答案傷害更大 */}
+            <div
+              className={`rounded-[10px] border p-6 text-center ${
+                unknownCount > 0
+                  ? "border-line bg-card"
+                  : engine.results.every((r) => r.status !== "blocked")
+                    ? "border-ok/25 bg-ok/[.06]"
+                    : engine.results.filter((r) => r.status === "blocked").length >= 4
+                      ? "border-fail/25 bg-fail/[.06]"
+                      : "border-warn/25 bg-warn/[.06]"
+              }`}
+            >
+              <p className="text-2xl font-bold text-ink">
+                {unknownCount > 0
+                  ? "⚪ 無法判定"
+                  : engine.results.every((r) => r.status !== "blocked")
+                    ? "🟢 AI 引擎都能存取你的網站"
+                    : engine.results.filter((r) => r.status === "blocked").length >= 4
+                      ? "🔴 主要 AI 引擎被擋住了"
+                      : `🟡 有 ${engine.results.filter((r) => r.status === "blocked").length} 個 AI 引擎被擋住`}
               </p>
-              <h1 className="mt-3 max-w-[19em] text-[32px] leading-[1.18] font-bold tracking-[-0.03em] text-ink sm:text-[40px]">
-                {heroPlain} <mark className="lime-highlight">{heroMarked}</mark>
-              </h1>
-              <p className="mt-4 max-w-[36em] text-[15.5px] leading-relaxed text-ink2">{lede}</p>
-              <div className="mono mt-5 flex flex-wrap gap-x-6 gap-y-2 text-xs text-ink3">
-                <span>爬蟲 {engine.results.length} 家</span>
-                {status?.audit && <span>深度健檢 {status.audit.length} 項</span>}
-                <span>實際詢問 {engine.brandVisibility.length} 個引擎</span>
-                <span>關鍵字查詢 {Object.keys(keywordResults).length} 組</span>
-              </div>
 
               {unknownCount > 0 && (
-                <div className="mt-5 space-y-2 rounded-[10px] border border-line bg-card p-4 text-sm text-ink2">
-                  <p>⚪ {engine.robotsNote}</p>
+                <div className="mt-3 space-y-2 text-sm text-ink2">
+                  <p>{engine.robotsNote}</p>
                   <p>
                     這<strong>不代表</strong>你的網站對 AI 開放——很可能有 robots.txt
                     但我們讀不到。請直接在瀏覽器打開{" "}
@@ -919,60 +802,23 @@ export default function GeoPage() {
                     人工確認。
                   </p>
                   {engine.wafHint && (
-                    <div className="mt-2 rounded-lg border border-line bg-paper p-3">
+                    <div className="mt-3 rounded-lg border border-line bg-paper p-3 text-left">
                       <p className="text-xs font-semibold text-ink3">偵測到可能的原因：{engine.wafHint.vendor}</p>
                       <p className="mt-1 text-sm text-ink2">{engine.wafHint.advice}</p>
                     </div>
                   )}
                 </div>
               )}
-            </section>
 
-            {/* 四支柱：進得來／讀得到／說得清／記得住 */}
-            <section className="grid grid-cols-2 gap-px border-b border-line bg-line sm:grid-cols-4">
-              {pillars.map((p) => {
-                const ui = PILLAR_UI[p.status];
-                const barWidth = p.status === "ok" ? "100%" : p.status === "warn" ? "60%" : "25%";
-                return (
-                  <div key={p.code} className="bg-card px-5 pt-[22px] pb-6">
-                    <p className="eyebrow">{p.code}</p>
-                    <p className="mt-1 text-2xl font-bold tracking-[-0.03em] text-ink">{p.name}</p>
-                    <p className={`mt-1.5 text-[13.5px] font-semibold ${ui.className}`}>
-                      {ui.emoji} {p.headline}
-                    </p>
-                    <div className="mt-4 h-[5px] rounded-full bg-line2">
-                      <div className={`h-full rounded-full ${ui.barClassName}`} style={{ width: barWidth }} />
-                    </div>
-                    <p className="mt-3 text-[13.5px] leading-[1.55] text-ink2">{p.detail}</p>
-                  </div>
-                );
-              })}
-            </section>
+              {engine.robotsStatus === "none" && (
+                <p className="mt-2 text-sm text-ink3">（這個網站沒有 robots.txt，依規範預設所有爬蟲都能存取）</p>
+              )}
+              {engine.robotsStatus === "found" && (
+                <p className="mono mt-2 text-xs text-ink3">規則來源：{engine.robotsUrl}</p>
+              )}
+            </div>
 
-            {/* 先做這幾件事：只列 fail 項目，API 回傳時已依權威順序排好 */}
-            {failItems.length > 0 && (
-              <section className="border-b border-line py-14" style={{ paddingTop: 56, paddingBottom: 56 }}>
-                <p className="eyebrow">TODO</p>
-                <div className="mt-1 flex items-baseline gap-2">
-                  <h2 className="text-[26px] font-bold text-ink">先做這幾件事</h2>
-                  <span className="mono text-xs text-ink3">依健檢結果排序 · {failItems.length} 項需處理</span>
-                </div>
-                <ul className="mt-2">
-                  {failItems.map((c) => (
-                    <li key={c.key} className="todo-row">
-                      <div>
-                        <h4 className="font-bold text-ink">{c.item}</h4>
-                        <p>{c.advice}</p>
-                      </div>
-                      <span className="st t-fail">需處理</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            <div className="mt-10">
-              {/* 五分類雷達圖上線前的過渡呈現：狀態色堆疊長條，先沿用既有分類邏輯 */}
+            <div className="mt-6">
               <CategoryOverview rows={buildCategoryRows(engine, status?.audit)} />
             </div>
 
