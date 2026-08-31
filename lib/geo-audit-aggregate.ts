@@ -14,6 +14,36 @@ function toPath(origin: string, u: string): string {
   return normalizeUrl(u).replace(origin, '') || '/';
 }
 
+// Google 在 SERP 是用「像素寬度」截斷標題，不是字元數——純字數門檻（例如「>30 字」）
+// 對中英夾雜的標題不準：全形字（中文、全形標點）跟半形字（英文字母、數字、符號）佔的
+// 寬度差一倍，同樣是 30 字，「內部知識庫 AI 助理」跟純中文標題的實際寬度差很多。
+// 這裡用簡化估算：全形 ≈20px/字、半形 ≈10px/字，桌面版安全上限抓 600px——
+// 這組係數跟門檻是用實際 SERP 截斷案例回推校準的，跟google官方的可變寬度渲染
+// 比一定有誤差，但比純字數門檻準得多，抓超標的方向不會錯。
+const FULLWIDTH_PX = 20;
+const HALFWIDTH_PX = 10;
+const TITLE_SAFE_PX = 600;
+
+function isFullWidthChar(ch: string): boolean {
+  const code = ch.codePointAt(0) ?? 0;
+  return (
+    (code >= 0x1100 && code <= 0x115f) || // 諺文字母
+    (code >= 0x2e80 && code <= 0xa4cf) || // CJK 部首～彝文
+    (code >= 0xac00 && code <= 0xd7a3) || // 諺文音節
+    (code >= 0xf900 && code <= 0xfaff) || // CJK 相容表意文字
+    (code >= 0xfe30 && code <= 0xfe4f) || // CJK 相容格式
+    (code >= 0xff00 && code <= 0xff60) || // 全形字符
+    (code >= 0xffe0 && code <= 0xffe6) ||
+    (code >= 0x20000 && code <= 0x3fffd) // CJK 擴展區
+  );
+}
+
+function estimateTitlePixelWidth(s: string): number {
+  let width = 0;
+  for (const ch of s) width += isFullWidthChar(ch) ? FULLWIDTH_PX : HALFWIDTH_PX;
+  return width;
+}
+
 export async function aggregateAuditChecks(
   crawl: CrawlResult,
   onProgress?: (msg: string) => void,
@@ -117,15 +147,18 @@ export async function aggregateAuditChecks(
     for (const p of htmlPages) {
       const probs: string[] = [];
       if (!p.title) { te++; probs.push('Title 留空'); }
-      else if (charLen(p.title) > 30) { tl++; probs.push(`Title 過長（${charLen(p.title)} 字）`); }
+      else {
+        const px = estimateTitlePixelWidth(p.title.trim());
+        if (px > TITLE_SAFE_PX) { tl++; probs.push(`Title 過長（估算 ${px}px，桌面版安全上限 ${TITLE_SAFE_PX}px，可能被 SERP 截斷）`); }
+      }
       if (!p.description) { de++; probs.push('Description 留空'); }
       else if (charLen(p.description) > 80) { dl++; probs.push(`Description 過長（${charLen(p.description)} 字）`); }
       if (probs.length) tkdDetails.push({ url: p.url, note: probs.join('、') });
     }
     const issues = te + tl + de + dl;
     out.push(issues
-      ? { key: 'tkd', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: 'TKD 完整性', status: 'fail', advice: `共 ${Y} 頁中：Title 留空 ${te}、過長(>30) ${tl}；Description 留空 ${de}、過長(>80) ${dl}，建議補齊並控制字數`, evidence: `T空${te}/長${tl}｜D空${de}/長${dl}（共 ${Y} 頁）`, details: tkdDetails }
-      : { key: 'tkd', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: 'TKD 完整性', status: 'ok', advice: `爬取 ${Y} 頁 Title / Description 皆有填且長度適當`, evidence: `共 ${Y} 頁皆正常` });
+      ? { key: 'tkd', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: 'TKD 完整性', status: 'fail', advice: `共 ${Y} 頁中：Title 留空 ${te}、估算像素寬度超過 ${TITLE_SAFE_PX}px 過長 ${tl}（按全形≈${FULLWIDTH_PX}px／半形≈${HALFWIDTH_PX}px 估算，比純字數門檻更貼近 Google SERP 實際截斷點）；Description 留空 ${de}、過長(>80 字) ${dl}，建議補齊並控制長度`, evidence: `T空${te}/長${tl}｜D空${de}/長${dl}（共 ${Y} 頁）`, details: tkdDetails }
+      : { key: 'tkd', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: 'TKD 完整性', status: 'ok', advice: `爬取 ${Y} 頁 Title / Description 皆有填，Title 估算像素寬度都在 ${TITLE_SAFE_PX}px 安全上限內，長度適當`, evidence: `共 ${Y} 頁皆正常` });
   }
 
   // 11. h1、h2 使用
