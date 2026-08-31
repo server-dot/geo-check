@@ -2,12 +2,19 @@ import { LEVEL, CATEGORY } from './geo-audit-rules';
 import type { CheckResult, CheckStatus } from './geo-audit-rules';
 
 // ── GEO 深度健檢：AI 語意判斷層 ──────────────────────────
-// 規則判不了的語意題，交給 GPT-4o（走 OpenRouter）：E-E-A-T 權威訊號足不足。
+// 規則判不了的語意題，交給 AI（走 OpenRouter）：E-E-A-T 權威訊號足不足。
 // Schema 完整度已改成純規則判斷（見 geo-schema-check.ts），不用再叫 AI 猜。
 // 沒設 API key 或呼叫失敗時，回退成 warn（標「AI 未判斷」），不讓整個健檢炸掉。
 // 這是每次免費健檢都要花錢的部分，先做出來，之後再決定要不要限流或設閘門。
-
-const MODEL = 'openai/gpt-4o';
+//
+// 2026-08-31 從 openai/gpt-4o（2024 年舊模型）換模型，原本想換 gpt-5-mini，
+// 但實測發現它是推理模型（reasoning model）：completion tokens 大部分被內部
+// 思考過程吃掉，max_tokens=500 常常在思考階段就用完，實際輸出的 content 是
+// 空的，整個判斷直接回退成「AI 回覆無法解析」。改用 gpt-4.1-mini——非推理
+// 模型，輸出穩定可預期，價格比 gpt-4o 更低（約 1/6），指令遵循也是更新一代
+// 模型應有的水準（gpt-4o 曾經把 prompt 範例整段照抄回來當結果，見 commit
+// d182bbb 的 bug 記錄）。
+const MODEL = 'openai/gpt-4.1-mini';
 
 export type AiAuditInput = {
   url: string;
