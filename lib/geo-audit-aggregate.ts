@@ -88,15 +88,23 @@ export async function aggregateAuditChecks(
   // 5. Local Business：純規則核對欄位完整度（地址／電話／營業時間），不再是「建議人工複核」的空話
   out.push(buildLocalBizCheck(pages.map((p) => ({ url: p.url, jsonLdNodes: p.jsonLdNodes }))));
 
-  // 6. 麵包屑
+  // 6. 麵包屑——首頁不用排除在外會被誤判：首頁本來就沒有「上一層」可以
+  // 顯示麵包屑，不裝麵包屑是正常的，不是缺陷。只看首頁以外的頁面夠不夠。
   {
-    const noBc = htmlPages.filter((p) => !p.hasBreadcrumb);
-    const bc = Y - noBc.length;
-    out.push(bc === 0
-      ? { key: 'breadcrumb', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '有無麵包屑', status: 'warn', advice: `爬取頁面皆未偵測到麵包屑（0/${Y}），建議加上 BreadcrumbList`, evidence: `0/${Y} 頁有麵包屑`, details: noBc.map((p) => ({ url: p.url, note: '未偵測到麵包屑' })) }
-      : bc < Y
-        ? { key: 'breadcrumb', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '有無麵包屑', status: 'warn', advice: `僅 ${bc}/${Y} 頁有麵包屑，建議全站補齊`, evidence: `${bc}/${Y} 頁有麵包屑`, details: noBc.map((p) => ({ url: p.url, note: '未偵測到麵包屑' })) }
-        : { key: 'breadcrumb', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '有無麵包屑', status: 'ok', advice: `爬取頁面皆有麵包屑（${bc}/${Y}）`, evidence: `${bc}/${Y} 頁有麵包屑` });
+    const base = { key: 'breadcrumb', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '有無麵包屑' };
+    const nonHomePages = htmlPages.filter((p) => !p.isHome);
+    if (nonHomePages.length === 0) {
+      out.push({ ...base, status: 'ok', advice: '只爬到首頁，首頁本來就不需要麵包屑', evidence: '（僅首頁）' });
+    } else {
+      const NY = nonHomePages.length;
+      const noBc = nonHomePages.filter((p) => !p.hasBreadcrumb);
+      const bc = NY - noBc.length;
+      out.push(bc === 0
+        ? { ...base, status: 'warn', advice: `除首頁外，其餘頁面皆未偵測到麵包屑（0/${NY}），建議加上 BreadcrumbList`, evidence: `0/${NY} 頁有麵包屑（不計首頁）`, details: noBc.map((p) => ({ url: p.url, note: '未偵測到麵包屑' })) }
+        : bc < NY
+          ? { ...base, status: 'warn', advice: `除首頁外，僅 ${bc}/${NY} 頁有麵包屑，建議全站補齊`, evidence: `${bc}/${NY} 頁有麵包屑（不計首頁）`, details: noBc.map((p) => ({ url: p.url, note: '未偵測到麵包屑' })) }
+          : { ...base, status: 'ok', advice: `除首頁外，其餘頁面皆有麵包屑（${bc}/${NY}）`, evidence: `${bc}/${NY} 頁有麵包屑（不計首頁）` });
+    }
   }
 
   // 7. 內部連結結構
