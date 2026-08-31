@@ -13,17 +13,25 @@ interface AiBotResult {
 
 type VisibilityStatus = "ok" | "thin" | "empty";
 
+type PreviewBlock = { kind: "tags"; items: string[] } | { kind: "text"; text: string };
+
 interface ContentVisibility {
   status: VisibilityStatus;
   textLength: number;
+  substantiveChars: number;
+  furnitureChars: number;
   htmlLength: number;
   scriptCount: number;
   preview: string;
+  previewBlocks: PreviewBlock[];
   title: string;
   description: string;
   h1: string[];
+  leadParagraphs: string[];
   jsonLdTypes: string[];
+  summary: string;
   advice: string;
+  duplicateBlockChars: number;
 }
 
 type SignalValue = "yes" | "no" | "unset";
@@ -604,6 +612,7 @@ export default function GeoPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState<StatusResponse | null>(null);
+  const [showRawContent, setShowRawContent] = useState(false);
 
   async function handleCheck(e?: React.FormEvent) {
     e?.preventDefault();
@@ -758,27 +767,83 @@ export default function GeoPage() {
                 <h2 className="mb-3 text-sm font-semibold text-gray-500">AI 眼中的你</h2>
                 <div className={`rounded-xl border p-6 shadow-sm ${VISIBILITY[engine.visibility.status].className}`}>
                   <p className="text-lg font-bold text-gray-900">{VISIBILITY[engine.visibility.status].label}</p>
-                  <p className="mt-2 text-sm leading-relaxed text-gray-600">{engine.visibility.advice}</p>
-                  <div className="mt-4">
-                    <p className="text-xs font-medium text-gray-500">AI 爬蟲實際讀到的內容開頭：</p>
-                    <div className="mt-1 rounded-lg border border-gray-200 bg-white/70 p-3 font-mono text-xs leading-relaxed break-all text-gray-700">
-                      {engine.visibility.preview || "（完全沒有可讀的文字）"}
-                    </div>
+                  <p className="mt-2 text-sm font-medium leading-relaxed text-gray-800">{engine.visibility.summary}</p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    共 {engine.visibility.textLength} 字：正文約 {engine.visibility.substantiveChars} 字、選單／標籤約{" "}
+                    {engine.visibility.furnitureChars} 字
+                    {engine.visibility.textLength > 0
+                      ? `（占 ${Math.round((engine.visibility.furnitureChars / engine.visibility.textLength) * 100)}%）`
+                      : ""}
+                  </p>
+
+                  <div className="mt-4 rounded-lg border border-gray-200 bg-white/70 p-4">
+                    <p className="text-xs font-medium text-gray-500">AI 從這幾項判斷你網站是做什麼的：</p>
+                    <p className="mt-2 text-sm font-semibold text-gray-900">
+                      {engine.visibility.title || "（沒有寫標題）"}
+                    </p>
+                    {engine.visibility.description ? (
+                      <p className="mt-1 text-sm leading-relaxed text-gray-600">{engine.visibility.description}</p>
+                    ) : (
+                      <p className="mt-1 text-sm text-amber-700">
+                        （沒有寫 meta description，AI 只能自己從標題和正文猜，建議補上一段簡短描述）
+                      </p>
+                    )}
+                    {engine.visibility.h1.length > 0 && (
+                      <p className="mt-2 text-xs text-gray-400">H1：{engine.visibility.h1.join("、")}</p>
+                    )}
+                    {engine.visibility.leadParagraphs.length > 0 && (
+                      <div className="mt-3 border-t border-gray-100 pt-3">
+                        <p className="text-xs text-gray-400">頁面內容摘錄：</p>
+                        <div className="mt-1 space-y-2">
+                          {engine.visibility.leadParagraphs.map((p, i) => (
+                            <p key={i} className="text-sm leading-relaxed text-gray-700">
+                              {p}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
+
+                  {engine.visibility.duplicateBlockChars > 0 && (
+                    <p className="mt-2 rounded-md bg-amber-50 border border-amber-200 px-2.5 py-1.5 text-xs text-amber-800">
+                      ⚠️ 已排除約 {engine.visibility.duplicateBlockChars} 字的重複內容區塊（可能是跑馬燈效果），建議加上{" "}
+                      <code className="rounded bg-amber-100 px-1 py-0.5">aria-hidden=&quot;true&quot;</code>。
+                    </p>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setShowRawContent((v) => !v)}
+                    className="mt-3 text-xs text-blue-600 underline underline-offset-2"
+                  >
+                    {showRawContent ? "收起" : "查看"} AI 實際讀到的原始文字片段（技術細節，一般不用看）
+                  </button>
+                  {showRawContent &&
+                    (() => {
+                      const blocks = engine.visibility.previewBlocks;
+                      return (
+                        <div className="mt-2 space-y-3 rounded-lg border border-gray-200 bg-white/70 p-4">
+                          {blocks.length === 0 && <p className="text-sm text-gray-500">（完全沒有可讀的文字）</p>}
+                          {blocks.map((block, i) =>
+                            block.kind === "tags" ? (
+                              <p key={i} className="border-l-2 border-gray-200 pl-2 text-xs leading-relaxed text-gray-400">
+                                {block.items.join("、")}
+                              </p>
+                            ) : (
+                              <p key={i} className="text-sm leading-relaxed text-gray-700">
+                                {block.text}
+                              </p>
+                            )
+                          )}
+                        </div>
+                      );
+                    })()}
+
                   <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4">
                     <div>
                       <dt className="text-gray-500">可讀字數</dt>
                       <dd className="font-medium text-gray-900">{engine.visibility.textLength}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-gray-500">標題</dt>
-                      <dd className="font-medium text-gray-900">{engine.visibility.title || "（缺）"}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-gray-500">H1</dt>
-                      <dd className="font-medium text-gray-900">
-                        {engine.visibility.h1.length > 0 ? engine.visibility.h1.join("、") : "（缺）"}
-                      </dd>
                     </div>
                     <div>
                       <dt className="text-gray-500">結構化資料</dt>
