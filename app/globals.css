@@ -191,6 +191,9 @@ code {
 .todo-row .st { text-align: right; font-family: var(--font-plex-mono), monospace; font-size: 12px; padding-top: 5px; }
 
 .report-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+/* 固定欄寬（配 colgroup）：不然瀏覽器會照內容自動撐開欄位，長字串一多
+   整張表就比容器寬，overflow-x-auto 的捲軸救不了，會把外層版面一起撐開。 */
+.report-table--fixed { table-layout: fixed; }
 .report-table th {
   text-align: left;
   font-family: var(--font-plex-mono), monospace;
@@ -202,7 +205,13 @@ code {
   padding: 0 16px 10px 0;
   border-bottom: 1px solid var(--ink);
 }
-.report-table td { padding: 14px 16px 14px 0; border-top: 1px solid var(--line2); vertical-align: top; }
+.report-table td {
+  padding: 14px 16px 14px 0;
+  border-top: 1px solid var(--line2);
+  vertical-align: top;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
 .report-table th:last-child,
 .report-table td:last-child:not([colspan]) {
   padding-right: 0;
@@ -221,7 +230,6 @@ code {
   border-top: 1px solid var(--line);
   text-align: left;
 }
-.report-table td .fix { display: block; font-size: 14px; color: var(--ink3); margin-top: 3px; }
 .report-table td.item { font-weight: 500; }
 
 mark.lime-highlight {

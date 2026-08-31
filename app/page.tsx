@@ -366,20 +366,28 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
         </div>
       </div>
       <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
-        <table className="report-table min-w-[640px]">
+        <table className="report-table report-table--fixed min-w-[700px]">
+          <colgroup>
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "17%" }} />
+            <col style={{ width: "28%" }} />
+            <col style={{ width: "28%" }} />
+            <col style={{ width: "18%" }} />
+          </colgroup>
           <thead>
             <tr>
-              <th style={{ width: "11%" }}>狀態</th>
-              <th style={{ width: "24%" }}>項目</th>
+              <th>狀態</th>
+              <th>項目</th>
               <th>建議</th>
-              <th style={{ width: "13%" }}>問題頁面</th>
+              <th>詳細數據</th>
+              <th>問題頁面</th>
             </tr>
           </thead>
           <tbody>
             {[...groups.entries()].map(([category, rows]) => (
               <Fragment key={category}>
                 <tr className="grp">
-                  <td colSpan={4}>{category}</td>
+                  <td colSpan={5}>{category}</td>
                 </tr>
                 {rows.map((c) => {
                   const ui = CHECK_UI[c.status];
@@ -391,10 +399,8 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
                         </span>
                       </td>
                       <td className="item">{c.item}</td>
-                      <td className="text-ink2">
-                        {c.advice}
-                        {c.evidence && <div className="fix mono break-all">{c.evidence}</div>}
-                      </td>
+                      <td className="text-ink2">{c.advice}</td>
+                      <td className="mono text-xs text-ink3">{c.evidence || "—"}</td>
                       <td>
                         {c.details && c.details.length > 0 ? (
                           <DetailsToggle title={c.item} details={c.details} />
