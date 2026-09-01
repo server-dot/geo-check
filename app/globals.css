@@ -149,7 +149,17 @@ code {
   text-align: center;
 }
 .figs > div { background: var(--paper); padding: 16px 0 18px; }
-.figs b { display: block; font-size: 32px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; }
+/* 這格常放 schema 類型清單（WebPage、BreadcrumbList…），英文值沒有空格可斷，
+   32px 字級一放寬就會畫出格子外——overflow-wrap:normal 預設不允許字中斷行。 */
+.figs b {
+  display: block;
+  padding: 0 8px;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+  overflow-wrap: break-word;
+}
 .figs span { font-family: var(--font-plex-mono), monospace; font-size: 11px; letter-spacing: 0.08em; color: var(--ink3); }
 
 .list-row {
@@ -235,6 +245,30 @@ code {
    （像 llms.txt 斷成 llm/s.txt），改用 anywhere 讓瀏覽器優先在 / 這類
    標點處斷行，真的沒地方斷才會硬切。 */
 .report-table td .evidence { overflow-wrap: anywhere; word-break: normal; }
+
+.progress-track {
+  height: 6px;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--inset);
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--lime);
+  transition: width 0.4s ease;
+}
+/* 「彙總分析中」這類階段沒有實際頁數可算百分比，用跑動色塊表示還在動，
+   不要騙使用者看到一條假的滿版進度條。 */
+.progress-fill--indeterminate {
+  width: 40%;
+  animation: progress-slide 1.2s ease-in-out infinite;
+}
+@keyframes progress-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
 
 mark.lime-highlight {
   background: linear-gradient(transparent 62%, var(--lime) 62%);
