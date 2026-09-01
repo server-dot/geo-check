@@ -199,24 +199,39 @@ function splitAdviceSuggestion(advice: string): { diagnosis: string; suggestion:
   return { diagnosis: m[1], suggestion: m[2].replace(/^建議[：:]?\s*/, "") };
 }
 
-// 深度健檢一格的內容：現況文字（warn/fail 且切得出建議時，建議段落抽成獨立提示框）
-// ＋ mono 證據數據。表格版跟窄螢幕卡片版共用同一份，不要維護兩份文字邏輯。
+// 現況文字＋ mono 證據數據（不含建議提示框——桌機表格版要把提示框拉出去
+// 獨立一整列，卡片版才會把它接在下面一起顯示，所以現況跟建議框拆成兩個
+// 元件，各自的排版各自組合，不要耦合在一起）。
+function AdviceDiagnosis({ c, diagnosis }: { c: CheckItem; diagnosis: string }) {
+  return (
+    <>
+      {diagnosis}
+      {c.evidence && <p className="evidence mono mt-1 text-xs text-ink3">{c.evidence}</p>}
+    </>
+  );
+}
+
+function SuggestionBox({ status, suggestion }: { status: CheckStatus; suggestion: string }) {
+  return (
+    <div className={`rounded-md border px-3 py-2 text-xs leading-relaxed ${CHECK_UI[status].badge}`}>
+      <p className="mb-0.5 font-semibold">改善建議</p>
+      <p>{suggestion}</p>
+    </div>
+  );
+}
+
+// 窄螢幕卡片版：現況跟建議框直接疊在同一塊裡（沒有 colspan 這種表格限定的概念，
+// 疊在一起本來就是卡片自然的排法）。桌機表格版另外處理，見 AuditTable。
 function AdviceCell({ c }: { c: CheckItem }) {
   const split = c.status !== "ok" ? splitAdviceSuggestion(c.advice) : null;
   return (
     <>
-      {split?.suggestion ? (
-        <>
-          {split.diagnosis}
-          <div className={`mt-2 rounded-md border px-3 py-2 text-xs leading-relaxed ${CHECK_UI[c.status].badge}`}>
-            <p className="mb-0.5 font-semibold">改善建議</p>
-            <p>{split.suggestion}</p>
-          </div>
-        </>
-      ) : (
-        c.advice
+      <AdviceDiagnosis c={c} diagnosis={split?.suggestion ? split.diagnosis : c.advice} />
+      {split?.suggestion && (
+        <div className="mt-2">
+          <SuggestionBox status={c.status} suggestion={split.suggestion} />
+        </div>
       )}
-      {c.evidence && <p className="evidence mono mt-1 text-xs text-ink3">{c.evidence}</p>}
     </>
   );
 }
@@ -631,25 +646,37 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
                 </tr>
                 {rows.map((c) => {
                   const ui = CHECK_UI[c.status];
+                  const split = c.status !== "ok" ? splitAdviceSuggestion(c.advice) : null;
                   return (
-                    <tr key={c.key}>
-                      <td>
-                        <span className={`mono rounded-full border px-2 py-0.5 text-xs font-medium ${ui.badge}`}>
-                          {ui.text}
-                        </span>
-                      </td>
-                      <td className="item">{c.item}</td>
-                      <td className="text-ink2">
-                        <AdviceCell c={c} />
-                      </td>
-                      <td>
-                        {c.details && c.details.length > 0 ? (
-                          <DetailsToggle title={c.item} details={c.details} />
-                        ) : (
-                          <span className="text-ink3/50">—</span>
-                        )}
-                      </td>
-                    </tr>
+                    <Fragment key={c.key}>
+                      <tr className={split?.suggestion ? "has-suggestion" : undefined}>
+                        <td>
+                          <span className={`mono rounded-full border px-2 py-0.5 text-xs font-medium ${ui.badge}`}>
+                            {ui.text}
+                          </span>
+                        </td>
+                        <td className="item">{c.item}</td>
+                        <td className="text-ink2">
+                          <AdviceDiagnosis c={c} diagnosis={split?.suggestion ? split.diagnosis : c.advice} />
+                        </td>
+                        <td>
+                          {c.details && c.details.length > 0 ? (
+                            <DetailsToggle title={c.item} details={c.details} />
+                          ) : (
+                            <span className="text-ink3/50">—</span>
+                          )}
+                        </td>
+                      </tr>
+                      {/* 改善建議獨立一整列橫跨到底，不縮在建議欄裡——欄寬只有 58%，
+                          長一點的建議文字擠在裡面比擠在整列窄很多，橫跨可以用滿版面寬度。 */}
+                      {split?.suggestion && (
+                        <tr className="suggestion-row">
+                          <td colSpan={4}>
+                            <SuggestionBox status={c.status} suggestion={split.suggestion} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </Fragment>
