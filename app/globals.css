@@ -209,6 +209,7 @@ code {
 .report-table th {
   text-align: center;
   vertical-align: middle;
+  white-space: nowrap;
   font-family: var(--font-plex-mono), monospace;
   font-size: 16px;
   letter-spacing: 0.12em;

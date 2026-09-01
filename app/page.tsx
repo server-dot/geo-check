@@ -643,7 +643,7 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
                   <col style={{ width: "88px" }} />
                   <col style={{ width: "128px" }} />
                   <col />
-                  <col style={{ width: "104px" }} />
+                  <col style={{ width: "136px" }} />
                 </colgroup>
                 <thead>
                   <tr>
