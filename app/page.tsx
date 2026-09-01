@@ -640,7 +640,7 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
             <div className="rounded-[10px] border border-ink/15 bg-card">
               <table className="report-table report-table--fixed w-full">
                 <colgroup>
-                  <col style={{ width: "72px" }} />
+                  <col style={{ width: "88px" }} />
                   <col style={{ width: "128px" }} />
                   <col />
                   <col style={{ width: "104px" }} />

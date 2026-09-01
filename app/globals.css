@@ -204,30 +204,33 @@ code {
 /* 固定欄寬（配 colgroup）：不然瀏覽器會照內容自動撐開欄位，長字串一多
    整張表就比容器寬，overflow-x-auto 的捲軸救不了，會把外層版面一起撐開。 */
 .report-table--fixed { table-layout: fixed; }
+/* 標題列水平垂直置中；欄位內距（th/td 都是）左右各留 10px，不要讓文字/徽章
+   貼著儲存格邊界或彼此頂在一起——之前左右 padding 是 0，看起來很擠。 */
 .report-table th {
-  text-align: left;
+  text-align: center;
+  vertical-align: middle;
   font-family: var(--font-plex-mono), monospace;
   font-size: 10.5px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--ink3);
   font-weight: 500;
-  padding: 0 16px 10px 0;
+  padding: 0 10px 10px;
   border-bottom: 1px solid var(--ink);
 }
 .report-table td {
-  padding: 14px 16px 14px 0;
+  padding: 14px 10px;
   border-top: 1px solid var(--line2);
   vertical-align: top;
   overflow-wrap: break-word;
   word-break: break-word;
 }
+.report-table tr > :first-child { padding-left: 16px; }
+.report-table tr > :last-child { padding-right: 16px; }
 /* 每個分類現在各自一張表，第一列上面已經有 thead 的粗底線了，
    不需要再疊一條細線變成雙線。 */
 .report-table tbody tr:first-child td { border-top: none; }
-.report-table th:last-child,
 .report-table td:last-child:not([colspan]) {
-  padding-right: 0;
   text-align: right;
   font-family: var(--font-plex-mono), monospace;
   font-size: 13px;
