@@ -633,7 +633,7 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
       <div className="hidden space-y-5 sm:block">
         {[...groups.entries()].map(([category, rows]) => (
           <div key={category}>
-            <p className="mono mb-2 text-[10.5px] tracking-widest text-ink3 uppercase">{category}</p>
+            <p className="mono mb-2 text-sm font-semibold tracking-wide text-lime-dark uppercase">{category}</p>
             {/* --line 這個邊框色是設計系統裡刻意收斂的淡色，套在其他卡片上沒問題，
                 但這裡小積木明確反饋看起來像沒有框——深度健檢表格改用對比更明顯的
                 border-ink/15，跟設計稿那種清楚有框的視覺對齊，不動全站其他卡片。 */}
@@ -699,7 +699,7 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
       <div className="space-y-5 sm:hidden">
         {[...groups.entries()].map(([category, rows]) => (
           <div key={category}>
-            <p className="mono mb-2 text-[10.5px] tracking-widest text-ink3 uppercase">{category}</p>
+            <p className="mono mb-2 text-sm font-semibold tracking-wide text-lime-dark uppercase">{category}</p>
             <div className="divide-y divide-line2 rounded-[10px] border border-ink/15 bg-card">
               {rows.map((c) => {
                 const ui = CHECK_UI[c.status];

@@ -210,8 +210,8 @@ code {
   text-align: center;
   vertical-align: middle;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 10.5px;
-  letter-spacing: 0.16em;
+  font-size: 13px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink3);
   font-weight: 500;
