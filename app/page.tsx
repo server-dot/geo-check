@@ -1071,24 +1071,41 @@ export default function GeoPage() {
 
         {error && <p className="mt-4 text-center text-fail">{error}</p>}
 
-        {/* 按下「開始檢測」後，後端要先同步跑完 robots.txt／首頁存取檢查＋品牌能見度
-            查詢（兩個 AI 引擎，真的要等它們回應）才會建立 job 回傳 jobId——engine 在
-            這之前一直是 null，下面那個進度卡也還沒東西可顯示，畫面會整個空著。這裡
-            補一個「剛送出、還沒拿到第一個回應」的過渡畫面，一點下去就有東西可看。 */}
-        {loading && !engine && (
+        {/* 小積木反饋：檢測過程中途只想看到單一進度動畫，不要一部分結果先跑出來、
+            一部分還在轉圈——「全部判斷完再列出結果」。所以下面整塊結果只在
+            status.status === "completed" 才出現；跑到完成前，不管是還沒建立 job
+            的前置檢查階段，還是爬取／分析階段，都共用這一張進度卡。 */}
+        {loading && status?.status !== "completed" && (
           <div className="mt-10 flex items-center gap-6 rounded-[10px] border border-line bg-card p-6">
             <RadarSweep />
             <div className="min-w-0 flex-1">
-              <p className="eyebrow">健檢啟動中</p>
-              <p className="mt-2 text-sm text-ink2">正在檢查 AI 爬蟲存取權限、品牌能見度…</p>
-              <div className="progress-track mt-4">
-                <div className="progress-fill progress-fill--indeterminate" />
+              <div className="flex items-center justify-between gap-4">
+                <p className="eyebrow">{status ? "深度健檢進行中" : "健檢啟動中"}</p>
+                {status && status.progress.crawled > 0 && (
+                  <span className="mono text-xs text-ink3">
+                    {status.progress.crawled}/{status.progress.cap} 頁
+                  </span>
+                )}
               </div>
+              <p className="mt-2 text-sm text-ink2">{status ? status.message : "正在檢查 AI 爬蟲存取權限、品牌能見度…"}</p>
+              <div className="progress-track mt-4">
+                {status?.status === "crawling" && status.progress.cap > 0 ? (
+                  <div
+                    className="progress-fill"
+                    style={{
+                      width: `${Math.min(100, Math.round((status.progress.crawled / status.progress.cap) * 100))}%`,
+                    }}
+                  />
+                ) : (
+                  <div className="progress-fill progress-fill--indeterminate" />
+                )}
+              </div>
+              <p className="mt-3 text-xs text-ink3">多頁健檢通常需要 30–120 秒，關掉分頁不會保留結果，請稍候。</p>
             </div>
           </div>
         )}
 
-        {engine && (
+        {status?.status === "completed" && engine && (
           <div className="mt-10">
             {/* 判定不出來時必須明講。給假綠燈比不給答案傷害更大 */}
             <div
@@ -1139,36 +1156,6 @@ export default function GeoPage() {
                 <p className="mono mt-2 text-xs text-ink3">規則來源：{engine.robotsUrl}</p>
               )}
             </div>
-
-            {status && status.status !== "completed" && !status.audit && (
-              <div className="mt-6 flex items-center gap-6 rounded-[10px] border border-line bg-card p-6">
-                <RadarSweep />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-4">
-                    <p className="eyebrow">深度健檢進行中</p>
-                    {status.progress.crawled > 0 && (
-                      <span className="mono text-xs text-ink3">
-                        {status.progress.crawled}/{status.progress.cap} 頁
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-2 text-sm text-ink2">{status.message}</p>
-                  <div className="progress-track mt-4">
-                    {status.status === "crawling" && status.progress.cap > 0 ? (
-                      <div
-                        className="progress-fill"
-                        style={{
-                          width: `${Math.min(100, Math.round((status.progress.crawled / status.progress.cap) * 100))}%`,
-                        }}
-                      />
-                    ) : (
-                      <div className="progress-fill progress-fill--indeterminate" />
-                    )}
-                  </div>
-                  <p className="mt-3 text-xs text-ink3">多頁健檢通常需要 30–120 秒，關掉分頁不會保留結果，請稍候。</p>
-                </div>
-              </div>
-            )}
 
             {status?.audit &&
               (() => {
@@ -1444,16 +1431,10 @@ export default function GeoPage() {
 
             {engine.llmsTxt.exists !== null && <LlmsTxtCard llmsTxt={engine.llmsTxt} />}
 
-            {/* 深度健檢：多頁爬蟲＋規則＋AI 語意判斷，跑得比上面慢，進度誠實顯示 */}
-            <div className="mt-10">
-              {status && (status.status === "crawling" || status.status === "analyzing") && (
-                <div className="flex items-center gap-3 rounded-[10px] border border-line bg-card px-5 py-4">
-                  <span className="h-[18px] w-[18px] shrink-0 animate-spin rounded-full border-2 border-line border-t-ink" />
-                  <p className="text-sm text-ink2">{status.message}</p>
-                </div>
-              )}
-              {status?.status === "completed" && status.audit && <AuditTable checks={status.audit} />}
-            </div>
+            {/* 深度健檢：多頁爬蟲＋規則＋AI 語意判斷。這個區塊外層已經整包包在
+                status.status === "completed" 底下，跑到這裡 status.audit 一定有值——
+                進行中的畫面統一由最外層那張進度卡負責，這裡不用再重複一份。 */}
+            <div className="mt-10">{status?.audit && <AuditTable checks={status.audit} />}</div>
           </div>
         )}
       </div>
