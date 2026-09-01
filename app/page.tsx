@@ -441,24 +441,29 @@ function DetailsToggle({ title, details }: { title: string; details: { url: stri
                 ✕
               </button>
             </div>
-            <div className="divide-y divide-line2 overflow-y-auto overflow-x-hidden px-5 py-2">
-              {details.map((d, i) => (
-                <div key={i} className="flex gap-3 py-2.5 text-xs leading-relaxed">
-                  <span className="mono w-6 shrink-0 text-right tabular-nums text-ink3/60">{i + 1}</span>
-                  <div className="min-w-0 flex-1">
-                    <a
-                      href={d.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mono block break-all text-ink"
-                      title={d.url}
-                    >
-                      {urlToPath(d.url)}
-                    </a>
-                    <p className="mt-0.5 break-all text-ink3">{d.note}</p>
+            <div className="relative min-h-0 flex-1">
+              <div className="h-full divide-y divide-line2 overflow-y-auto overflow-x-hidden px-5 py-2">
+                {details.map((d, i) => (
+                  <div key={i} className="flex gap-3 py-2.5 text-xs leading-relaxed">
+                    <span className="mono w-6 shrink-0 text-right tabular-nums text-ink3/60">{i + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <a
+                        href={d.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mono block break-all text-ink"
+                        title={d.url}
+                      >
+                        {urlToPath(d.url)}
+                      </a>
+                      <p className="mt-0.5 break-all text-ink3">{d.note}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+              {/* Mac 預設隱藏捲軸，內容一多使用者根本看不出來還能往下捲，
+                  誤以為文字被裁掉——底部加一條漸層淡出當視覺提示。 */}
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-card to-transparent" />
             </div>
           </div>
         </div>
@@ -494,17 +499,15 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
         <table className="report-table report-table--fixed min-w-[700px]">
           <colgroup>
             <col style={{ width: "9%" }} />
-            <col style={{ width: "17%" }} />
-            <col style={{ width: "28%" }} />
-            <col style={{ width: "28%" }} />
-            <col style={{ width: "18%" }} />
+            <col style={{ width: "20%" }} />
+            <col style={{ width: "58%" }} />
+            <col style={{ width: "13%" }} />
           </colgroup>
           <thead>
             <tr>
               <th>狀態</th>
               <th>項目</th>
               <th>建議</th>
-              <th>詳細數據</th>
               <th>問題頁面</th>
             </tr>
           </thead>
@@ -512,7 +515,7 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
             {[...groups.entries()].map(([category, rows]) => (
               <Fragment key={category}>
                 <tr className="grp">
-                  <td colSpan={5}>{category}</td>
+                  <td colSpan={4}>{category}</td>
                 </tr>
                 {rows.map((c) => {
                   const ui = CHECK_UI[c.status];
@@ -524,8 +527,10 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
                         </span>
                       </td>
                       <td className="item">{c.item}</td>
-                      <td className="text-ink2">{c.advice}</td>
-                      <td className="mono text-xs text-ink3">{c.evidence || "—"}</td>
+                      <td className="text-ink2">
+                        {c.advice}
+                        {c.evidence && <p className="evidence mono mt-1 text-xs text-ink3">{c.evidence}</p>}
+                      </td>
                       <td>
                         {c.details && c.details.length > 0 ? (
                           <DetailsToggle title={c.item} details={c.details} />

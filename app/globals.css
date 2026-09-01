@@ -231,6 +231,10 @@ code {
   text-align: left;
 }
 .report-table td.item { font-weight: 500; }
+/* 證據字串常是完整網址，break-word 遇到長字會硬切在任意字元中間
+   （像 llms.txt 斷成 llm/s.txt），改用 anywhere 讓瀏覽器優先在 / 這類
+   標點處斷行，真的沒地方斷才會硬切。 */
+.report-table td .evidence { overflow-wrap: anywhere; word-break: normal; }
 
 mark.lime-highlight {
   background: linear-gradient(transparent 62%, var(--lime) 62%);
