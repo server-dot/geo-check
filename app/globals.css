@@ -210,12 +210,12 @@ code {
   text-align: center;
   vertical-align: middle;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 13px;
+  font-size: 16px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink3);
   font-weight: 500;
-  padding: 0 10px 10px;
+  padding: 0 20px 20px;
   border-bottom: 1px solid var(--ink);
 }
 .report-table td {
