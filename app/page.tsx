@@ -231,6 +231,9 @@ interface Category5 {
   name: string;
   passRate: number; // (ok×1 + warn×0.5) / total × 100，四捨五入
   total: number;
+  ok: number;
+  warn: number;
+  fail: number;
 }
 
 // 設計稿提案的五分類合併（依 lib/geo-audit-rules.ts 的 CATEGORY／key 為準，不是
@@ -291,8 +294,43 @@ function buildCategories5(engine?: EngineResult, audit?: CheckItem[]): Category5
     const b = buckets.get(name) ?? { ok: 0, warn: 0, fail: 0 };
     const total = b.ok + b.warn + b.fail;
     const passRate = total > 0 ? Math.round(((b.ok + b.warn * 0.5) / total) * 100) : 0;
-    return { name, passRate, total };
+    return { name, passRate, total, ok: b.ok, warn: b.warn, fail: b.fail };
   });
+}
+
+// 總分＝5 分類各自 passRate 的平均（每個分類權重相同，跟雷達圖五個角一一對應，
+// 不會因為某個分類底下檢測項目數量多就搶走權重）。等第門檻是隨性抓的區間，
+// 沒有業界標準可循——先求「有個總覽數字」堪用，之後要調全靠這幾個數字改。
+function computeOverallScore(categories: Category5[]): { score: number; grade: string; gradeLabel: string } {
+  const score = categories.length > 0 ? Math.round(categories.reduce((s, c) => s + c.passRate, 0) / categories.length) : 0;
+  const grade =
+    score >= 85 ? "A" : score >= 70 ? "B" : score >= 55 ? "C" : score >= 40 ? "D" : "F";
+  const gradeLabel =
+    score >= 85 ? "優異" : score >= 70 ? "良好" : score >= 55 ? "普通" : score >= 40 ? "待加強" : "不合格";
+  return { score, grade, gradeLabel };
+}
+
+// 總分環形進度：純 SVG stroke-dasharray，不用圖表函式庫，跟雷達圖同一套做法。
+function ScoreRing({ score }: { score: number }) {
+  const r = 54;
+  const c = 2 * Math.PI * r;
+  const offset = c * (1 - Math.min(100, Math.max(0, score)) / 100);
+  return (
+    <svg width="132" height="132" viewBox="0 0 132 132" className="-rotate-90">
+      <circle cx="66" cy="66" r={r} fill="none" stroke="#eaebe0" strokeWidth="10" />
+      <circle
+        cx="66"
+        cy="66"
+        r={r}
+        fill="none"
+        stroke="#a8d128"
+        strokeWidth="10"
+        strokeLinecap="round"
+        strokeDasharray={c}
+        strokeDashoffset={offset}
+      />
+    </svg>
+  );
 }
 
 // 五分類雷達圖：純 SVG，座標公式跟設計稿一致，不用圖表函式庫。跟下面的
@@ -981,12 +1019,49 @@ export default function GeoPage() {
               </div>
             )}
 
-            {status?.audit && (
-              <div className="mt-6 rounded-[10px] border border-line bg-card p-5">
-                <h2 className="eyebrow mb-4">五分類總覽</h2>
-                <RadarChart categories={buildCategories5(engine, status.audit)} />
-              </div>
-            )}
+            {status?.audit &&
+              (() => {
+                const categories5 = buildCategories5(engine, status.audit);
+                const overall = computeOverallScore(categories5);
+                const totals = categories5.reduce(
+                  (acc, c) => ({ ok: acc.ok + c.ok, warn: acc.warn + c.warn, fail: acc.fail + c.fail }),
+                  { ok: 0, warn: 0, fail: 0 }
+                );
+                return (
+                  <div className="mt-6 rounded-[10px] border border-line bg-card p-5">
+                    <h2 className="eyebrow mb-4">五分類總覽</h2>
+                    <div className="grid gap-6 sm:grid-cols-[132px_1fr] sm:items-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="relative h-[132px] w-[132px]">
+                          <ScoreRing score={overall.score} />
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <b className="text-3xl font-bold text-ink">{overall.score}</b>
+                            <span className="mono text-[10px] tracking-widest text-ink3">總分</span>
+                          </div>
+                        </div>
+                        <span className="mono rounded-full border border-line bg-inset px-3 py-1 text-xs font-medium text-ink2">
+                          {overall.grade} 級・{overall.gradeLabel}
+                        </span>
+                        <dl className="mono flex gap-4 text-center text-xs">
+                          <div>
+                            <b className="block text-base text-ok">{totals.ok}</b>
+                            <span className="text-ink3">正常</span>
+                          </div>
+                          <div>
+                            <b className="block text-base text-warn">{totals.warn}</b>
+                            <span className="text-ink3">可優化</span>
+                          </div>
+                          <div>
+                            <b className="block text-base text-fail">{totals.fail}</b>
+                            <span className="text-ink3">需處理</span>
+                          </div>
+                        </dl>
+                      </div>
+                      <RadarChart categories={categories5} />
+                    </div>
+                  </div>
+                );
+              })()}
 
             <div className="mt-6">
               <CategoryOverview rows={buildCategoryRows(engine, status?.audit)} />
