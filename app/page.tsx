@@ -212,7 +212,7 @@ function AdviceDiagnosis({ c, diagnosis }: { c: CheckItem; diagnosis: string }) 
 
 function SuggestionBox({ status, suggestion }: { status: CheckStatus; suggestion: string }) {
   return (
-    <div className={`rounded-md border px-3 py-2 text-xs leading-relaxed ${CHECK_UI[status].badge}`}>
+    <div className={`rounded-md border px-3 py-2 text-base leading-relaxed ${CHECK_UI[status].badge}`}>
       <p className="mb-0.5 font-semibold">改善建議</p>
       <p>{suggestion}</p>
     </div>
