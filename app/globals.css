@@ -270,6 +270,14 @@ code {
   100% { transform: translateX(250%); }
 }
 
+.radar-sweep-arm {
+  animation: radar-spin 2.4s linear infinite;
+}
+@keyframes radar-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 mark.lime-highlight {
   background: linear-gradient(transparent 62%, var(--lime) 62%);
   color: inherit;

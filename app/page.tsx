@@ -310,6 +310,38 @@ function computeOverallScore(categories: Category5[]): { score: number; grade: s
   return { score, grade, gradeLabel };
 }
 
+// 健檢進行中的掃描動畫：純裝飾，不代表真實進度（真實進度是旁邊的 progress-track）。
+// 純 CSS/SVG，沒有引外部函式庫或圖檔。
+function RadarSweep() {
+  const dots = [
+    { x: 88, y: 34 },
+    { x: 40, y: 70 },
+    { x: 100, y: 96 },
+  ];
+  return (
+    <svg width="132" height="132" viewBox="0 0 132 132" className="shrink-0">
+      <circle cx="66" cy="66" r="60" fill="none" stroke="var(--line)" />
+      <circle cx="66" cy="66" r="40" fill="none" stroke="var(--line)" />
+      <circle cx="66" cy="66" r="20" fill="none" stroke="var(--line)" />
+      <line x1="66" y1="6" x2="66" y2="126" stroke="var(--line)" />
+      <line x1="6" y1="66" x2="126" y2="66" stroke="var(--line)" />
+      {dots.map((d, i) => (
+        <circle key={i} cx={d.x} cy={d.y} r="2.5" fill="var(--limeDark)" />
+      ))}
+      <g className="radar-sweep-arm" style={{ transformOrigin: "66px 66px" }}>
+        <path d="M 66 66 L 66 6 A 60 60 0 0 1 118 36 Z" fill="url(#radar-sweep-fade)" />
+      </g>
+      <circle cx="66" cy="66" r="3" fill="var(--ink)" />
+      <defs>
+        <linearGradient id="radar-sweep-fade" x1="66" y1="66" x2="118" y2="36" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="var(--lime)" stopOpacity="0.5" />
+          <stop offset="1" stopColor="var(--lime)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
 // 總分環形進度：純 SVG stroke-dasharray，不用圖表函式庫，跟雷達圖同一套做法。
 function ScoreRing({ score }: { score: number }) {
   const r = 54;
@@ -993,29 +1025,32 @@ export default function GeoPage() {
             </div>
 
             {status && status.status !== "completed" && !status.audit && (
-              <div className="mt-6 rounded-[10px] border border-line bg-card p-6">
-                <div className="flex items-center justify-between gap-4">
-                  <p className="eyebrow">深度健檢進行中</p>
-                  {status.progress.crawled > 0 && (
-                    <span className="mono text-xs text-ink3">
-                      {status.progress.crawled}/{status.progress.cap} 頁
-                    </span>
-                  )}
+              <div className="mt-6 flex items-center gap-6 rounded-[10px] border border-line bg-card p-6">
+                <RadarSweep />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="eyebrow">深度健檢進行中</p>
+                    {status.progress.crawled > 0 && (
+                      <span className="mono text-xs text-ink3">
+                        {status.progress.crawled}/{status.progress.cap} 頁
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-sm text-ink2">{status.message}</p>
+                  <div className="progress-track mt-4">
+                    {status.status === "crawling" && status.progress.cap > 0 ? (
+                      <div
+                        className="progress-fill"
+                        style={{
+                          width: `${Math.min(100, Math.round((status.progress.crawled / status.progress.cap) * 100))}%`,
+                        }}
+                      />
+                    ) : (
+                      <div className="progress-fill progress-fill--indeterminate" />
+                    )}
+                  </div>
+                  <p className="mt-3 text-xs text-ink3">多頁健檢通常需要 30–120 秒，關掉分頁不會保留結果，請稍候。</p>
                 </div>
-                <p className="mt-2 text-sm text-ink2">{status.message}</p>
-                <div className="progress-track mt-4">
-                  {status.status === "crawling" && status.progress.cap > 0 ? (
-                    <div
-                      className="progress-fill"
-                      style={{
-                        width: `${Math.min(100, Math.round((status.progress.crawled / status.progress.cap) * 100))}%`,
-                      }}
-                    />
-                  ) : (
-                    <div className="progress-fill progress-fill--indeterminate" />
-                  )}
-                </div>
-                <p className="mt-3 text-xs text-ink3">多頁健檢通常需要 30–120 秒，關掉分頁不會保留結果，請稍候。</p>
               </div>
             )}
 
