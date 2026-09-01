@@ -181,6 +181,46 @@ const CHECK_UI: Record<CheckStatus, { badge: string; text: string }> = {
   fail: { badge: "bg-fail/10 text-fail border-fail/30", text: "需處理" },
 };
 
+// advice 是「現況＋建議」寫在同一句的自由文字（21 種檢測各自組字串，格式不統一），
+// 不是結構化的兩個欄位。用「、。；，這類標點＋建議」當切點，把最後一段「建議…」
+// 拆出來獨立做成提示框；切不出來就整段照舊當一般文字顯示，不勉強硬切。
+function splitAdviceSuggestion(advice: string): { diagnosis: string; suggestion: string | null } {
+  // 優先在句號斷句：整段話的最後一句如果是完整的「建議」句子，切出來最自然
+  // （不會把「如果⋯，建議⋯」這種條件子句攔腰斬斷）。斷不出完整句子才退而
+  // 求其次，找最後一個「逗號＋建議」的位置硬切。
+  const sentences = advice.split("。").filter((s) => s.trim());
+  if (sentences.length >= 2 && sentences[sentences.length - 1].includes("建議")) {
+    const suggestion = sentences[sentences.length - 1].trim().replace(/^建議[：:]?\s*/, "");
+    const diagnosis = sentences.slice(0, -1).join("。") + "。";
+    return { diagnosis, suggestion };
+  }
+  const m = advice.match(/^([\s\S]+[，、；])\s*(建議[：:]?\s*[\s\S]*)$/);
+  if (!m) return { diagnosis: advice, suggestion: null };
+  return { diagnosis: m[1], suggestion: m[2].replace(/^建議[：:]?\s*/, "") };
+}
+
+// 深度健檢一格的內容：現況文字（warn/fail 且切得出建議時，建議段落抽成獨立提示框）
+// ＋ mono 證據數據。表格版跟窄螢幕卡片版共用同一份，不要維護兩份文字邏輯。
+function AdviceCell({ c }: { c: CheckItem }) {
+  const split = c.status !== "ok" ? splitAdviceSuggestion(c.advice) : null;
+  return (
+    <>
+      {split?.suggestion ? (
+        <>
+          {split.diagnosis}
+          <div className={`mt-2 rounded-md border px-3 py-2 text-xs leading-relaxed ${CHECK_UI[c.status].badge}`}>
+            <p className="mb-0.5 font-semibold">改善建議</p>
+            <p>{split.suggestion}</p>
+          </div>
+        </>
+      ) : (
+        c.advice
+      )}
+      {c.evidence && <p className="evidence mono mt-1 text-xs text-ink3">{c.evidence}</p>}
+    </>
+  );
+}
+
 // 狀態色（dataviz 技能的固定 status palette，不跟著品牌色跑）——CategoryOverview
 // 用內嵌 style 畫長條，跟新 token 的十六進位值保持一致。
 const STATUS_COLOR = { ok: "#2f6b45", warn: "#8a6410", fail: "#9e3529" } as const;
@@ -565,7 +605,9 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
           <span className="text-ok">正常 {sc.ok}</span>
         </div>
       </div>
-      <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
+      {/* 640px 以上維持表格；再窄下去三欄硬擠只會逼中文逐字斷行，改成每列一張卡片，
+          資訊順序不變（狀態＋項目在上，說明／證據在中，問題頁面連結靠右），不需要橫向捲動。 */}
+      <div className="hidden overflow-x-auto rounded-[10px] border border-line bg-card sm:block">
         <table className="report-table report-table--fixed min-w-[700px]">
           <colgroup>
             <col style={{ width: "9%" }} />
@@ -598,8 +640,7 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
                       </td>
                       <td className="item">{c.item}</td>
                       <td className="text-ink2">
-                        {c.advice}
-                        {c.evidence && <p className="evidence mono mt-1 text-xs text-ink3">{c.evidence}</p>}
+                        <AdviceCell c={c} />
                       </td>
                       <td>
                         {c.details && c.details.length > 0 ? (
@@ -615,6 +656,37 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="space-y-5 sm:hidden">
+        {[...groups.entries()].map(([category, rows]) => (
+          <div key={category}>
+            <p className="mono mb-2 text-[10.5px] tracking-widest text-ink3 uppercase">{category}</p>
+            <div className="divide-y divide-line2 rounded-[10px] border border-line bg-card">
+              {rows.map((c) => {
+                const ui = CHECK_UI[c.status];
+                return (
+                  <div key={c.key} className="flex flex-col gap-1.5 p-4">
+                    <div className="flex items-center gap-2">
+                      <span className={`mono rounded-full border px-2 py-0.5 text-xs font-medium ${ui.badge}`}>
+                        {ui.text}
+                      </span>
+                      <p className="text-sm font-medium text-ink">{c.item}</p>
+                    </div>
+                    <div className="text-sm text-ink2">
+                      <AdviceCell c={c} />
+                    </div>
+                    {c.details && c.details.length > 0 && (
+                      <div className="flex justify-end">
+                        <DetailsToggle title={c.item} details={c.details} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
