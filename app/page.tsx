@@ -622,18 +622,25 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
       {/* 640px 以上維持表格；再窄下去三欄硬擠只會逼中文逐字斷行，改成每列一張卡片，
           資訊順序不變（狀態＋項目在上，說明／證據在中，問題頁面連結靠右），不需要橫向捲動。
           每個分類各自一張獨立的卡片＋表格（照設計稿的版型），不是一張大表裡面塞分類分隔列——
-          跟下面窄螢幕卡片版的分類分法（每類自己一個 rounded 卡片）對齊，不要兩套邏輯。 */}
+          跟下面窄螢幕卡片版的分類分法（每類自己一個 rounded 卡片）對齊，不要兩套邏輯。
+
+          欄寬照設計稁原始檔案（AuditTable-2b-版型.html）用固定 px，不是百分比：
+          72／128／104 三欄固定，中間「建議」欄吃剩下全部空間、可以縮到很窄也不會
+          觸發水平捲動。之前用百分比 + min-w-[700px] 逼出 overflow-x-auto，容器窄於
+          700px 時表格會出現水平捲軸——但 Mac 預設隱藏捲軸，使用者看不出來還能捲，
+          就像被裁掉一樣。固定寬三欄 + 中間欄無下限，表格永遠塞得進容器，不會有
+          「其實可以捲動、但看不出來」這個陷阱。 */}
       <div className="hidden space-y-5 sm:block">
         {[...groups.entries()].map(([category, rows]) => (
           <div key={category}>
             <p className="mono mb-2 text-[10.5px] tracking-widest text-ink3 uppercase">{category}</p>
-            <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
-              <table className="report-table report-table--fixed min-w-[700px]">
+            <div className="rounded-[10px] border border-line bg-card">
+              <table className="report-table report-table--fixed w-full">
                 <colgroup>
-                  <col style={{ width: "9%" }} />
-                  <col style={{ width: "20%" }} />
-                  <col style={{ width: "58%" }} />
-                  <col style={{ width: "13%" }} />
+                  <col style={{ width: "72px" }} />
+                  <col style={{ width: "128px" }} />
+                  <col />
+                  <col style={{ width: "104px" }} />
                 </colgroup>
                 <thead>
                   <tr>
