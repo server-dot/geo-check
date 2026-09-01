@@ -265,7 +265,7 @@ export function analyzeContentVisibility(html: string): ContentVisibility {
   }
 
   if (duplicateBlockChars > 0) {
-    advice += ` 另外偵測到約 ${duplicateBlockChars} 個字的內容在頁面裡重複了兩份（常見於跑馬燈／無限捲動效果為了做無縫循環而複製的第二份），這段已經從上面的字數和預覽排除。建議把重複的那份加上 aria-hidden="true"，避免稀釋 AI 讀到的有效內容比例。`;
+    advice += ` 另外偵測到約 ${duplicateBlockChars} 個字的內容在頁面裡重複渲染了兩份（常見於跑馬燈／無限捲動效果為了無縫循環而複製的第二份，也可能是響應式版面同時渲染手機版/桌機版兩份選單），這段已經從上面的字數和預覽排除。建議把重複的那份加上 aria-hidden="true"，避免稀釋 AI 讀到的有效內容比例。`;
   }
 
   // summary：給人看的一句話總結，優先於底下的技術細節（advice）。
@@ -288,7 +288,7 @@ export function analyzeContentVisibility(html: string): ContentVisibility {
       issues.push('沒有寫 meta description，建議補一段簡短說明，這是 AI 判斷頁面主題的重要依據');
     }
     if (duplicateBlockChars > 0) {
-      issues.push(`偵測到約 ${duplicateBlockChars} 字重複內容（跑馬燈效果造成），建議加上 aria-hidden 排除`);
+      issues.push(`偵測到約 ${duplicateBlockChars} 字重複渲染內容（常見於跑馬燈或響應式雙份選單），建議加上 aria-hidden 排除`);
     }
     summary =
       issues.length === 0

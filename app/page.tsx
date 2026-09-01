@@ -1349,7 +1349,7 @@ export default function GeoPage() {
 
                   {engine.visibility.duplicateBlockChars > 0 && (
                     <p className="mt-2 rounded-md border border-warn/30 bg-warn/10 px-2.5 py-1.5 text-xs text-warn">
-                      ⚠️ 已排除約 {engine.visibility.duplicateBlockChars} 字的重複內容區塊（可能是跑馬燈效果），建議加上{" "}
+                      ⚠️ 已排除約 {engine.visibility.duplicateBlockChars} 字的重複渲染內容區塊（常見於跑馬燈或響應式雙份選單），建議加上{" "}
                       <code>aria-hidden=&quot;true&quot;</code>。
                     </p>
                   )}
@@ -1382,7 +1382,10 @@ export default function GeoPage() {
                       );
                     })()}
 
-                  <dl className="figs mt-4 grid-cols-2 sm:grid-cols-4">
+                  {/* 這格只有兩個統計數字（可讀字數、結構化資料），grid-cols-4 在寬螢幕下
+                      會多出兩欄空白軌道（container 底色透出來變成一塊怪異的空白）——
+                      固定用 2 欄，不要為了呼應「figs」這個共用 class 名稱硬撐出根本不存在的欄位。 */}
+                  <dl className="figs mt-4 grid-cols-2">
                     <div>
                       <b>{engine.visibility.textLength}</b>
                       <span>可讀字數</span>
