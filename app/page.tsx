@@ -1071,6 +1071,23 @@ export default function GeoPage() {
 
         {error && <p className="mt-4 text-center text-fail">{error}</p>}
 
+        {/* 按下「開始檢測」後，後端要先同步跑完 robots.txt／首頁存取檢查＋品牌能見度
+            查詢（兩個 AI 引擎，真的要等它們回應）才會建立 job 回傳 jobId——engine 在
+            這之前一直是 null，下面那個進度卡也還沒東西可顯示，畫面會整個空著。這裡
+            補一個「剛送出、還沒拿到第一個回應」的過渡畫面，一點下去就有東西可看。 */}
+        {loading && !engine && (
+          <div className="mt-10 flex items-center gap-6 rounded-[10px] border border-line bg-card p-6">
+            <RadarSweep />
+            <div className="min-w-0 flex-1">
+              <p className="eyebrow">健檢啟動中</p>
+              <p className="mt-2 text-sm text-ink2">正在檢查 AI 爬蟲存取權限、品牌能見度…</p>
+              <div className="progress-track mt-4">
+                <div className="progress-fill progress-fill--indeterminate" />
+              </div>
+            </div>
+          </div>
+        )}
+
         {engine && (
           <div className="mt-10">
             {/* 判定不出來時必須明講。給假綠燈比不給答案傷害更大 */}
