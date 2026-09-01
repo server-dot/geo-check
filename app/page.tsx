@@ -620,68 +620,70 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
         </div>
       </div>
       {/* 640px 以上維持表格；再窄下去三欄硬擠只會逼中文逐字斷行，改成每列一張卡片，
-          資訊順序不變（狀態＋項目在上，說明／證據在中，問題頁面連結靠右），不需要橫向捲動。 */}
-      <div className="hidden overflow-x-auto rounded-[10px] border border-line bg-card sm:block">
-        <table className="report-table report-table--fixed min-w-[700px]">
-          <colgroup>
-            <col style={{ width: "9%" }} />
-            <col style={{ width: "20%" }} />
-            <col style={{ width: "58%" }} />
-            <col style={{ width: "13%" }} />
-          </colgroup>
-          <thead>
-            <tr>
-              <th>狀態</th>
-              <th>項目</th>
-              <th>建議</th>
-              <th>問題頁面</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...groups.entries()].map(([category, rows]) => (
-              <Fragment key={category}>
-                <tr className="grp">
-                  <td colSpan={4}>{category}</td>
-                </tr>
-                {rows.map((c) => {
-                  const ui = CHECK_UI[c.status];
-                  const split = c.status !== "ok" ? splitAdviceSuggestion(c.advice) : null;
-                  return (
-                    <Fragment key={c.key}>
-                      <tr className={split?.suggestion ? "has-suggestion" : undefined}>
-                        <td>
-                          <span className={`mono rounded-full border px-2 py-0.5 text-xs font-medium ${ui.badge}`}>
-                            {ui.text}
-                          </span>
-                        </td>
-                        <td className="item">{c.item}</td>
-                        <td className="text-ink2">
-                          <AdviceDiagnosis c={c} diagnosis={split?.suggestion ? split.diagnosis : c.advice} />
-                        </td>
-                        <td>
-                          {c.details && c.details.length > 0 ? (
-                            <DetailsToggle title={c.item} details={c.details} />
-                          ) : (
-                            <span className="text-ink3/50">—</span>
-                          )}
-                        </td>
-                      </tr>
-                      {/* 改善建議獨立一整列橫跨到底，不縮在建議欄裡——欄寬只有 58%，
-                          長一點的建議文字擠在裡面比擠在整列窄很多，橫跨可以用滿版面寬度。 */}
-                      {split?.suggestion && (
-                        <tr className="suggestion-row">
-                          <td colSpan={4}>
-                            <SuggestionBox status={c.status} suggestion={split.suggestion} />
+          資訊順序不變（狀態＋項目在上，說明／證據在中，問題頁面連結靠右），不需要橫向捲動。
+          每個分類各自一張獨立的卡片＋表格（照設計稿的版型），不是一張大表裡面塞分類分隔列——
+          跟下面窄螢幕卡片版的分類分法（每類自己一個 rounded 卡片）對齊，不要兩套邏輯。 */}
+      <div className="hidden space-y-5 sm:block">
+        {[...groups.entries()].map(([category, rows]) => (
+          <div key={category}>
+            <p className="mono mb-2 text-[10.5px] tracking-widest text-ink3 uppercase">{category}</p>
+            <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
+              <table className="report-table report-table--fixed min-w-[700px]">
+                <colgroup>
+                  <col style={{ width: "9%" }} />
+                  <col style={{ width: "20%" }} />
+                  <col style={{ width: "58%" }} />
+                  <col style={{ width: "13%" }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>狀態</th>
+                    <th>項目</th>
+                    <th>建議</th>
+                    <th>問題頁面</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((c) => {
+                    const ui = CHECK_UI[c.status];
+                    const split = c.status !== "ok" ? splitAdviceSuggestion(c.advice) : null;
+                    return (
+                      <Fragment key={c.key}>
+                        <tr className={split?.suggestion ? "has-suggestion" : undefined}>
+                          <td>
+                            <span className={`mono rounded-full border px-2 py-0.5 text-xs font-medium ${ui.badge}`}>
+                              {ui.text}
+                            </span>
+                          </td>
+                          <td className="item">{c.item}</td>
+                          <td className="text-ink2">
+                            <AdviceDiagnosis c={c} diagnosis={split?.suggestion ? split.diagnosis : c.advice} />
+                          </td>
+                          <td>
+                            {c.details && c.details.length > 0 ? (
+                              <DetailsToggle title={c.item} details={c.details} />
+                            ) : (
+                              <span className="text-ink3/50">—</span>
+                            )}
                           </td>
                         </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
+                        {/* 改善建議獨立一整列橫跨到底，不縮在建議欄裡——欄寬只有 58%，
+                            長一點的建議文字擠在裡面比擠在整列窄很多，橫跨可以用滿版面寬度。 */}
+                        {split?.suggestion && (
+                          <tr className="suggestion-row">
+                            <td colSpan={4}>
+                              <SuggestionBox status={c.status} suggestion={split.suggestion} />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="space-y-5 sm:hidden">
