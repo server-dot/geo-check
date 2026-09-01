@@ -182,21 +182,20 @@ const CHECK_UI: Record<CheckStatus, { badge: string; text: string }> = {
 };
 
 // advice 是「現況＋建議」寫在同一句的自由文字（21 種檢測各自組字串，格式不統一），
-// 不是結構化的兩個欄位。用「、。；，這類標點＋建議」當切點，把最後一段「建議…」
-// 拆出來獨立做成提示框；切不出來就整段照舊當一般文字顯示，不勉強硬切。
+// 不是結構化的兩個欄位。只在句號斷句能切出一句完整的「建議」句子時才拆
+// （例如「...沒有其他管道揭露聯絡地址。如果有實體門市，建議部署...」）；
+// 曾經多加一條「逗號＋建議」的退路，實測會切出「補齊並控制長度」這種脫離
+// 上下文的殘句（原句是「...Description 過長 23，建議補齊並控制長度」，
+// 「補齊」什麼、「控制」什麼的長度，切開後完全看不出來）——這種半吊子的
+// 建議框比不切還糟，所以拿掉，寧可整段照舊當一般文字顯示。
 function splitAdviceSuggestion(advice: string): { diagnosis: string; suggestion: string | null } {
-  // 優先在句號斷句：整段話的最後一句如果是完整的「建議」句子，切出來最自然
-  // （不會把「如果⋯，建議⋯」這種條件子句攔腰斬斷）。斷不出完整句子才退而
-  // 求其次，找最後一個「逗號＋建議」的位置硬切。
   const sentences = advice.split("。").filter((s) => s.trim());
   if (sentences.length >= 2 && sentences[sentences.length - 1].includes("建議")) {
     const suggestion = sentences[sentences.length - 1].trim().replace(/^建議[：:]?\s*/, "");
     const diagnosis = sentences.slice(0, -1).join("。") + "。";
     return { diagnosis, suggestion };
   }
-  const m = advice.match(/^([\s\S]+[，、；])\s*(建議[：:]?\s*[\s\S]*)$/);
-  if (!m) return { diagnosis: advice, suggestion: null };
-  return { diagnosis: m[1], suggestion: m[2].replace(/^建議[：:]?\s*/, "") };
+  return { diagnosis: advice, suggestion: null };
 }
 
 // 現況文字＋ mono 證據數據（不含建議提示框——桌機表格版要把提示框拉出去
