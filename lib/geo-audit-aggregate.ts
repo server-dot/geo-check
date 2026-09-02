@@ -209,12 +209,31 @@ export async function aggregateAuditChecks(
     // 關於頁最可能寫學經歷；活動/作品頁最可能有講座、案例這類可佐證的實績——
     // 兩種都優先排進取樣，AI 才給得出「把 XX 放到更明顯位置」這種具體建議，
     // 不是只能給「補一段簡介」這種看不到內容就只能講的空泛話。
-    const ABOUT_URL_PATTERN = /\/(about|team|profile|bio|founder|author|關於|个人)/i;
-    const PROOF_URL_PATTERN = /\/(activities|portfolio|case|works|speaking|press|作品|活動)/i;
-    const aboutPages = htmlPages.filter((p) => ABOUT_URL_PATTERN.test(p.url));
-    const proofPages = htmlPages.filter((p) => PROOF_URL_PATTERN.test(p.url));
+    // 英文關鍵字用 \b 詞界，避免「purchase」誤中「case」這種字串裡剛好包到的情況；
+    // 中文關鍵字不能套用同一招——JS 的 \b 是以 \w（ASCII 字母/數字/底線）為基準，
+    // 中文字全部算非 \w，一整串中文字裡不會有任何 \w/\W 轉換點，\b 在裡面永遠不會
+    // 命中（例如 /\b案例\b/ 對「成功案例」完全比對不到）。中文關鍵字改成直接比對
+    // 子字串，接受極少數過度比對的風險（頂多多取樣一頁，不像漏掉真正該取樣的
+    // 關於／案例頁那麼傷）。
+    const ABOUT_URL_PATTERN = /\b(about|team|profile|bio|founder|author)\b|關於|个人/i;
+    const PROOF_URL_PATTERN = /\b(activities|portfolio|case|works|speaking|press)\b|作品|活動|案例|見證|见证|評價|评价|推薦|推荐/i;
+    // new URL(...).href／.pathname 對非 ASCII 字元一律轉成 %XX 百分號編碼，中文網址
+    // 例如 /關於我們/ 實際存進 p.url 的是 /%E9%97%9C%E6%96%BC.../，上面兩個規則裡的
+    // 中文關鍵字直接對 p.url 做 regex.test 永遠不會命中——中文站慣用中文網址 slug
+    // （「關於我們」「成功案例」），這個 bug 會讓「優先取樣關於／案例頁」整個失效，
+    // 悄悄退化成「隨便抓爬到的前幾頁」，AI 因為看不到真正的佐證內容才會誤判成
+    // 「缺乏客戶評論／媒體報導」。比對前先解碼回真正的中文字再測。
+    const decodedUrl = (u: string) => {
+      try {
+        return decodeURIComponent(u);
+      } catch {
+        return u;
+      }
+    };
+    const aboutPages = htmlPages.filter((p) => ABOUT_URL_PATTERN.test(decodedUrl(p.url)));
+    const proofPages = htmlPages.filter((p) => PROOF_URL_PATTERN.test(decodedUrl(p.url)));
     const otherPages = htmlPages.filter(
-      (p) => !ABOUT_URL_PATTERN.test(p.url) && !PROOF_URL_PATTERN.test(p.url)
+      (p) => !ABOUT_URL_PATTERN.test(decodedUrl(p.url)) && !PROOF_URL_PATTERN.test(decodedUrl(p.url))
     );
     // 每頁各自限額截斷（而不是全部接起來最後才砍）——不然首頁的內文本身就很
     // 長，會把接在後面的頁面擠到字數上限外面，AI 實際上根本沒看到那些內容。
