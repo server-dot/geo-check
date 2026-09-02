@@ -22,8 +22,9 @@ export interface AiBotResult {
   matchedRule: string; // 實際命中的規則（給證據用）
 }
 
-// 目前主流會抓取網站內容餵給生成式 AI 的爬蟲
-const AI_BOTS: { ua: string; label: string }[] = [
+// 目前主流會抓取網站內容餵給生成式 AI 的爬蟲。export 出去給首頁「已檢測 N 家 AI
+// 爬蟲」那句文案用 AI_BOTS.length，不要在行銷頁另外手動寫死一個數字。
+export const AI_BOTS: { ua: string; label: string }[] = [
   { ua: 'GPTBot', label: 'ChatGPT（OpenAI 一般爬蟲）' },
   { ua: 'OAI-SearchBot', label: 'ChatGPT 搜尋（OpenAI）' },
   { ua: 'ChatGPT-User', label: 'ChatGPT 即時瀏覽（OpenAI）' },

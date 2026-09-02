@@ -105,6 +105,15 @@ code {
   padding: 10px 18px;
   cursor: pointer;
   letter-spacing: -0.01em;
+  /* 這顆 class 也常套在 <Link>/<a> 上當按鈕用（例如行銷頁的 CTA）——
+     text-decoration:none 直接寫在這裡（class 選擇器，蓋得過下面全域
+     a{text-decoration:underline} 那條元素選擇器），不要指望 Tailwind 的
+     no-underline：globals.css 這些手寫規則沒包在 @layer 裡，跟 Tailwind
+     utilities 的 @layer utilities 比較時，沒有 layer 的規則一律贏，
+     不管 class/utility 誰的特異度高——這裡遇到的 nav-link/footer-link
+     文字顏色蓋不掉，根源都是同一件事。 */
+  text-decoration: none;
+  display: inline-block;
 }
 .btn-lime:hover { background: var(--limeDark); }
 .btn-lime:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -120,8 +129,28 @@ code {
   border-radius: 8px;
   padding: 10px 18px;
   cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
 }
 .btn-line:hover { background: var(--card); }
+
+/* 深色底（CTA band／hero）用的次要按鈕——邊框跟文字色都要換成亮色，
+   不是 .btn-line 加個 Tailwind text-paper 就能蓋過去（見上面的說明）。 */
+.btn-line-dark {
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  border: 0;
+  background: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+  color: var(--paper);
+  border-radius: 8px;
+  padding: 10px 18px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+.btn-line-dark:hover { background: rgba(255, 255, 255, 0.08); }
 
 .input-mono {
   font-family: var(--font-plex-mono), monospace;
@@ -149,8 +178,8 @@ code {
   text-align: center;
 }
 .figs > div { background: var(--paper); padding: 16px 0 18px; }
-/* 這格常放 schema 類型清單（WebPage、BreadcrumbList…），英文值沒有空格可斷，
-   32px 字級一放寬就會畫出格子外——overflow-wrap:normal 預設不允許字中斷行。 */
+/* 32px 字級的大數字，值萬一比預期長會畫出格子外——
+   overflow-wrap:normal 預設不允許字中斷行，保留這行當安全網。 */
 .figs b {
   display: block;
   padding: 0 8px;
@@ -283,3 +312,82 @@ mark.lime-highlight {
   background: linear-gradient(transparent 62%, var(--lime) 62%);
   color: inherit;
 }
+
+/* ── 行銷頁（首頁 hero/內容區 + GEO知識/判斷標準/費用/關於我們）專用樣式 ──
+   對應設計稿 lime-base.css，token 沿用上面已有的 --ink/--lime 等變數（值完全
+   一致，不重複定義）。統一包在 .marketing 底下（套在每個行銷頁的外層 wrapper），
+   避免 table/mark 這類選擇器影響到既有健檢工具頁（AuditTable 等）目前的樣式。
+   按鈕沿用既有 .btn-lime/.btn-line，不引入設計稿的 .btn/.btn.line 命名。
+   .list-row/.todo-row/.figs/.eyebrow/mark.lime-highlight 也直接沿用既有規則，
+   跟 lime-base.css 的 .list>div/.todo li/.figs/.eyebrow,.k/子頁螢光筆逐一對得上。 */
+.marketing .k {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+.marketing .prose { max-width: 34em; color: var(--ink2); }
+.marketing .quote {
+  font-size: 21px;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+  border-left: 3px solid var(--lime);
+  padding-left: 20px;
+  margin: 16px 0 20px;
+  max-width: 30em;
+}
+.marketing .mark { display: flex; align-items: center; gap: 11px; }
+.marketing .mark i { width: 26px; height: 26px; background: var(--lime); border-radius: 7px; display: block; position: relative; }
+.marketing .mark i::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+.marketing .mark b { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+.marketing .mark em {
+  font-style: normal;
+  font-size: 12.5px;
+  color: var(--ink3);
+  border-left: 1px solid var(--line);
+  padding-left: 11px;
+}
+.marketing p.note { font-size: 14px; color: var(--ink3); margin-top: 16px; max-width: 34em; }
+.marketing table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.marketing th {
+  text-align: left;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink3);
+  font-weight: 500;
+  padding: 0 16px 10px 0;
+  border-bottom: 1px solid var(--ink);
+}
+.marketing td { padding: 14px 16px 14px 0; border-top: 1px solid var(--line2); vertical-align: top; }
+.marketing th:last-child,
+.marketing td:last-child:not([colspan]) {
+  padding-right: 0;
+  text-align: right;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 13px;
+  color: var(--ink2);
+}
+.marketing td.item { font-weight: 500; }
+.marketing td .fix { display: block; font-size: 14px; color: var(--ink3); margin-top: 3px; }
+
+/* Masthead 導覽連結／深色頁尾連結：跟上面 .btn-lime 註解同一個原因，
+   顏色／底線要蓋過全域 a{} 規則，不能靠 Tailwind text-ink2/text-paper
+   這類 utility class（那些包在 @layer 裡，贏不過沒包 layer 的 a{}）。 */
+.marketing .nav-link { color: var(--ink2); text-decoration: none; }
+.marketing .nav-link:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--limeDark); }
+.marketing .nav-link.is-active { color: var(--ink); font-weight: 600; text-decoration: none; }
+
+.marketing .footer-link { color: var(--paper); text-decoration-color: var(--lime); }
+.marketing .footer-link:hover { color: var(--card); text-decoration-color: var(--card); }

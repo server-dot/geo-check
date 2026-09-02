@@ -54,6 +54,18 @@ export const ITEM_ORDER: string[] = [
   'eeat',
 ];
 
+// 深度健檢實際會產生的 CheckResult key（跟 geo-audit-aggregate.ts／geo-schema-check.ts／
+// geo-audit-ai.ts 逐一核對過原始碼裡的 key: '...' 字面值，不是從 ITEM_ORDER 推算——
+// ITEM_ORDER 只是顯示排序用，少列了 llmsSeo 這個真的會 push 出來的 key，拿它扣掉
+// AI 引擎層算數量會少算一項）。行銷頁「N 項深度健檢」文案用這份清單的長度，
+// 之後新增/刪除深度健檢項目時要記得一起更新。
+export const DEEP_AUDIT_KEYS = [
+  'analytics', 'sitemap', 'robots', 'indexing', 'localbiz', 'breadcrumb',
+  'internalLinks', 'brokenLinks', 'duplicate', 'tkd', 'headings', 'schema',
+  'page', 'viewport', 'categoryDepth', 'homepage', 'imgAlt', 'imgFormat',
+  'externalLinks', 'llmsSeo', 'eeat',
+] as const;
+
 export type CheckResult = {
   key: string;
   level: string;
