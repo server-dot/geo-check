@@ -1529,10 +1529,19 @@ export default function HomeClient({
       <div className="marketing">
         <Masthead />
 
-        {/* Hero：深色、全幅背景，AI 生成的循環動畫（Kling AI，5s loop）。 */}
+        {/* Hero：深色、全幅背景，AI 生成的循環動畫（Kling AI，5s loop）。
+            影片本身線條偏稀疏，裁緊＋疊一層固定漸層墊底，避免空幀時看起來太空。
+            額度刷新後可以用更強調「滿版無大片留白」的 prompt 重新生成換掉。 */}
         <div className="relative overflow-hidden bg-ink text-paper">
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(900px circle at 68% 28%, rgba(163,230,53,.16), transparent 60%), radial-gradient(700px circle at 20% 85%, rgba(163,230,53,.10), transparent 65%)",
+            }}
+          />
           <video
-            className="absolute inset-0 h-full w-full object-cover opacity-[.42]"
+            className="absolute inset-0 h-full w-full scale-125 object-cover object-[65%_35%] opacity-[.55]"
             poster="/hero-bg-poster.jpg"
             autoPlay
             muted
