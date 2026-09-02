@@ -12,6 +12,8 @@ import { analyzeLlmsTxt } from '@/lib/geo-llms-txt';
 import { createAuditJob, updateAuditJob, type EngineResult } from '@/lib/geo-audit-jobs';
 import { crawlSite } from '@/lib/geo-audit-crawler';
 import { aggregateAuditChecks } from '@/lib/geo-audit-aggregate';
+import { buildSchemaTypeCards } from '@/lib/geo-schema-check';
+import { enrichSchemaCards } from '@/lib/geo-schema-complete';
 
 // GEO 深度健檢：先跑「AI 引擎可達性」這層（robots.txt、內容可視性、Content Signals、
 // llms.txt——秒級，這是我們的差異化核心），再跑多頁爬蟲＋規則＋AI 語意判斷（Schema、E-E-A-T）
@@ -162,7 +164,7 @@ async function runEngineChecks(origin: string): Promise<EngineResult> {
   const toVerify = policyResults.filter((r) => r.status === 'allowed');
   const [probes, brandVisibility] = await Promise.all([
     toVerify.length > 0 ? probeBotAccess(origin, toVerify.map((r) => r.ua)) : Promise.resolve(new Map<string, ProbeResult>()),
-    checkBrandVisibility(visibility?.title ?? '', origin),
+    checkBrandVisibility(visibility?.title ?? '', origin, visibility?.orgName),
   ]);
 
   const results = policyResults.map((r) => {
@@ -241,9 +243,16 @@ export async function POST(req: NextRequest) {
       });
       updateAuditJob(job.id, { status: 'analyzing', message: `已爬 ${crawl.pages.length} 頁，彙總分析中…` });
       const audit = await aggregateAuditChecks(crawl, (msg) => updateAuditJob(job.id, { status: 'analyzing', message: msg }));
+      updateAuditJob(job.id, { status: 'analyzing', message: '整理結構化資料缺漏建議中…' });
+      const rawSchemaCards = buildSchemaTypeCards(crawl.pages.map((p) => ({ url: p.url, jsonLdNodes: p.jsonLdNodes })));
+      const schemaCards = await enrichSchemaCards(
+        rawSchemaCards,
+        crawl.pages.map((p) => ({ url: p.url, mainText: p.mainText })),
+      );
       updateAuditJob(job.id, {
         status: 'completed',
         result: audit,
+        schemaCards,
         message: `完成，爬取 ${crawl.pages.length} 頁、產出 ${audit.length} 項深度檢測`,
       });
     } catch (e) {
