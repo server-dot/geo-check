@@ -31,6 +31,8 @@ export interface ContentVisibility {
   h1: string[];
   leadParagraphs: string[]; // 頁面裡幾段「像完整句子」的內容摘錄，各自成段，給標題/描述多一點佐證
   jsonLdTypes: string[]; // 結構化資料型別，AI 理解頁面的重要線索
+  orgName: string; // JSON-LD Organization/LocalBusiness 的 name——比 <title> 可靠的品牌名來源
+                    // （<title> 常被 SEO 文案佔掉第一段，例如「SEO GEO專業團隊｜...｜真正的品牌名」）
   summary: string;  // 一句話總結點評——給人看的重點結論，放在最前面
   advice: string;   // 底下支撐 summary 的技術細節（字數、重複內容等）
   duplicateBlockChars: number; // 偵測到結構性重複區塊（例如跑馬燈為做無縫循環而複製兩份）並排除掉的字數
@@ -176,6 +178,7 @@ export function analyzeContentVisibility(html: string): ContentVisibility {
 
   // JSON-LD 的 @type：可能是單一物件、陣列，或帶 @graph 的容器，統一攤平後取型別
   const jsonLdTypes = new Set<string>();
+  let orgName = '';
   for (const script of root.querySelectorAll('script[type="application/ld+json"]')) {
     try {
       const data = JSON.parse(script.rawText.trim());
@@ -188,6 +191,13 @@ export function analyzeContentVisibility(html: string): ContentVisibility {
         const t = (node as { '@type'?: unknown })?.['@type'];
         if (typeof t === 'string') jsonLdTypes.add(t);
         else if (Array.isArray(t)) t.forEach((x) => typeof x === 'string' && jsonLdTypes.add(x));
+
+        if (!orgName) {
+          const types = Array.isArray(t) ? t : [t];
+          const isOrg = types.some((x) => typeof x === 'string' && /Organization|LocalBusiness/.test(x));
+          const name = (node as { name?: unknown })?.name;
+          if (isOrg && typeof name === 'string' && name.trim()) orgName = name.trim();
+        }
       }
     } catch {
       // JSON 壞掉就跳過，不影響其他判斷
@@ -271,11 +281,23 @@ export function analyzeContentVisibility(html: string): ContentVisibility {
   // summary：給人看的一句話總結，優先於底下的技術細節（advice）。
   // ok 狀態下再依內容組成（家具占比、有沒有寫 description、有沒有重複區塊）
   // 點出最多兩個值得處理的地方，不是把每個小數字都塞進同一句話。
+  //
+  // 重複渲染區塊是機械偵測到的事實，跟內容量高低（empty/thin/ok）無關，
+  // 只要偵測到就該講——不能因為狀態判定不是 ok 就完全不提，也不能在 ok 狀態
+  // 下被「只取前兩則」的上限擠掉（不然同一個問題時有時無地出現，看起來像亂數）。
+  // 獨立算好這句話，empty/thin 直接接一句，ok 狀態下保證一定被列出。
+  const duplicateBlockNote =
+    duplicateBlockChars > 0
+      ? `偵測到約 ${duplicateBlockChars} 字重複渲染內容（常見於跑馬燈或響應式雙份選單），建議加上 aria-hidden 排除`
+      : '';
+
   let summary: string;
   if (status === 'empty') {
     summary = 'AI 幾乎讀不到你的內容，等於你的網站在 AI 眼中是空的——這是最優先要處理的問題。';
+    if (duplicateBlockNote) summary += `另外，${duplicateBlockNote}。`;
   } else if (status === 'thin') {
     summary = 'AI 讀得到內容，但份量偏薄，建議加寫更多說明文字，AI 才有足夠依據理解並引用你的頁面。';
+    if (duplicateBlockNote) summary += `另外，${duplicateBlockNote}。`;
   } else {
     const furnitureRatio = textLength > 0 ? furnitureChars / textLength : 0;
     const issues: string[] = [];
@@ -287,13 +309,12 @@ export function analyzeContentVisibility(html: string): ContentVisibility {
     if (!description) {
       issues.push('沒有寫 meta description，建議補一段簡短說明，這是 AI 判斷頁面主題的重要依據');
     }
-    if (duplicateBlockChars > 0) {
-      issues.push(`偵測到約 ${duplicateBlockChars} 字重複渲染內容（常見於跑馬燈或響應式雙份選單），建議加上 aria-hidden 排除`);
-    }
+    const capped = issues.slice(0, 2);
+    if (duplicateBlockNote) capped.push(duplicateBlockNote);
     summary =
-      issues.length === 0
+      capped.length === 0
         ? '內容量足夠、標題與描述也清楚，AI 應該能正確理解你的網站在做什麼，沒有發現明顯需要處理的問題。'
-        : `內容量足夠，AI 讀得到理解你網站所需要的文字。可以再優化的地方：${issues.slice(0, 2).join('；')}。`;
+        : `內容量足夠，AI 讀得到理解你網站所需要的文字。可以再優化的地方：${capped.join('；')}。`;
   }
 
   const previewBlocks = truncateBlocks(fullBlocks, 800);
@@ -313,6 +334,7 @@ export function analyzeContentVisibility(html: string): ContentVisibility {
     h1,
     leadParagraphs,
     jsonLdTypes: [...jsonLdTypes],
+    orgName,
     summary,
     advice,
   };

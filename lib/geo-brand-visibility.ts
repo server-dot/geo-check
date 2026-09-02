@@ -110,15 +110,23 @@ export async function runVisibilityQueries(query: string, origin: string): Promi
   return results.filter((r): r is VisibilityAnswer => r !== null);
 }
 
-// 從頁面標題猜一個能拿去問 AI 的品牌名稱：中文站標題常見「品牌｜賣點｜賣點」這種疊法，
-// 取第一段最接近真實品牌名稱；標題本身沒有分隔符就整段用（截斷避免整句拿去問）。
-export function guessBrandName(title: string): string {
-  const first = title.split(/[|｜\-–—:：]/)[0]?.trim() ?? '';
-  return (first || title.trim()).slice(0, 30);
+// 從一段文字猜一個能拿去問 AI 的品牌名稱：中文站標題／機構名常見「品牌｜賣點｜賣點」這種疊法，
+// 取第一段最接近真實品牌名稱；沒有分隔符就整段用（截斷避免整句拿去問）。
+function firstSegment(text: string): string {
+  const first = text.split(/[|｜\-–—:：]/)[0]?.trim() ?? '';
+  return (first || text.trim()).slice(0, 30);
 }
 
-export async function checkBrandVisibility(title: string, origin: string): Promise<BrandVisibilityResult[]> {
-  const brandName = guessBrandName(title);
+// <title> 是 SEO 文案，常把行銷詞疊在品牌名前面（例如「SEO GEO專業團隊｜...｜積木媒體行銷」），
+// 猜出來的「品牌名」其實是句廣告詞。JSON-LD 的 Organization/LocalBusiness.name 是站方明確
+// 標記給機器看的機構名，順序通常才是「品牌在前」，可信度高於 <title>，優先使用。
+export function guessBrandName(title: string, orgName?: string): string {
+  if (orgName?.trim()) return firstSegment(orgName);
+  return firstSegment(title);
+}
+
+export async function checkBrandVisibility(title: string, origin: string, orgName?: string): Promise<BrandVisibilityResult[]> {
+  const brandName = guessBrandName(title, orgName);
   if (!brandName) return [];
 
   const query = `「${brandName}」是做什麼的？請簡短介紹，如果知道的話請說明它的官方網站。`;
