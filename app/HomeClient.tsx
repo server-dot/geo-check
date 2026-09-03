@@ -32,12 +32,12 @@ function useCountUpProgress(durationMs = 1100): number {
 }
 
 const HOME_CHECKS = [
-  { name: "AI 爬蟲的存取權限", why: "GPTBot / ClaudeBot / PerplexityBot 等 8 家實際請求", verdicts: "可存取 / 被擋" },
-  { name: "AI 讀到的內容", why: "關掉 JavaScript 後量可讀字數、title、h1", verdicts: "正常 / 內容單薄" },
-  { name: "內容使用授權（Content Signals）", why: "search / ai-input / ai-train 三項的表態", verdicts: "允許 / 不允許 / 未表態" },
-  { name: "llms.txt", why: "有沒有、格式完不完整、連結解不解得開", verdicts: "沒有 / 內容單薄 / 格式完整" },
-  { name: "AI 認不認得你（實際去問）", why: "送出提問給 Perplexity 與 ChatGPT，原話與引用來源照貼", verdicts: "★ 引用自己" },
-  { name: "多頁 SEO + GEO 深度健檢", why: "結構化資料、索引、網站健康、外部權威等 21 項", verdicts: "正常 / 可優化 / 需處理" },
+  { name: "AI 爬蟲的存取權限", why: "GPTBot / ClaudeBot / PerplexityBot 等 8 家實際請求" },
+  { name: "AI 讀到的內容", why: "關掉 JavaScript 後量可讀字數、title、h1" },
+  { name: "內容使用授權（Content Signals）", why: "search / ai-input / ai-train 三項的表態" },
+  { name: "llms.txt", why: "有沒有、格式完不完整、連結解不解得開" },
+  { name: "AI 認不認得你（實際去問）", why: "送出提問給 Perplexity 與 ChatGPT，原話與引用來源照貼" },
+  { name: "多頁 SEO + GEO 深度健檢", why: "結構化資料、索引、網站健康、外部權威等 21 項" },
 ];
 
 const HOME_STEPS = [
@@ -1609,15 +1609,14 @@ export default function HomeClient({
           <>
             <Section k="01" eyebrow="THE CHECK" title="健檢會看什麼">
               <p className="prose mt-4">
-                六個檢測層，最後一項是多頁深度健檢。每一項都會給出量到的數值，不是打勾。判定字彙與總分算法寫在{" "}
+                六個檢測層，最後一項是多頁深度健檢。判定字彙與總分算法寫在{" "}
                 <a href="/scoring">判斷標準</a>。
               </p>
               <ul className="mt-[30px]">
                 {HOME_CHECKS.map((c) => (
-                  <li key={c.name} className="list-row">
+                  <li key={c.name} className="list-row list-row--2col">
                     <div className="nm">{c.name}</div>
                     <div className="why">{c.why}</div>
-                    <div className="st">{c.verdicts}</div>
                   </li>
                 ))}
               </ul>
@@ -1633,7 +1632,6 @@ export default function HomeClient({
                   </div>
                 ))}
               </dl>
-              <p className="note">最慢的一步是實際送出提問、等 AI 引擎回答，進度會停在那裡一下。</p>
             </Section>
 
             <Section k="03" eyebrow="THE REPORT" title="你會拿到一份總分 0–100 的報告" noBorder>

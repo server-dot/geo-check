@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
 import Section from "@/components/marketing/Section";
 import SubpageHero from "@/components/marketing/SubpageHero";
@@ -7,7 +6,7 @@ import Footer from "@/components/marketing/Footer";
 
 export const metadata: Metadata = {
   title: "關於我們｜AI 搜尋能見度健檢",
-  description: "這個工具是積木媒體行銷做的。",
+  description: "積木媒體行銷｜台北的 SEO 與 AI SEO 團隊",
 };
 
 const CHECKED_COUNT = Number(process.env.CHECKED_COUNT ?? 250);
@@ -23,7 +22,7 @@ const SERVICES = [
 const PRINCIPLES = [
   { name: "只讀取公開可存取的內容", desc: "跟一般搜尋引擎的爬蟲一樣，是唯讀的，不會改動你的網站", tag: "唯讀" },
   { name: "不儲存你的網站內容", desc: "檢測需要的內容只用來產生這一份報告", tag: "不留存" },
-  { name: "不確定的事不寫成通過", desc: "讀不到答案時標成 ⚪ 無法判定，並告訴你怎麼自己確認", tag: "無法判定" },
+  { name: "不會把不確定的事寫成通過", desc: "讀不到答案時標成 ⚪ 無法判定，並告訴你怎麼自己確認", tag: "無法判定" },
 ];
 
 const CONTACTS = [
@@ -42,11 +41,7 @@ export default function AboutPage() {
       <SubpageHero
         k="ABOUT"
         eyebrow="關於我們 · ABOUT"
-        heading={
-          <>
-            這個工具是<mark className="lime-highlight">積木媒體行銷</mark>做的。
-          </>
-        }
+        heading={<mark className="lime-highlight">積木媒體行銷</mark>}
         lede="我們是台北的 SEO 與 AI SEO 團隊，做關鍵字優化、網站架構、內容與外部連結，也處理 AIO / GEO / AEO 的能見度問題。這份健檢是我們在客戶專案裡實際會跑的檢查，整理出來給大家自己用。"
       >
         <div className="mono mt-[22px] flex flex-wrap gap-x-6 gap-y-2 text-xs text-ink3">
@@ -78,7 +73,7 @@ export default function AboutPage() {
         </ul>
       </Section>
 
-      <Section k="03" eyebrow="HOW WE HANDLE YOUR SITE" title="我們怎麼對待你的網站">
+      <Section k="03" eyebrow="HOW WE HANDLE YOUR SITE" title="我們怎麼解析你的網站">
         <ul className="mt-[26px] max-w-[52em]">
           {PRINCIPLES.map((p) => (
             <li key={p.name} className="list-row">
@@ -92,8 +87,9 @@ export default function AboutPage() {
 
       <Section k="04" eyebrow="CONTACT" title="聯絡我們" noBorder>
         <div className="mt-[30px] grid grid-cols-[120px_1fr] items-start gap-x-7">
-          <div className="flex h-[120px] w-[120px] items-center justify-center rounded-[10px] border border-line bg-card text-center text-xs text-ink3">
-            積木 logo
+          <div className="flex h-[120px] w-[120px] items-center justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element -- 固定素材、非使用者上傳圖片，不需要 next/image 的最佳化/尺寸協商 */}
+            <img src="/stack-logo.png" alt="積木媒體行銷" className="h-full w-full object-contain" />
           </div>
           <div>
             <ul>
@@ -116,25 +112,6 @@ export default function AboutPage() {
           </div>
         </div>
       </Section>
-
-      <div className="bg-ink text-paper">
-        <div className="mx-auto max-w-[1120px] px-10 py-[72px]">
-          <h2 className="max-w-[20em] text-[34px] tracking-[-0.035em]">先看一次你的網站在 AI 眼中長什麼樣。</h2>
-          <div className="mt-7 flex gap-3">
-            <Link href="/" className="btn-lime no-underline">
-              開始檢測
-            </Link>
-            <Link href="/pricing" className="btn-line-dark">
-              看費用
-            </Link>
-          </div>
-          <div className="mono mt-9 flex flex-wrap gap-7 text-[11.5px] text-[#8b968d]">
-            <span>積木媒體行銷股份有限公司</span>
-            <span>統編 00206766</span>
-            <span>週一至週五 10:00–19:00</span>
-          </div>
-        </div>
-      </div>
 
       <Footer />
     </div>
