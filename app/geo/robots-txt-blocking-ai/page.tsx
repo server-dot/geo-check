@@ -54,16 +54,21 @@ export default function RobotsTxtArticlePage() {
 
           <div className="max-w-[34em]">
             <p className="text-[15.5px] leading-[1.75] text-ink2">
-              （第一段導言待填。建議直接寫出這個問題造成的後果，例如：Google 抓得到你，AI 抓不到。）
+              Google 抓得到你的網站，不代表 AI 抓得到。robots.txt 通常是網站最早設定、也最少回頭檢查的檔案——
+              常見的情況是規則寫得太寬、或套用了某個資安外掛／CDN 的預設封鎖清單，把 GPTBot、ClaudeBot
+              這類 AI 爬蟲也一起擋在外面，而且完全不影響 Google 排名，很容易被忽略。
             </p>
 
             <h2 className="mt-11 text-[30px]">問題長什麼樣</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
-              （說明健檢在報告上怎麼呈現這一項、判定成什麼。正文待填。）
+              健檢會用 8 家 AI 爬蟲各自真實的 User-Agent 實際發送請求，對照 robots.txt 的規則，
+              只要有任何一家被 Disallow 擋下，這一項就會標成 <span className="t-fail">需處理</span>。
+              下面是一個典型會連 AI 爬蟲一起擋掉的規則：
             </p>
             <div className="excerpt whitespace-pre-wrap">{"User-agent: GPTBot\nDisallow: /"}</div>
             <p className="mt-5 text-[15.5px] leading-[1.75] text-ink2">
-              （解釋這兩行的意思，以及為什麼常常是無意間被加上的。正文待填。）
+              這兩行的意思是「GPTBot 不能存取網站任何路徑」。常見成因是直接複製別人的 robots.txt 範本、
+              或用了一次擋掉所有非瀏覽器 User-Agent 的資安設定——原意是擋垃圾爬蟲，結果把 AI 爬蟲也算了進去。
             </p>
 
             <h2 className="mt-11 text-[30px]">怎麼修</h2>
@@ -76,13 +81,14 @@ export default function RobotsTxtArticlePage() {
               ))}
             </div>
             <p className="mt-5 text-[15.5px] leading-[1.75] text-ink2">
-              （每一步的細節待填。要動到伺服器設定的部分，寫清楚誰該做。）
+              如果 robots.txt 是用 CMS 外掛（例如 Yoast、Rank Math）產生的，改設定介面就好；如果是放在網站根目錄的純文字檔，
+              要請工程師直接改內容並重新部署。改完記得留著原本允許 Google 等既有搜尋引擎的規則，不要整份清空重寫。
             </p>
 
             <h2 className="mt-11 text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               回到 <Link href="/">健檢</Link> 重跑一次，這一項應該從 <span className="t-fail">需處理</span> 變成{" "}
-              <span className="t-ok">正常</span>，爬蟲清單會收合成一行「5 個 AI 爬蟲的結果一致：可存取」。
+              <span className="t-ok">正常</span>，爬蟲清單會收合成一行「8 個 AI 爬蟲的結果一致：可存取」。
               如果仍然標成 ⚪ 無法判定，代表 robots.txt 我們讀不到，通常是 WAF 的問題——見{" "}
               <Link href="/scoring">判斷標準</Link>。
             </p>

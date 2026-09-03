@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
 import Section from "@/components/marketing/Section";
 import SubpageHero from "@/components/marketing/SubpageHero";
@@ -111,20 +110,6 @@ export default function PricingPage() {
       <Section k="FAQ" eyebrow="FAQ" title="關於費用的常見問題" noBorder>
         <FaqAccordion items={FAQS} />
       </Section>
-
-      <div className="bg-ink text-paper">
-        <div className="mx-auto max-w-[1120px] px-10 py-[72px]">
-          <h2 className="max-w-[20em] text-[34px] tracking-[-0.035em]">先跑一次健檢，再決定要不要談。</h2>
-          <div className="mt-7 flex gap-3">
-            <Link href="/" className="btn-lime no-underline">
-              開始檢測
-            </Link>
-            <Link href="/scoring" className="btn-line-dark">
-              看判斷標準
-            </Link>
-          </div>
-        </div>
-      </div>
 
       <Footer />
     </div>
