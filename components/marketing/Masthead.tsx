@@ -15,7 +15,8 @@ export default function Masthead({ active }: { active?: "geo" | "scoring" | "pri
     <div className="sticky top-0 z-20 border-b border-line bg-[rgba(243,242,234,.95)]">
       <div className="mx-auto flex h-[68px] max-w-[1120px] items-center gap-6 px-10">
         <Link href="/" className="mark">
-          <i />
+          {/* eslint-disable-next-line @next/next/no-img-element -- 固定素材、非使用者上傳圖片，不需要 next/image 的最佳化/尺寸協商 */}
+          <img src="/geocheck-logo.png" alt="GEOCHECK" className="h-[28px] w-[41px] shrink-0 object-contain" />
           <b>GEOCHECK</b>
           <em>AI 搜尋能見度健檢</em>
         </Link>

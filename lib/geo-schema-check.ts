@@ -234,7 +234,7 @@ export function buildLocalBizCheck(pages: SchemaPage[]): CheckResult {
   return {
     ...base,
     status: 'warn',
-    advice: `全站已部署 ${typesText} 標籤，但 ${deployedPages - completePages}/${deployedPages} 頁欄位不完整，例如：${details.slice(0, 3).map((d) => d.note).join('；')}，建議補齊`,
+    advice: `全站已部署 ${typesText} 標籤，但 ${deployedPages - completePages}/${deployedPages} 頁欄位不完整，例如：${details.slice(0, 3).map((d) => d.note).join('；')}。建議把缺漏的欄位補齊，欄位越完整，AI 越容易正確解讀你的商家／商品資訊。`,
     evidence: `${completePages}/${deployedPages} 頁欄位完整`,
     details,
   };
@@ -285,11 +285,11 @@ export function buildSchemaCompletenessCheck(pages: SchemaPage[]): CheckResult {
   }
 
   if (allTypes.size === 0) {
-    return { ...base, status: 'fail', advice: '全站原始碼找不到任何 JSON-LD 結構化資料，建議依頁面性質部署 LocalBusiness / Product / Article / BreadcrumbList 等 Schema', evidence: '（無）' };
+    return { ...base, status: 'fail', advice: '全站原始碼找不到任何 JSON-LD 結構化資料。建議依頁面性質部署對應的 Schema（例如商家頁用 LocalBusiness、商品頁用 Product、文章頁用 Article，並搭配 BreadcrumbList），讓 AI 更容易正確解讀頁面內容。', evidence: '（無）' };
   }
   const typesText = [...allTypes].join('、');
   if (importantNodeCount === 0) {
-    return { ...base, status: 'warn', advice: `全站偵測到 ${typesText}，但未偵測到 LocalBusiness / Product / Article 等關鍵型別，建議依頁面性質補上對應 Schema`, evidence: typesText };
+    return { ...base, status: 'warn', advice: `全站偵測到 ${typesText}，但未偵測到 LocalBusiness / Product / Article 等關鍵型別。建議依頁面性質補上對應的 Schema（商家頁用 LocalBusiness、商品頁用 Product、文章頁用 Article），這些是 AI 判讀業務內容最直接依賴的型別。`, evidence: typesText };
   }
   if (incompleteCount === 0) {
     return { ...base, status: 'ok', advice: `全站偵測到 ${typesText}，關鍵型別（LocalBusiness / Product / Article）欄位皆完整`, evidence: typesText };
@@ -297,7 +297,7 @@ export function buildSchemaCompletenessCheck(pages: SchemaPage[]): CheckResult {
   return {
     ...base,
     status: 'warn',
-    advice: `全站偵測到 ${typesText}，其中 ${incompleteCount}/${importantNodeCount} 個關鍵節點欄位不完整，例如：${details.slice(0, 3).map((d) => d.note).join('；')}，建議補齊`,
+    advice: `全站偵測到 ${typesText}，其中 ${incompleteCount}/${importantNodeCount} 個關鍵節點欄位不完整，例如：${details.slice(0, 3).map((d) => d.note).join('；')}。建議把缺漏的欄位補齊，欄位越完整，AI 越容易正確解讀這些節點代表的商家／商品／文章資訊。`,
     evidence: typesText,
     details,
   };

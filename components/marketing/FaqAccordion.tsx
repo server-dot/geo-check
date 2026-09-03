@@ -13,7 +13,7 @@ export default function FaqAccordion({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="mt-[26px] max-w-[46em]">
+    <div className="mt-[26px] max-w-[52rem]">
       {items.map((item, i) => (
         <div key={item.q} className="border-t border-line">
           <button

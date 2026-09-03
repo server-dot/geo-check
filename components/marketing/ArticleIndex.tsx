@@ -3,50 +3,57 @@
 import Link from "next/link";
 import { useState } from "react";
 
-type Post = { cat: string; title: string; excerpt: string; href: string | null };
+type Post = { cat: string; title: string; excerpt: string; href: string | null; date: string };
 
 const POSTS: Post[] = [
   {
     cat: "AI 可達性",
-    title: "robots.txt 擋掉 GPTBot 之後，你在 AI 答案裡就不存在了",
-    excerpt: "最常見的需處理項目，也是最快能修好的一項。哪幾行要改、改完怎麼複驗。",
+    title: "robots.txt 要怎麼寫，AI 爬蟲才進得來？",
+    excerpt: "robots.txt 擋掉 GPTBot 之後，你在 AI 答案裡就不存在了——這是最常見的需處理項目，也是最快能修好的一項。哪幾行要改、改完怎麼複驗。",
     href: "/geo/robots-txt-blocking-ai",
+    date: "2026-05-14",
   },
   {
     cat: "內容品質",
-    title: "AI 爬蟲讀到的是空殼：JavaScript 渲染怎麼修",
-    excerpt: "關掉 JavaScript 之後只剩 412 個字，代表 AI 讀不到你的產品說明。SSR 與預先渲染怎麼選。",
-    href: null,
+    title: "網站用 JavaScript 渲染，AI 讀得到內容嗎？",
+    excerpt: "AI 爬蟲讀到的是空殼，你寫的產品介紹它一個字都看不到。主流 AI 爬蟲不執行 JavaScript，純前端渲染的網站在 AI 眼中可能只是空的 <div>。判定門檻、怎麼修。",
+    href: "/geo/js-rendering-empty-shell",
+    date: "2026-06-02",
   },
   {
     cat: "AI 可達性",
-    title: "Content Signals 是什麼，要不要表態",
-    excerpt: "search / ai-input / ai-train 三項的差別，以及「未表態」對引用機率的影響。",
-    href: null,
+    title: "要讓 AI 引用你的內容，該怎麼表態？",
+    excerpt: "沒說清楚能不能被 AI 引用，AI 乾脆不引用你的內容。search / ai-input / ai-train 三項的差別，以及「未表態」對引用機率的影響。",
+    href: "/geo/content-signals-declare",
+    date: "2026-06-19",
   },
   {
     cat: "AI 可達性",
-    title: "llms.txt 要不要做？做了要寫什麼",
-    excerpt: "格式、放哪裡、要列哪些連結，以及健檢怎麼判定「內容單薄」。",
-    href: null,
+    title: "llms.txt 要怎麼寫，AI 才看得懂你的網站？",
+    excerpt: "沒有給 AI 看的網站導覽，AI 只能自己亂猜你在做什麼。格式、放哪裡、要列哪些連結，以及健檢怎麼判定「內容單薄」。",
+    href: "/geo/llms-txt-format",
+    date: "2026-07-08",
   },
   {
     cat: "結構化資料",
-    title: "JSON-LD 補哪幾個 Schema 最有感",
-    excerpt: "Organization、Product、FAQPage 的優先順序，以及常見的標記錯誤。",
-    href: null,
+    title: "結構化資料要補哪些欄位，AI 才認得出你是誰？",
+    excerpt: "結構化資料缺這幾個欄位，AI 認不出你是誰。Organization、LocalBusiness、Product、Article 四種型別各自要補的關鍵欄位，以及常見的標記錯誤。",
+    href: "/geo/schema-priority",
+    date: "2026-07-25",
   },
   {
     cat: "品牌與權威",
-    title: "AI 引用了競爭對手，不是你：引用來源怎麼搶回來",
-    excerpt: "從實際去問 AI 的結果反推缺的是內容、權威還是一致性。",
-    href: null,
+    title: "AI 為什麼引用競爭對手，不是你？",
+    excerpt: "AI 引用了競爭對手，不是你：引用來源怎麼搶回來？從實際去問 AI 的結果反推缺的是內容、權威還是一致性。",
+    href: "/geo/ai-cites-competitor",
+    date: "2026-08-11",
   },
   {
     cat: "技術與索引",
-    title: "「無法判定」不是通過：WAF 把 AI 爬蟲一起擋掉的情況",
-    excerpt: "為什麼健檢會標成 ⚪ 無法判定，以及你要怎麼自己確認。",
-    href: null,
+    title: "健檢顯示「無法判定」，是防火牆擋住了嗎？",
+    excerpt: "「無法判定」不是通過：防火牆可能把 AI 爬蟲一起擋掉了。為什麼健檢會標成 ⚪ 無法判定，以及你要怎麼自己確認。",
+    href: "/geo/waf-false-unknown",
+    date: "2026-08-29",
   },
 ];
 
@@ -61,9 +68,9 @@ const NOTES: Record<string, string> = {
   品牌與權威: "AI 認不認得你、引用的是誰的網域。",
 };
 
-// GEO 知識分享：依健檢項目分類篩選文章。多數標題目前只是規劃中的主題（href 是 null），
-// 只有 robots.txt 那篇真的寫了——所以不包成連結，避免點進死連結；等文章生出來，
-// 在這裡把對應的 href 補上就會自動變成可點的列。
+// GEO 知識分享：依健檢項目分類篩選文章。七篇都已經寫完、href 都指到真的文章頁；
+// href 允許 null 是留給以後新增規劃中主題用的——還沒寫完的文章先不包成連結，
+// 避免點進死連結，等文章生出來，在這裡把對應的 href 補上就會自動變成可點的列。
 export default function ArticleIndex() {
   const [cat, setCat] = useState<(typeof CATEGORIES)[number]>("全部");
   const visible = POSTS.filter((p) => cat === "全部" || p.cat === cat);
@@ -96,16 +103,16 @@ export default function ArticleIndex() {
             <>
               <div>
                 <h4 className="text-[19px]">{p.title}</h4>
-                <p className="mt-1.5 max-w-[40em] text-[14.5px] text-ink2">{p.excerpt}</p>
+                <p className="mt-1.5 text-[14.5px] text-ink2">{p.excerpt}</p>
               </div>
-              <div className="mono text-right text-[11.5px] text-ink3">{p.cat} · （日期待填）</div>
+              <div className="mono text-right text-[11.5px] text-ink3">{p.cat} · {p.date}</div>
             </>
           );
           return p.href ? (
             <Link
               key={p.title}
               href={p.href}
-              className="grid grid-cols-[1fr_200px] items-baseline gap-x-8 border-t border-line py-[22px] no-underline"
+              className="article-row grid grid-cols-[1fr_200px] items-baseline gap-x-8 border-t border-line py-[22px]"
             >
               {row}
             </Link>
@@ -116,9 +123,7 @@ export default function ArticleIndex() {
           );
         })}
       </div>
-      <p className="note">
-        文章標題與摘要是建議主題，實際內容待填。不知道從哪一篇開始，先跑一次健檢，報告會告訴你哪幾項需處理。
-      </p>
+      <p className="note">不知道從哪一篇開始，先跑一次健檢，報告會告訴你哪幾項需處理。</p>
     </div>
   );
 }

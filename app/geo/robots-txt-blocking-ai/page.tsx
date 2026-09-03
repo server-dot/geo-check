@@ -4,7 +4,7 @@ import Masthead from "@/components/marketing/Masthead";
 import Footer from "@/components/marketing/Footer";
 
 export const metadata: Metadata = {
-  title: "robots.txt 擋掉 GPTBot 之後，你在 AI 答案裡就不存在了｜AI 搜尋能見度健檢",
+  title: "robots.txt 要怎麼寫，AI 爬蟲才進得來？｜AI 搜尋能見度健檢",
   description: "健檢裡最常見的需處理項目，也是最快能修好的一項：規則怎麼影響各家 AI 爬蟲、哪幾行要改、改完怎麼複驗。",
 };
 
@@ -15,9 +15,9 @@ const STEPS = [
 ];
 
 const RELATED = [
-  "AI 爬蟲讀到的是空殼：JavaScript 渲染怎麼修",
-  "Content Signals 是什麼，要不要表態",
-  "「無法判定」不是通過：WAF 把 AI 爬蟲一起擋掉的情況",
+  { title: "網站用 JavaScript 渲染，AI 讀得到內容嗎？", href: "/geo/js-rendering-empty-shell" },
+  { title: "要讓 AI 引用你的內容，該怎麼表態？", href: "/geo/content-signals-declare" },
+  { title: "健檢顯示「無法判定」，是防火牆擋住了嗎？", href: "/geo/waf-false-unknown" },
 ];
 
 export default function RobotsTxtArticlePage() {
@@ -33,14 +33,14 @@ export default function RobotsTxtArticlePage() {
               <Link href="/geo">GEO 知識</Link> / AI 可達性
             </div>
             <h1 className="mt-4 max-w-[22em] text-[44px] leading-[1.18] tracking-[-0.035em]">
-              robots.txt 擋掉 GPTBot 之後，你在 AI 答案裡就不存在了
+              robots.txt 要怎麼寫，AI 爬蟲才進得來？
             </h1>
             <p className="mt-[18px] max-w-[34em] text-[16.5px] text-ink2">
               這是健檢裡最常見的需處理項目，也是最快能修好的一項。以下說明規則怎麼影響各家 AI
               爬蟲、哪幾行要改，以及改完怎麼複驗。
             </p>
             <div className="mono mt-5 flex flex-wrap gap-5 text-[11.5px] text-ink3">
-              <span>（日期待填）</span>
+              <span>2026-05-14</span>
               <span>（作者待填）</span>
               <span>（閱讀時間待填）</span>
             </div>
@@ -61,7 +61,7 @@ export default function RobotsTxtArticlePage() {
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               （說明健檢在報告上怎麼呈現這一項、判定成什麼。正文待填。）
             </p>
-            <div className="excerpt mt-5 whitespace-pre-wrap">{"User-agent: GPTBot\nDisallow: /"}</div>
+            <div className="excerpt whitespace-pre-wrap">{"User-agent: GPTBot\nDisallow: /"}</div>
             <p className="mt-5 text-[15.5px] leading-[1.75] text-ink2">
               （解釋這兩行的意思，以及為什麼常常是無意間被加上的。正文待填。）
             </p>
@@ -104,10 +104,10 @@ export default function RobotsTxtArticlePage() {
             </div>
             <div className="k mt-8">相關文章</div>
             <div className="mt-3.5 grid gap-3 text-sm">
-              {RELATED.map((title) => (
-                <span key={title} className="text-ink3">
-                  {title}
-                </span>
+              {RELATED.map((r) => (
+                <Link key={r.href} href={r.href} className="text-ink3">
+                  {r.title}
+                </Link>
               ))}
             </div>
           </div>

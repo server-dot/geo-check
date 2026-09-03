@@ -92,7 +92,7 @@ export async function runAiChecks(input: AiAuditInput): Promise<CheckResult[]> {
   const EEAT = { key: 'eeat', level: LEVEL.EFFICIENCY, category: CATEGORY.EXTERNAL, item: '符合 E-E-A-T 原則' };
 
   const fallback = (reason: string): CheckResult[] => [
-    { ...EEAT, status: 'warn', advice: `未經 AI 判斷（${reason}）` },
+    { ...EEAT, status: 'warn', advice: `未經 AI 判斷（${reason}）。建議稍後重新檢測，或請站方確認 OpenRouter API 額度／金鑰是否正常。` },
   ];
 
   if (!apiKey) return fallback('缺少 OPENROUTER_API_KEY');

@@ -54,7 +54,7 @@ const VERDICTS = [
   { label: "🟢 正常", rule: "量到的值符合標準，不需要動", example: "正常" },
   { label: "🟡 可優化", rule: "能用，但體質不夠好，AI 引用你的機率會被拉低", example: "可優化" },
   { label: "🔴 需處理", rule: "會直接讓 AI 讀不到或不引用你", example: "需處理" },
-  { label: "⚪ 無法判定", rule: "我們讀不到答案，不會當成通過，會告訴你怎麼自己確認", example: "無法判定" },
+  { label: "⚪ 無法判定", rule: "我們讀不到答案，會告訴你怎麼自己確認", example: "無法判定" },
 ];
 
 const CATEGORIES = [
@@ -72,7 +72,7 @@ const CATEGORIES = [
 const FAQS = [
   {
     q: "「無法判定」是什麼意思？",
-    a: "有些情況我們讀不到答案，例如站方的 WAF 把我們的請求一起擋掉。這時候會標成 ⚪ 無法判定，並告訴你怎麼自己確認，不會把不確定的事寫成通過。",
+    a: "有些情況我們讀不到答案，例如站方的 WAF 把我們的請求一起擋掉。這時候會標成 ⚪ 無法判定，並告訴你怎麼自己確認。",
   },
   {
     q: "這跟一般 SEO 檢測有什麼不同？",
@@ -106,10 +106,10 @@ export default function ScoringPage() {
         eyebrow="判斷標準 · HOW WE JUDGE"
         heading={
           <>
-            每一項都是<mark className="lime-highlight">實際量到的值，不是打勾。</mark>
+            每一項都是<mark className="lime-highlight">實測結果。</mark>
           </>
         }
-        lede="健檢分成六個檢測層與一份多頁深度健檢。判定只有三種：正常、可優化、需處理。我們讀不到答案的時候會標成 ⚪ 無法判定，不會把不確定的事寫成通過。"
+        lede="用 GPTBot 等身分實際發送請求、把問題丟給 Perplexity 和 ChatGPT 問一次，再跑一次多頁深度健檢，共六個檢測層。判定只有三種：正常、可優化、需處理；讀不到答案時標成 ⚪ 無法判定，並告訴你怎麼自己確認。"
       />
 
       <Section k="01" eyebrow="SIX LAYERS" title="六個檢測層">
@@ -138,7 +138,7 @@ export default function ScoringPage() {
       </Section>
 
       <Section k="02" eyebrow="THREE VERDICTS" title="三種判定，加一種不判定">
-        <ul className="mt-[26px] max-w-[52em]">
+        <ul className="mt-[26px] list">
           {VERDICTS.map((v) => (
             <li key={v.label} className="list-row">
               <div className="nm">{v.label}</div>
@@ -147,7 +147,7 @@ export default function ScoringPage() {
             </li>
           ))}
         </ul>
-        <div className="excerpt max-w-[44em] whitespace-pre-wrap">
+        <div className="excerpt whitespace-pre-wrap">
           {"⚪ 無法判定：robots.txt 回應 403\n這不代表你的網站對 AI 開放——很可能有 robots.txt 但我們讀不到。\n請直接在瀏覽器打開 https://你的網域/robots.txt 確認。"}
         </div>
         <p className="note">爬蟲一致時清單會收成一行；不一致才逐項展開。政策允許但實測被擋會獨立標示，不會併進「可存取」。</p>
@@ -155,10 +155,10 @@ export default function ScoringPage() {
 
       <Section k="03" eyebrow="THE SCORE" title="總分怎麼算">
         <p className="prose mt-4">從 100 分開始扣。只有深度健檢的項目會扣分，AI 引擎層（爬蟲存取、內容可讀、Content Signals、llms.txt）全部通過時不扣分。</p>
-        <div className="excerpt max-w-[40em] whitespace-pre-wrap">
+        <div className="excerpt whitespace-pre-wrap">
           {"起始 100 分\n每個需處理（fail）的深度健檢項目   −4 分\n每個可優化（warn）的深度健檢項目   −0.5 分\nAI 引擎層全部通過時不扣分\n四捨五入到整數"}
         </div>
-        <dl className="figs mt-[26px] grid-cols-3">
+        <dl className="figs mt-[26px] max-w-[52em] grid-cols-3">
           <div>
             <b>100</b>
             <span>起始分數</span>
@@ -177,7 +177,7 @@ export default function ScoringPage() {
 
       <Section k="04" eyebrow="FIVE CATEGORIES" title="深度健檢的五個分類">
         <p className="prose mt-4">21 項深度健檢歸進五個分類（AI 可達性另外算，不計入這 21 項），總覽圖與雷達圖用的是同一套分類。通過率算法：（正常 × 1 ＋ 可優化 × 0.5）÷ 項目數，四捨五入。</p>
-        <ul className="mt-[26px] max-w-[52em]">
+        <ul className="mt-[26px] list">
           {CATEGORIES.map((c) => (
             <li key={c.name} className="list-row">
               <div className="nm">{c.name}</div>

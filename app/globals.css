@@ -18,6 +18,9 @@
   --warn: #8a6410;
   --fail: #9e3529;
   --gray: #8a938a;
+  --code: #141d17;
+  --codeInk: #dfe6da;
+  --codeDim: #7e8c81;
 }
 
 @theme inline {
@@ -206,16 +209,34 @@ code {
 .list-row .why { font-family: var(--font-plex-mono), monospace; font-size: 12.5px; color: var(--ink3); }
 .list-row .st { text-align: right; font-family: var(--font-plex-mono), monospace; font-size: 12px; }
 
+/* 深色終端機風格的程式碼區塊——之前這裡套的是淺色卡片樣式，跟設計稿的
+   .excerpt（深色底 + 左側 gutter 色條，像編輯器行號欄）對不上，看起來
+   像沒設計過的空白框。照設計稿補回來，含 <s>/<em>/<b> 的語法標色。 */
 .excerpt {
   font-family: var(--font-plex-mono), monospace;
   font-size: 13px;
-  color: var(--ink2);
-  background: var(--card);
-  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--codeInk);
+  background: var(--code);
   border-radius: 8px;
-  padding: 16px 18px;
-  line-height: 1.75;
+  padding: 15px 18px 16px 52px;
+  line-height: 1.8;
+  margin: 20px 0;
+  max-width: 52rem;
+  position: relative;
+  overflow: hidden;
+  tab-size: 2;
 }
+.excerpt::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 36px;
+  background: rgba(255, 255, 255, 0.05);
+  border-right: 1px solid rgba(255, 255, 255, 0.09);
+}
+.excerpt s { color: #e79b90; text-decoration: none; }
+.excerpt em { font-style: normal; color: var(--codeDim); }
+.excerpt b { font-weight: 500; color: var(--lime); }
 
 .todo-row {
   list-style: none;
@@ -340,17 +361,6 @@ mark.lime-highlight {
   max-width: 30em;
 }
 .marketing .mark { display: flex; align-items: center; gap: 11px; }
-.marketing .mark i { width: 26px; height: 26px; background: var(--lime); border-radius: 7px; display: block; position: relative; }
-.marketing .mark i::after {
-  content: "";
-  position: absolute;
-  left: 6px;
-  bottom: 6px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--ink);
-}
 .marketing .mark b { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
 .marketing .mark em {
   font-style: normal;
@@ -360,7 +370,14 @@ mark.lime-highlight {
   padding-left: 11px;
 }
 .marketing p.note { font-size: 14px; color: var(--ink3); margin-top: 16px; max-width: 34em; }
-.marketing table { width: 100%; border-collapse: collapse; font-size: 15px; }
+/* 內容欄是 960px，但 table/.list/.excerpt/FAQ 全部塞滿 960px 讀起來太寬，
+   統一收窄到同一個寬度，右緣才會對齊——不要在個別頁面上一個個補
+   max-w-[52em]，改一個地方以後新頁面就不會又長出不同寬度的階梯。
+   用 rem 不用 em：table 自己是 15px、.excerpt 是 13px，同樣寫 52em
+   換算出來的 px 會不一樣（52 × 各自的 font-size），寬度照樣對不齊；
+   rem 永遠以根字級（16px）換算，跟這裡套用的元素自己的字級無關。 */
+.marketing table { width: 100%; max-width: 52rem; border-collapse: collapse; font-size: 15px; }
+.marketing .list { max-width: 52rem; }
 .marketing th {
   text-align: left;
   font-family: var(--font-plex-mono), monospace;
@@ -393,3 +410,9 @@ mark.lime-highlight {
 
 .marketing .footer-link { color: var(--paper); text-decoration-color: var(--lime); }
 .marketing .footer-link:hover { color: var(--card); text-decoration-color: var(--card); }
+
+/* GEO 知識分享的整列文章連結：Tailwind 的 no-underline 蓋不過全域 a{} 規則
+   （同一個坑，見上面 btn-lime 那則說明），標題+摘要+分類每一行都各自畫出一條
+   螢光底線，一整排看起來很吵。這裡蓋掉底線，只在整列 hover 時標題變色當作提示。 */
+.marketing .article-row { text-decoration: none; color: inherit; }
+.marketing .article-row:hover h4 { color: var(--limeDark); }

@@ -1429,7 +1429,7 @@ export default function HomeClient({
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [showRawContent, setShowRawContent] = useState(false);
   const [customKeywords, setCustomKeywords] = useState<string[]>([]);
-  const [removedSuggestions, setRemovedSuggestions] = useState<string[]>([]);
+  const [addedSuggestions, setAddedSuggestions] = useState<string[]>([]);
   const [keywordInput, setKeywordInput] = useState("");
   const [keywordResults, setKeywordResults] = useState<Record<string, KeywordVisibilityResult[]>>({});
   const [keywordLoading, setKeywordLoading] = useState(false);
@@ -1482,15 +1482,21 @@ export default function HomeClient({
   const engine = status?.engine;
   const unknownCount = engine?.results.filter((r) => r.status === "unknown").length ?? 0;
 
+  // 自動抓的候選字只是建議，不會預設進查詢清單——使用者要自己點加入，
+  // 不是預設全加、要自己動手刪掉不要的（之前是反過來，容易誤查一堆沒篩過的字）。
   const suggestedKeywords = engine?.visibility
     ? guessKeywordCandidates(engine.visibility.title, engine.visibility.description, engine.visibility.h1).filter(
-        (k) => !removedSuggestions.includes(k)
+        (k) => !addedSuggestions.includes(k)
       )
     : [];
-  const activeKeywords = [...suggestedKeywords, ...customKeywords];
+  const activeKeywords = [...addedSuggestions, ...customKeywords];
+
+  function addSuggestedKeyword(k: string) {
+    setAddedSuggestions((prev) => [...prev, k]);
+  }
 
   function removeKeyword(k: string) {
-    if (suggestedKeywords.includes(k)) setRemovedSuggestions((prev) => [...prev, k]);
+    if (addedSuggestions.includes(k)) setAddedSuggestions((prev) => prev.filter((x) => x !== k));
     else setCustomKeywords((prev) => prev.filter((x) => x !== k));
   }
 
@@ -1638,7 +1644,7 @@ export default function HomeClient({
               <p className="prose mt-4">
                 每一項標成 <span className="t-ok">正常</span>、<span className="t-warn">可優化</span> 或{" "}
                 <span className="t-fail">需處理</span>，附上實際量到的數值與該怎麼改。我們讀不到的東西會標成 ⚪
-                無法判定，不會當成通過。
+                無法判定。
               </p>
               {/* 兩張報告截圖橫向並排（總覽／深度健檢表格），各自維持原生比例，不裁切、
                   不硬套單一寬高框。原本放三張，中間那張（品牌能見度）拿掉了——小積木反饋
@@ -1812,11 +1818,30 @@ export default function HomeClient({
             )}
 
             <div className="mt-6">
-              <h2 className="eyebrow mb-1">關鍵字 AI 能見度（你想搶的主題，AI 推薦名單裡有你嗎？）</h2>
-              <p className="mb-3 max-w-[34em] text-xs text-ink3">
-                上面看的是「AI 知不知道你」；這裡看的是「有人拿某個主題去問 AI，AI 會不會推薦到你」——這才是大部分人真正在意的問題。以下是從標題／描述自動抓的候選字，可以刪掉不要的，或自己加。
+              <h2 className="text-[19px] font-bold text-ink">關鍵字 AI 能見度</h2>
+              <p className="mt-1 text-sm font-medium text-ink2">你想搶的主題，AI 推薦名單裡有你嗎？</p>
+              <p className="mb-3 mt-1.5 max-w-[34em] text-xs text-ink3">
+                上面看的是「AI 知不知道你」；這裡看的是「有人拿某個主題去問 AI，AI 會不會推薦到你」——這才是大部分人真正在意的問題。以下是從標題／描述自動抓的候選字，只是建議，不會自動加入查詢，要自己點才會加進去。
               </p>
               <div className="rounded-[10px] border border-line bg-card p-6">
+                {suggestedKeywords.length > 0 && (
+                  <div className="mb-3">
+                    <p className="mb-1.5 text-xs text-ink3">建議關鍵字（點一下加入查詢）</p>
+                    <div className="flex flex-wrap gap-2">
+                      {suggestedKeywords.map((k) => (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => addSuggestedKeyword(k)}
+                          className="inline-flex items-center gap-1 rounded-full border border-dashed border-line px-3 py-1 text-sm text-ink3 hover:border-lime-dark hover:text-ink"
+                        >
+                          + {k}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <p className="mb-1.5 text-xs text-ink3">要查詢的關鍵字</p>
                 <div className="flex flex-wrap gap-2">
                   {activeKeywords.map((k) => (
                     <span
@@ -1835,7 +1860,9 @@ export default function HomeClient({
                     </span>
                   ))}
                   {activeKeywords.length === 0 && (
-                    <span className="text-sm text-ink3">（沒有抓到候選關鍵字，自己加一個試試）</span>
+                    <span className="text-sm text-ink3">
+                      {suggestedKeywords.length > 0 ? "（還沒加入任何關鍵字，點上面的建議或自己輸入）" : "（沒有抓到候選關鍵字，自己加一個試試）"}
+                    </span>
                   )}
                 </div>
                 <div className="mt-3 flex gap-2">

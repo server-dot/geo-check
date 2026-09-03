@@ -12,25 +12,25 @@ export const metadata: Metadata = {
 const CHECKED_COUNT = Number(process.env.CHECKED_COUNT ?? 250);
 
 const SERVICES = [
-  { name: "SEO 關鍵字優化", desc: "關鍵字研究、站內優化、內容規劃", link: "stack.com.tw" },
-  { name: "AI SEO / GEO", desc: "AI 引擎的可讀性、結構化資料與引用來源", link: "aiseo服務" },
-  { name: "網頁設計製作", desc: "符合 SEO 架構的網站設計與製作", link: "web-design" },
-  { name: "反向連結", desc: "外部權威與連結品質", link: "反向連結購買" },
-  { name: "媒體採購", desc: "廣告投放與媒體版位", link: "media_buying" },
+  { name: "SEO 關鍵字優化", desc: "關鍵字研究、站內優化、內容規劃" },
+  { name: "AI SEO / GEO", desc: "AI 引擎的可讀性、結構化資料與引用來源" },
+  { name: "網頁設計製作", desc: "符合 SEO 架構的網站設計與製作" },
+  { name: "反向連結", desc: "外部權威與連結品質" },
+  { name: "媒體採購", desc: "廣告投放與媒體版位" },
 ];
 
 const PRINCIPLES = [
-  { name: "只讀取公開可存取的內容", desc: "跟一般搜尋引擎的爬蟲一樣，是唯讀的，不會改動你的網站", tag: "唯讀" },
-  { name: "不儲存你的網站內容", desc: "檢測需要的內容只用來產生這一份報告", tag: "不留存" },
-  { name: "不會把不確定的事寫成通過", desc: "讀不到答案時標成 ⚪ 無法判定，並告訴你怎麼自己確認", tag: "無法判定" },
+  { name: "只讀取公開可存取的內容", desc: "跟一般搜尋引擎的爬蟲一樣，是唯讀的，不會改動你的網站" },
+  { name: "不儲存你的網站內容", desc: "檢測需要的內容只用來產生這一份報告" },
+  { name: "讀不到就標無法判定", desc: "讀不到答案時標成 ⚪ 無法判定，並告訴你怎麼自己確認" },
 ];
 
 const CONTACTS = [
-  { name: "電話", value: "02-27457601", note: "週一至週五" },
-  { name: "Line", value: "@683sivea", note: "即時" },
-  { name: "地址", value: "台北市信義區東興路 49 號 11 樓", note: "台北" },
-  { name: "營業時間", value: "週一至週五 10:00–19:00", note: "—" },
-  { name: "網站", value: "stack.com.tw", note: "積木媒體行銷" },
+  { name: "電話", value: "02-27457601" },
+  { name: "Line", value: "@683sivea" },
+  { name: "地址", value: "台北市信義區東興路 49 號 11 樓" },
+  { name: "營業時間", value: "週一至週五 10:00–19:00" },
+  { name: "網站", value: "stack.com.tw" },
 ];
 
 export default function AboutPage() {
@@ -62,24 +62,22 @@ export default function AboutPage() {
       </Section>
 
       <Section k="02" eyebrow="WHAT WE DO" title="我們平常在做的事">
-        <ul className="mt-[26px] max-w-[52em]">
+        <ul className="mt-[26px] list">
           {SERVICES.map((s) => (
-            <li key={s.name} className="list-row">
+            <li key={s.name} className="list-row list-row--2col">
               <div className="nm">{s.name}</div>
               <div className="why">{s.desc}</div>
-              <div className="st">{s.link}</div>
             </li>
           ))}
         </ul>
       </Section>
 
       <Section k="03" eyebrow="HOW WE HANDLE YOUR SITE" title="我們怎麼解析你的網站">
-        <ul className="mt-[26px] max-w-[52em]">
+        <ul className="mt-[26px] list">
           {PRINCIPLES.map((p) => (
-            <li key={p.name} className="list-row">
+            <li key={p.name} className="list-row list-row--2col">
               <div className="nm">{p.name}</div>
               <div className="why">{p.desc}</div>
-              <div className="st">{p.tag}</div>
             </li>
           ))}
         </ul>
@@ -94,10 +92,9 @@ export default function AboutPage() {
           <div>
             <ul>
               {CONTACTS.map((c) => (
-                <li key={c.name} className="list-row">
+                <li key={c.name} className="list-row list-row--2col">
                   <div className="nm">{c.name}</div>
                   <div className="why">{c.value}</div>
-                  <div className="st">{c.note}</div>
                 </li>
               ))}
             </ul>

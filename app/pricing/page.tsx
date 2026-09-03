@@ -63,10 +63,10 @@ export default function PricingPage() {
         lede="工具跑幾次都可以，不需要註冊。報告裡標成需處理的項目，如果你想找人一起看、一起排順序，可以預約一次諮詢；要不要繼續往下做，看完再決定。"
       />
 
-      <Section k="01" eyebrow="TWO THINGS" title="你只會用到兩件事">
+      <Section k="01" eyebrow="TWO THINGS" title="你只需要這兩件事：健檢與預約諮詢">
         <div className="mt-[30px] grid grid-cols-2 gap-px border-y border-line bg-line">
           {PLANS.map((plan) => (
-            <div key={plan.label} className="bg-card px-[22px] pb-[26px] pt-6">
+            <div key={plan.label} className="bg-paper px-[22px] pb-[26px] pt-6">
               <div className="k">{plan.label}</div>
               <p className="my-3.5 mb-1 text-[32px] font-bold leading-none tracking-[-0.04em]">{plan.price}</p>
               <p className="mono text-[11.5px] text-ink3">{plan.unit}</p>
@@ -93,8 +93,8 @@ export default function PricingPage() {
         </div>
       </Section>
 
-      <Section k="02" eyebrow="HOW IT GOES" title="諮詢會發生什麼">
-        <ul className="mt-[30px]">
+      <Section k="02" eyebrow="HOW IT GOES" title="諮詢流程">
+        <ul className="mt-[30px] list">
           {STEPS.map((s) => (
             <li key={s.title} className="todo-row">
               <div>
