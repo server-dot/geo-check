@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Masthead from "@/components/marketing/Masthead";
 import Section from "@/components/marketing/Section";
 import Footer from "@/components/marketing/Footer";
@@ -1427,6 +1427,9 @@ export default function HomeClient({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState<StatusResponse | null>(null);
+  // 記住「目前使用者在等的 job」——pollJob 收到回應時如果不是這個 id 就丟棄，
+  // 避免連按兩次或用 Enter 繞過按鈕 disabled 時，舊的/別的 job 蓋掉新的結果畫面。
+  const activeJobId = useRef<string | null>(null);
   const [showRawContent, setShowRawContent] = useState(false);
   const [customKeywords, setCustomKeywords] = useState<string[]>([]);
   const [addedSuggestions, setAddedSuggestions] = useState<string[]>([]);
@@ -1443,7 +1446,7 @@ export default function HomeClient({
 
   async function handleCheck(e?: React.FormEvent) {
     e?.preventDefault();
-    if (!url.trim()) return;
+    if (!url.trim() || loading) return;
     setLoading(true);
     setError("");
     setStatus(null);
@@ -1455,7 +1458,9 @@ export default function HomeClient({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "檢測失敗");
-      await pollJob(data.jobId as string);
+      const jobId = data.jobId as string;
+      activeJobId.current = jobId;
+      await pollJob(jobId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "檢測失敗");
       setLoading(false);
@@ -1467,9 +1472,11 @@ export default function HomeClient({
     while (true) {
       if (Date.now() - started > 5 * 60 * 1000) throw new Error("健檢逾時，請稍後再試");
       await new Promise((r) => setTimeout(r, 1500));
+      if (activeJobId.current !== jobId) return; // 使用者已經另外開了新的一次檢測，這個結果不算數
       const res = await fetch(`/api/geo/status?id=${jobId}`);
       const d = (await res.json()) as StatusResponse;
       if (!res.ok) throw new Error(d.error ?? "查詢進度失敗");
+      if (activeJobId.current !== jobId) return;
       setStatus(d);
       if (d.status === "completed") {
         setLoading(false);

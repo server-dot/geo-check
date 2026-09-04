@@ -50,9 +50,11 @@ export async function aggregateAuditChecks(
 ): Promise<CheckResult[]> {
   const { origin, pages, sitemapUrls, sitemapExists, robotsExists, llmsExists, reachedCap } = crawl;
 
-  // 空殼死頁（soft-404）：HTTP 回 200 但整頁沒 title、沒 h1、沒圖、0 內部連結、內文極短
+  // 空殼死頁（soft-404）：HTTP 回 200 但整頁沒 title、沒 h1、沒圖、0 內部連結、內文極短。
+  // 排除 nonHtml（例如 llms.txt 風格的 /page.md 純文字鏡像頁）——那是我們爬蟲主動跳過
+  // 解析，不代表頁面真的是空殼，不該當成 soft-404 倒扣。
   const isEmptyShell = (p: CrawlResult['pages'][number]) =>
-    p.ok && !p.title && p.h1 === 0 && p.imgTotal === 0 && p.internalLinks.length === 0 && p.mainText.trim().length < 50;
+    !p.nonHtml && p.ok && !p.title && p.h1 === 0 && p.imgTotal === 0 && p.internalLinks.length === 0 && p.mainText.trim().length < 50;
   const shells = pages.filter(isEmptyShell);
 
   const htmlPages = pages.filter((p) => p.ok && (p.title || p.h1 || p.imgTotal || p.mainText) && !isEmptyShell(p));

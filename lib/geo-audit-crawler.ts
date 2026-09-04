@@ -52,6 +52,7 @@ export interface PageFacts {
   isHome: boolean;
   mainText: string;
   viaSitemap: boolean;
+  nonHtml: boolean;
 }
 
 export interface CrawlProgress {
@@ -216,6 +217,7 @@ function extractPageFacts(html: string, url: string, depth: number, status: numb
     isHome: pathname === '/',
     mainText,
     viaSitemap,
+    nonHtml: false,
   };
 }
 
@@ -289,7 +291,7 @@ export async function crawlSite(
           try {
             const res = await fetchWithTimeout(url);
             const ct = res.headers.get('content-type') ?? '';
-            if (!ct.includes('html')) return emptyFacts(url, depth, res.status, res.ok, origin);
+            if (!ct.includes('html')) return emptyFacts(url, depth, res.status, res.ok, origin, false, true);
             return extractPageFacts(await res.text(), url, depth, res.status, res.ok, origin);
           } catch {
             return emptyFacts(url, depth, 0, false, origin);
@@ -339,7 +341,7 @@ export async function crawlSite(
           try {
             const res = await fetchWithTimeout(url);
             const ct = res.headers.get('content-type') ?? '';
-            if (!ct.includes('html')) return emptyFacts(url, 1, res.status, res.ok, origin, true);
+            if (!ct.includes('html')) return emptyFacts(url, 1, res.status, res.ok, origin, true, true);
             return extractPageFacts(await res.text(), url, 1, res.status, res.ok, origin, true);
           } catch {
             return emptyFacts(url, 1, 0, false, origin, true);
@@ -357,7 +359,7 @@ export async function crawlSite(
   return { origin, pages, sitemapUrls, sitemapExists, robotsExists, llmsExists, reachedCap };
 }
 
-function emptyFacts(url: string, depth: number, status: number, ok: boolean, origin: string, viaSitemap = false): PageFacts {
+function emptyFacts(url: string, depth: number, status: number, ok: boolean, origin: string, viaSitemap = false, nonHtml = false): PageFacts {
   let isHome = false;
   try {
     isHome = (new URL(url).pathname.replace(/\/+$/, '') || '/') === '/';
@@ -369,6 +371,6 @@ function emptyFacts(url: string, depth: number, status: number, ok: boolean, ori
     title: '', description: '', h1: 0, h2: 0,
     imgTotal: 0, imgAltEmpty: 0, imgAltEmptyNames: [], imgLegacy: 0,
     jsonLdTypes: [], jsonLdNodes: [], hasBreadcrumb: false, canonical: '', noindex: false, hasViewport: false,
-    analytics: [], internalLinks: [], externalCount: 0, isHome, mainText: '', viaSitemap,
+    analytics: [], internalLinks: [], externalCount: 0, isHome, mainText: '', viaSitemap, nonHtml,
   };
 }
