@@ -25,14 +25,6 @@ const PRINCIPLES = [
   { name: "讀不到就標無法判定", desc: "讀不到答案時標成 ⚪ 無法判定，並告訴你怎麼自己確認" },
 ];
 
-const CONTACTS = [
-  { name: "電話", value: "02-27457601" },
-  { name: "Line", value: "@683sivea" },
-  { name: "地址", value: "台北市信義區東興路 49 號 11 樓" },
-  { name: "營業時間", value: "週一至週五 10:00–19:00" },
-  { name: "網站", value: "stack.com.tw" },
-];
-
 export default function AboutPage() {
   return (
     <div className="marketing">
@@ -72,7 +64,7 @@ export default function AboutPage() {
         </ul>
       </Section>
 
-      <Section k="03" eyebrow="HOW WE HANDLE YOUR SITE" title="我們怎麼解析你的網站">
+      <Section k="03" eyebrow="HOW WE HANDLE YOUR SITE" title="我們怎麼解析你的網站" noBorder>
         <ul className="mt-[26px] list">
           {PRINCIPLES.map((p) => (
             <li key={p.name} className="list-row list-row--2col">
@@ -81,33 +73,6 @@ export default function AboutPage() {
             </li>
           ))}
         </ul>
-      </Section>
-
-      <Section k="04" eyebrow="CONTACT" title="聯絡我們" noBorder>
-        <div className="mt-[30px] grid grid-cols-[120px_1fr] items-start gap-x-7">
-          <div className="flex h-[120px] w-[120px] items-center justify-center">
-            {/* eslint-disable-next-line @next/next/no-img-element -- 固定素材、非使用者上傳圖片，不需要 next/image 的最佳化/尺寸協商 */}
-            <img src="/stack-logo.png" alt="積木媒體行銷" className="h-full w-full object-contain" />
-          </div>
-          <div>
-            <ul>
-              {CONTACTS.map((c) => (
-                <li key={c.name} className="list-row list-row--2col">
-                  <div className="nm">{c.name}</div>
-                  <div className="why">{c.value}</div>
-                </li>
-              ))}
-            </ul>
-            <div className="mt-[26px] flex flex-wrap gap-3">
-              <a className="btn-lime no-underline" href="https://stack.com.tw/%e8%81%af%e7%b5%a1%e6%88%91%e5%80%91/#form">
-                填聯絡表單
-              </a>
-              <a className="btn-line no-underline" href="https://lin.ee/UhKq8H1">
-                Line 詢問 @683sivea
-              </a>
-            </div>
-          </div>
-        </div>
       </Section>
 
       <Footer />
