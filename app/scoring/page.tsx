@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
 import Section from "@/components/marketing/Section";
 import SubpageHero from "@/components/marketing/SubpageHero";
@@ -191,25 +190,6 @@ export default function ScoringPage() {
       <Section k="FAQ" eyebrow="FAQ" title="常見問題" noBorder>
         <FaqAccordion items={FAQS} defaultOpen={0} />
       </Section>
-
-      <div className="bg-ink text-paper">
-        <div className="mx-auto max-w-[1120px] px-10 py-[72px]">
-          <h2 className="max-w-[20em] text-[34px] tracking-[-0.035em]">標準看完了，跑一次看你的分數。</h2>
-          <div className="mt-7 flex gap-3">
-            <Link href="/" className="btn-lime no-underline">
-              開始檢測
-            </Link>
-            <Link href="/pricing" className="btn-line-dark">
-              看費用
-            </Link>
-          </div>
-          <div className="mono mt-9 flex flex-wrap gap-7 text-[11.5px] text-[#8b968d]">
-            <span>約 40 秒</span>
-            <span>只讀取公開可存取的內容</span>
-            <span>不儲存你的網站內容</span>
-          </div>
-        </div>
-      </div>
 
       <Footer />
     </div>
