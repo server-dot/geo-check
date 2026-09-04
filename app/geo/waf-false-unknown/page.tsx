@@ -15,9 +15,9 @@ const STEPS = [
 ];
 
 const RELATED = [
+  { title: "robots.txt 明明允許，AI 爬蟲卻連不進來？", href: "/geo/waf-blocks-despite-allow" },
   { title: "網站用 JavaScript 渲染，AI 讀得到內容嗎？", href: "/geo/js-rendering-empty-shell" },
   { title: "結構化資料要補哪些欄位，AI 才認得出你是誰？", href: "/geo/schema-priority" },
-  { title: "要讓 AI 引用你的內容，該怎麼表態？", href: "/geo/content-signals-declare" },
 ];
 
 export default function WafFalseUnknownArticlePage() {

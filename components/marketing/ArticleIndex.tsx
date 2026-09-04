@@ -55,6 +55,13 @@ const POSTS: Post[] = [
     href: "/geo/waf-false-unknown",
     date: "2026-08-29",
   },
+  {
+    cat: "技術與索引",
+    title: "robots.txt 明明允許，AI 爬蟲卻連不進來？",
+    excerpt: "「政策允許但實測被擋」是 WAF／CDN 擋的，不是 robots.txt 的問題。WAF／CDN 是什麼、為什麼會蓋過 robots.txt 的允許，以及怎麼放行。",
+    href: "/geo/waf-blocks-despite-allow",
+    date: "2026-09-04",
+  },
 ];
 
 const CATEGORIES = ["全部", "AI 可達性", "內容品質", "結構化資料", "技術與索引", "品牌與權威"] as const;

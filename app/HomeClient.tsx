@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
 import Section from "@/components/marketing/Section";
 import Footer from "@/components/marketing/Footer";
@@ -276,11 +277,47 @@ function AdviceDiagnosis({ c, diagnosis }: { c: CheckItem; diagnosis: string }) 
   );
 }
 
+// 改善建議常常提到專有名詞（robots.txt、WAF、Content-Signal…），使用者不一定知道
+// 那是什麼、去哪裡查——直接連去對應的 GEO 知識文章，不用自己再搜尋一次。
+// 按長度由長到短排序，避免「Content-Signal」被短的子字串先搶走比對。
+const SUGGESTION_GLOSSARY: { term: string; href: string }[] = [
+  { term: "Content-Signal", href: "/geo/content-signals-declare" },
+  { term: "結構化資料", href: "/geo/schema-priority" },
+  { term: "llms.txt", href: "/geo/llms-txt-format" },
+  { term: "robots.txt", href: "/geo/robots-txt-blocking-ai" },
+  { term: "JavaScript", href: "/geo/js-rendering-empty-shell" },
+  { term: "WAF", href: "/geo/waf-blocks-despite-allow" },
+].sort((a, b) => b.term.length - a.term.length);
+
+const SUGGESTION_GLOSSARY_PATTERN = new RegExp(
+  SUGGESTION_GLOSSARY.map((g) => g.term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"),
+  "g",
+);
+
+function linkifySuggestion(text: string): React.ReactNode {
+  const tokens: React.ReactNode[] = [];
+  let last = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  while ((m = SUGGESTION_GLOSSARY_PATTERN.exec(text))) {
+    if (m.index > last) tokens.push(text.slice(last, m.index));
+    const entry = SUGGESTION_GLOSSARY.find((g) => g.term === m![0]);
+    tokens.push(
+      <Link key={key++} href={entry!.href} className="underline decoration-current/40 underline-offset-2 hover:decoration-current">
+        {m[0]}
+      </Link>,
+    );
+    last = SUGGESTION_GLOSSARY_PATTERN.lastIndex;
+  }
+  if (last < text.length) tokens.push(text.slice(last));
+  return tokens;
+}
+
 function SuggestionBox({ status, suggestion }: { status: CheckStatus; suggestion: string }) {
   return (
     <div className={`rounded-md border px-3 py-2 text-sm leading-relaxed ${CHECK_UI[status].badge}`}>
       <p className="mb-0.5 font-semibold">改善建議</p>
-      <p>{suggestion}</p>
+      <p>{linkifySuggestion(suggestion)}</p>
     </div>
   );
 }
