@@ -1180,6 +1180,19 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
 // 對所有 bot 一視同仁）收成一行摘要，不要 8 列一字不差的重複；
 // 有落差時（真正有故事可講——部分被擋、政策跟實測不一致）才展開逐項列表。
 // 收合只是預設呈現方式，不是藏資訊——一鍵可以展開看明細。
+// blocked／mismatch 才給建議：allowed 沒什麼好改的，unknown 是我們讀不到答案，
+// 沒有能指出的具體動作，硬塞建議只是空話。
+function botAccessSuggestion(status: BotStatus, label: string): string | null {
+  if (status === "blocked") {
+    return `在 robots.txt 加一條 Allow: /（或拿掉目前擋住 ${label} 的 Disallow 規則），這家引擎才能讀到你的頁面。`;
+  }
+  if (status === "mismatch") {
+    return `robots.txt 已經允許 ${label}，但實測連線被擋下，問題出在 WAF／CDN，不是 robots.txt。去防火牆設定裡把這個爬蟲的 User-Agent 或官方公告的來源 IP 段加進白名單。`;
+  }
+  return null;
+}
+const BOT_SUGGESTION_STATUS: Partial<Record<BotStatus, CheckStatus>> = { blocked: "fail", mismatch: "warn" };
+
 function BotAccessList({ results }: { results: AiBotResult[] }) {
   const [expanded, setExpanded] = useState(false);
   const uniform = results.length > 0 && results.every((r) => r.status === results[0].status);
@@ -1189,6 +1202,8 @@ function BotAccessList({ results }: { results: AiBotResult[] }) {
   // 名稱清單（不重複貼狀態徽章），單純給對照用，不假裝有診斷意義。
   if (uniform) {
     const status = results[0].status;
+    const suggestStatus = BOT_SUGGESTION_STATUS[status];
+    const suggestion = suggestStatus && botAccessSuggestion(status, `這 ${results.length} 家 AI 引擎`);
     return (
       <div className="rounded-[10px] border border-line bg-card p-5">
         <div className="flex items-center justify-between gap-4">
@@ -1219,6 +1234,11 @@ function BotAccessList({ results }: { results: AiBotResult[] }) {
             ))}
           </div>
         )}
+        {suggestStatus && suggestion && (
+          <div className="mt-4">
+            <SuggestionBox status={suggestStatus} suggestion={suggestion} />
+          </div>
+        )}
       </div>
     );
   }
@@ -1226,19 +1246,30 @@ function BotAccessList({ results }: { results: AiBotResult[] }) {
   // 不一致才是真正有故事可講的情況（部分被擋、政策跟實測不一致），逐項列表才有意義
   return (
     <div className="divide-y divide-line rounded-[10px] border border-line bg-card">
-      {results.map((r) => (
-        <div key={r.ua} className="flex items-center justify-between px-5 py-4">
-          <div>
-            <p className="font-medium text-ink">{r.label}</p>
-            <p className="mono text-xs text-ink3">
-              {r.ua} · {r.matchedRule}
-            </p>
+      {results.map((r) => {
+        const suggestStatus = BOT_SUGGESTION_STATUS[r.status];
+        const suggestion = suggestStatus && botAccessSuggestion(r.status, r.label);
+        return (
+          <div key={r.ua} className="px-5 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="font-medium text-ink">{r.label}</p>
+                <p className="mono text-xs text-ink3">
+                  {r.ua} · {r.matchedRule}
+                </p>
+              </div>
+              <span className={`shrink-0 rounded-full border px-3 py-1 text-sm font-medium ${BADGE[r.status].className}`}>
+                {BADGE[r.status].text}
+              </span>
+            </div>
+            {suggestStatus && suggestion && (
+              <div className="mt-3">
+                <SuggestionBox status={suggestStatus} suggestion={suggestion} />
+              </div>
+            )}
           </div>
-          <span className={`shrink-0 rounded-full border px-3 py-1 text-sm font-medium ${BADGE[r.status].className}`}>
-            {BADGE[r.status].text}
-          </span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -2024,16 +2055,30 @@ export default function HomeClient({
                       <p className="text-sm text-ink2">這個網站有表態，宣告內容可以被拿去做什麼用途：</p>
                       <div className="mt-4 space-y-3">
                         {engine.contentSignals.items.map((s) => (
-                          <div key={s.key} className="flex items-start justify-between gap-4">
-                            <div>
-                              <p className="text-sm font-medium text-ink">{s.label}</p>
-                              <p className="text-xs text-ink3">{s.meaning}</p>
+                          <div key={s.key}>
+                            <div className="flex items-start justify-between gap-4">
+                              <div>
+                                <p className="text-sm font-medium text-ink">{s.label}</p>
+                                <p className="text-xs text-ink3">{s.meaning}</p>
+                              </div>
+                              <span
+                                className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${SIGNAL_BADGE[s.value].className}`}
+                              >
+                                {SIGNAL_BADGE[s.value].text}
+                              </span>
                             </div>
-                            <span
-                              className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${SIGNAL_BADGE[s.value].className}`}
-                            >
-                              {SIGNAL_BADGE[s.value].text}
-                            </span>
+                            {/* 這裡只對「未表態」給建議：declared=true 代表網站已經在用
+                                Content-Signal，其他欄位有明確表態，唯獨這項沒寫，才是留白
+                                可以補的地方。「不允許」是網站主動的表態（例如故意擋 AI
+                                訓練），不是缺陷，不該建議使用者去改別人的立場。 */}
+                            {s.value === "unset" && (
+                              <div className="mt-2">
+                                <SuggestionBox
+                                  status="warn"
+                                  suggestion={`${s.label}還沒表態，等於留給各家 AI 引擎自行認定。想明確允許或封鎖，在 robots.txt 的 Content-Signal 加上 ${s.key}=yes 或 ${s.key}=no。`}
+                                />
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

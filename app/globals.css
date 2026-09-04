@@ -263,7 +263,7 @@ code {
   vertical-align: middle;
   white-space: nowrap;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 16px;
+  font-size: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink3);
