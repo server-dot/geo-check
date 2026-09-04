@@ -8,9 +8,10 @@ const NAV_ITEMS = [
   { key: "scoring", href: "/scoring", label: "判斷標準" },
   { key: "pricing", href: "/pricing", label: "費用" },
   { key: "about", href: "/about", label: "關於我們" },
+  { key: "contact", href: "/contact", label: "聯絡我們" },
 ] as const;
 
-export default function Masthead({ active }: { active?: "geo" | "scoring" | "pricing" | "about" }) {
+export default function Masthead({ active }: { active?: "geo" | "scoring" | "pricing" | "about" | "contact" }) {
   return (
     <div className="sticky top-0 z-20 border-b border-line bg-[rgba(243,242,234,.95)]">
       <div className="mx-auto flex h-[68px] max-w-[1120px] items-center gap-6 px-10">

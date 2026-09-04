@@ -416,3 +416,28 @@ mark.lime-highlight {
    螢光底線，一整排看起來很吵。這裡蓋掉底線，只在整列 hover 時標題變色當作提示。 */
 .marketing .article-row { text-decoration: none; color: inherit; }
 .marketing .article-row:hover h4 { color: var(--limeDark); }
+
+/* 聯絡我們表單欄位——跟 .input-mono 同一套規格，但用一般字體（非 mono），
+   給稱呼／品牌／信箱／電話這類非網址欄位用。 */
+.marketing .fld {
+  font-family: var(--font-archivo), "Noto Sans TC", system-ui, sans-serif;
+  font-size: 15px;
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--line);
+  background: var(--paper);
+  border-radius: 8px;
+  padding: 11px 13px;
+  color: var(--ink);
+  width: 100%;
+}
+.marketing .fld::placeholder { color: var(--ink3); }
+.marketing .fld:focus { outline: 0; box-shadow: inset 0 0 0 2px var(--ink); }
+.marketing .lbl {
+  display: block;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink3);
+  margin-bottom: 7px;
+}
