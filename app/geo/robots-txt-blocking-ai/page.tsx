@@ -120,20 +120,6 @@ export default function RobotsTxtArticlePage() {
         </div>
       </div>
 
-      <div className="bg-ink text-paper">
-        <div className="mx-auto max-w-[1120px] px-10 py-[72px]">
-          <h2 className="max-w-[20em] text-[34px] tracking-[-0.035em]">看看這一項在你的網站上是什麼結果。</h2>
-          <div className="mt-7 flex gap-3">
-            <Link href="/" className="btn-lime no-underline">
-              開始檢測
-            </Link>
-            <Link href="/geo" className="btn-line-dark">
-              回到 GEO 知識
-            </Link>
-          </div>
-        </div>
-      </div>
-
       <Footer />
     </div>
   );

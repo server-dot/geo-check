@@ -68,7 +68,7 @@ export default function WafFalseUnknownArticlePage() {
               直接告訴你「讀不到」跟「怎麼自己確認」。目前認得出的廠商包括 Cloudflare、Akamai、
               Imperva、Sucuri、AWS CloudFront／WAF、Fastly、F5 BIG-IP。
             </p>
-            <div className="excerpt whitespace-pre-wrap">
+            <div className="report-preview">
               {"⚪ 無法判定：robots.txt 回應 403\n這不代表你的網站對 AI 開放——很可能有 robots.txt 但我們讀不到。\n\n偵測到可能的原因：Cloudflare（Bot 攔截／挑戰頁）\n到 Cloudflare 後台「Security → Bots」，確認 Bot Fight Mode／\nSuper Bot Fight Mode 有沒有連好爬蟲一起擋掉，並在「Verified Bots」\n或自訂規則中放行 GPTBot、ClaudeBot、PerplexityBot 等 AI 爬蟲的 User-Agent。"}
             </div>
 
@@ -119,20 +119,6 @@ export default function WafFalseUnknownArticlePage() {
                 </Link>
               ))}
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-ink text-paper">
-        <div className="mx-auto max-w-[1120px] px-10 py-[72px]">
-          <h2 className="max-w-[20em] text-[34px] tracking-[-0.035em]">看看你的 robots.txt 讀不讀得到。</h2>
-          <div className="mt-7 flex gap-3">
-            <Link href="/" className="btn-lime no-underline">
-              開始檢測
-            </Link>
-            <Link href="/scoring" className="btn-line-dark">
-              看判斷標準
-            </Link>
           </div>
         </div>
       </div>

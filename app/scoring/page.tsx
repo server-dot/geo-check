@@ -146,7 +146,7 @@ export default function ScoringPage() {
             </li>
           ))}
         </ul>
-        <div className="excerpt whitespace-pre-wrap">
+        <div className="report-preview">
           {"⚪ 無法判定：robots.txt 回應 403\n這不代表你的網站對 AI 開放——很可能有 robots.txt 但我們讀不到。\n請直接在瀏覽器打開 https://你的網域/robots.txt 確認。"}
         </div>
         <p className="note">爬蟲一致時清單會收成一行；不一致才逐項展開。政策允許但實測被擋會獨立標示，不會併進「可存取」。</p>
@@ -154,7 +154,7 @@ export default function ScoringPage() {
 
       <Section k="03" eyebrow="THE SCORE" title="總分怎麼算">
         <p className="prose mt-4">從 100 分開始扣。只有深度健檢的項目會扣分，AI 引擎層（爬蟲存取、內容可讀、Content Signals、llms.txt）全部通過時不扣分。</p>
-        <div className="excerpt whitespace-pre-wrap">
+        <div className="report-preview">
           {"起始 100 分\n每個需處理（fail）的深度健檢項目   −4 分\n每個可優化（warn）的深度健檢項目   −0.5 分\nAI 引擎層全部通過時不扣分\n四捨五入到整數"}
         </div>
         <dl className="figs mt-[26px] max-w-[52em] grid-cols-3">

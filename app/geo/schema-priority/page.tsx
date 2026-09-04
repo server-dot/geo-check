@@ -59,7 +59,7 @@ export default function SchemaArticlePage() {
             </p>
 
             <h2 className="mt-11 text-[30px]">四種型別，各自要補的欄位</h2>
-            <div className="excerpt whitespace-pre-wrap">
+            <div className="report-preview">
               {"Organization（幾乎每個網站都該有）\n  名稱、網址、Logo 圖片網址、電話、Email、簡介、社群/外部連結\n\nLocalBusiness 家族（有實體門市或可到訪地點）\n  地址、電話、營業時間、圖片網址\n\nProduct（商品頁）\n  售價/庫存 (offers)、圖片\n\nArticle（文章頁）\n  作者、發布日期"}
             </div>
             <p className="mt-5 text-[15.5px] leading-[1.75] text-ink2">
@@ -114,20 +114,6 @@ export default function SchemaArticlePage() {
                 </Link>
               ))}
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-ink text-paper">
-        <div className="mx-auto max-w-[1120px] px-10 py-[72px]">
-          <h2 className="max-w-[20em] text-[34px] tracking-[-0.035em]">看看你的結構化資料缺了哪些欄位。</h2>
-          <div className="mt-7 flex gap-3">
-            <Link href="/" className="btn-lime no-underline">
-              開始檢測
-            </Link>
-            <Link href="/geo" className="btn-line-dark">
-              回到 GEO 知識
-            </Link>
           </div>
         </div>
       </div>

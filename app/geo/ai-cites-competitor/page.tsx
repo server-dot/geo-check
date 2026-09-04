@@ -66,7 +66,7 @@ export default function AiCitesCompetitorArticlePage() {
               也不代表你做錯了什麼技術設定——健檢前面幾項（爬蟲存取、內容可讀、結構化資料）全綠燈，
               一樣可能被判定「沒有引用你」，因為這一項回答的是另一個問題：AI 讀得到你，但選不選你。
             </p>
-            <div className="excerpt whitespace-pre-wrap">
+            <div className="report-preview">
               {"提問：台北推薦的 SEO 行銷公司有哪些？\n引用來源：3 筆\n  - competitor-a.com/seo-service（非本站）\n  - competitor-b.com/blog/seo-guide（非本站）\n  - reviews.example.com/seo-agencies（非本站）\n判定：沒有引用你"}
             </div>
 
@@ -118,20 +118,6 @@ export default function AiCitesCompetitorArticlePage() {
                 </Link>
               ))}
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-ink text-paper">
-        <div className="mx-auto max-w-[1120px] px-10 py-[72px]">
-          <h2 className="max-w-[20em] text-[34px] tracking-[-0.035em]">看看 AI 現在引用的是你，還是別人。</h2>
-          <div className="mt-7 flex gap-3">
-            <Link href="/" className="btn-lime no-underline">
-              開始檢測
-            </Link>
-            <Link href="/geo" className="btn-line-dark">
-              回到 GEO 知識
-            </Link>
           </div>
         </div>
       </div>

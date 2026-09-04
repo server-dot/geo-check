@@ -80,7 +80,7 @@ export default function WafBlocksDespiteAllowArticlePage() {
               兩邊是各自獨立運作的系統。也因為這樣，「robots.txt 允許」只代表你<em>願意</em>讓這家爬蟲進來，
               不保證前面那層防護真的會<em>放行</em>它。
             </p>
-            <div className="excerpt whitespace-pre-wrap">
+            <div className="report-preview">
               {"政策允許但實測被擋：robots.txt 允許（Allow: /），實測連線被擋下\n（HTTP 403，疑似 Cloudflare）\nrobots.txt 只是規則，實際能不能連進來要看前面的 WAF／CDN 放不放行。\n\n到 Cloudflare 後台「Security → Bots」，確認 Bot Fight Mode／Super Bot\nFight Mode 有沒有把這家爬蟲也擋掉，並在「Verified Bots」或自訂規則\n中放行對應的 User-Agent。"}
             </div>
 
@@ -131,20 +131,6 @@ export default function WafBlocksDespiteAllowArticlePage() {
                 </Link>
               ))}
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-ink text-paper">
-        <div className="mx-auto max-w-[1120px] px-10 py-[72px]">
-          <h2 className="max-w-[20em] text-[34px] tracking-[-0.035em]">看看你的網站前面有沒有擋住 AI 爬蟲。</h2>
-          <div className="mt-7 flex gap-3">
-            <Link href="/" className="btn-lime no-underline">
-              開始檢測
-            </Link>
-            <Link href="/scoring" className="btn-line-dark">
-              看判斷標準
-            </Link>
           </div>
         </div>
       </div>

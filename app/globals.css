@@ -21,6 +21,7 @@
   --code: #141d17;
   --codeInk: #dfe6da;
   --codeDim: #7e8c81;
+  --limeTint: #f1f3e6;
 }
 
 @theme inline {
@@ -440,4 +441,23 @@ mark.lime-highlight {
   text-transform: uppercase;
   color: var(--ink3);
   margin-bottom: 7px;
+}
+
+/* GEO 知識文章裡「假報告畫面」的預覽框——這不是程式碼，是模擬健檢報告會顯示
+   的文字（例如「⚪ 無法判定：...」），套深色的 .excerpt（程式碼區塊樣式）
+   看起來像貼錯東西。底色用 --limeTint（淺萊姆調的暖白，跟純白的 --card
+   比起來更貼近站上其他淺色卡片的調性——小積木在瀏覽器裡試過幾個顏色定案的）；
+   真的是語法／設定檔內容（robots.txt、llms.txt 格式）才維持用 .excerpt。 */
+.marketing .report-preview {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 13px;
+  color: var(--ink2);
+  background: var(--limeTint);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px 18px;
+  line-height: 1.8;
+  margin: 20px 0;
+  max-width: 52rem;
+  white-space: pre-wrap;
 }
