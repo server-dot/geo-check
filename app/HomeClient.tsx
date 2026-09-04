@@ -1643,7 +1643,8 @@ export default function HomeClient({
             <div className="mx-auto max-w-[1120px] px-10">
               <div className="eyebrow text-[#a9b5ac]">AI SEARCH VISIBILITY</div>
               <h1 className="mt-5 max-w-[16em] text-[60px] leading-[1.1] tracking-[-0.045em]">
-                客戶問 AI，AI 沒提到你。<mark className="bg-transparent text-lime">先看看它讀到了什麼。</mark>
+                客戶問 AI 的時候，你在
+                <mark className="bg-transparent whitespace-nowrap text-lime">答案裡</mark>嗎？
               </h1>
               <p className="mt-[22px] max-w-[32em] text-[17.5px] text-[#c3ccc5]">
                 我們用各家 AI 爬蟲的身分實際去讀你的網站，再實際去問 AI 認不認得你的品牌，最後跑一次多頁深度健檢。
