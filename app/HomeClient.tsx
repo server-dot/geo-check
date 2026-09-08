@@ -519,6 +519,298 @@ function computeOverallScore(categories: Category5[]): { score: number; grade: s
   return { score, grade, gradeLabel };
 }
 
+// ── 報告總表（一張圖看完）──────────────────────────────
+// 報告下半部是一大片文字，小積木的反饋是「太難懂，希望有圖文搭配」。這裡把
+// 全部檢測項目壓成一張狀態格陣：一格一項，看形狀就知道哪個分類在出血，
+// 不用逐條讀完二十幾段文字。
+//
+// 一定要「符號＋顏色」雙重編碼，不能只靠顏色：跑過 dataviz 的調色驗證，
+// 現有的 --warn(#8a6410) 跟 --fail(#9e3529) 在正常視覺下 ΔE 只有 12.2，
+// 低於 15 的可辨識門檻（色盲更慘，deutan ΔE 5.1）。橘色跟紅色的小方塊並排
+// 是分不出來的，所以每一格都畫上 ✓ / ! / ✕。
+const GRID_GLYPH: Record<CheckStatus, string> = { ok: "✓", warn: "!", fail: "✕" };
+
+interface GridGroup {
+  name: string;
+  items: { label: string; status: CheckStatus }[];
+}
+
+// 跟 buildCategories5 用同一組分類與同一套狀態換算，差別只在這裡保留逐項的
+// 名稱，不是只算加總——格陣要能 hover 看出「這一格是哪一項」。
+function buildStatusGrid(engine?: EngineResult, audit?: CheckItem[]): GridGroup[] {
+  const groups = new Map<string, GridGroup["items"]>();
+  const push = (name: string, label: string, status: CheckStatus) => {
+    const list = groups.get(name) ?? [];
+    list.push({ label, status });
+    groups.set(name, list);
+  };
+
+  if (engine) {
+    for (const b of engine.results) {
+      push("AI 可達性", b.label, b.status === "allowed" ? "ok" : b.status === "blocked" ? "fail" : "warn");
+    }
+    if (engine.contentSignals) {
+      push("AI 可達性", "內容使用授權", engine.contentSignals.declared ? "ok" : "warn");
+    }
+    if (engine.llmsTxt.exists !== null) {
+      push("AI 可達性", "llms.txt", engine.llmsTxt.exists ? (engine.llmsTxt.quality?.status === "ok" ? "ok" : "warn") : "warn");
+    }
+  }
+  if (audit) {
+    for (const c of audit) {
+      const group = CATEGORY5_KEY_MAP[c.key];
+      if (group) push(group, c.item, c.status);
+    }
+  }
+
+  return CATEGORY5_ORDER.map((name) => ({ name, items: groups.get(name) ?? [] })).filter((g) => g.items.length > 0);
+}
+
+// 版面座標。SVG 用固定 viewBox、畫面上寬度 100%，同一份 DOM 節點既是頁面上
+// 看到的圖，也是按下載時序列化出去的檔案——不要維護兩份會漂移的版型。
+const SVG_W = 720;
+const SVG_PAD = 24;
+const CELL = 18;
+const CELL_GAP = 5;
+const GRID_LABEL_W = 92;
+
+function summarySvgHeight(groups: GridGroup[]): number {
+  return 236 + groups.length * (CELL + 12) + 62;
+}
+
+function ReportSummarySvg({
+  svgRef,
+  origin,
+  score,
+  grade,
+  gradeLabel,
+  categories,
+  groups,
+}: {
+  svgRef?: React.Ref<SVGSVGElement>;
+  origin: string;
+  score: number;
+  grade: string;
+  gradeLabel: string;
+  categories: Category5[];
+  groups: GridGroup[];
+}) {
+  const H = summarySvgHeight(groups);
+  const barX = 300;
+  const barW = SVG_W - SVG_PAD - 46 - barX;
+  const today = new Date().toISOString().slice(0, 10);
+
+  return (
+    <svg
+      ref={svgRef}
+      viewBox={`0 0 ${SVG_W} ${H}`}
+      width="100%"
+      className="block h-auto w-full"
+      xmlns="http://www.w3.org/2000/svg"
+      fontFamily="'IBM Plex Mono', ui-monospace, 'Noto Sans TC', system-ui, sans-serif"
+      role="img"
+      aria-label={`健檢總表，總分 ${score} 分，${gradeLabel}`}
+    >
+      <rect x="0" y="0" width={SVG_W} height={H} fill="#fffefa" />
+      <rect x="0.5" y="0.5" width={SVG_W - 1} height={H - 1} fill="none" stroke="#dcded1" />
+
+      <text x={SVG_PAD} y="34" fontSize="17" fontWeight="700" fill="#101a14">
+        AI 搜尋能見度健檢總表
+      </text>
+      <text x={SVG_PAD} y="54" fontSize="11.5" fill="#8a938a">
+        {origin} · {today}
+      </text>
+
+      {/* 總分：整張圖唯一的大數字，先讓人知道「大概幾分」再往下看細節 */}
+      <text x={SVG_PAD} y="150" fontSize="58" fontWeight="700" fill="#101a14">
+        {score}
+      </text>
+      {/* 等寬字型下每個數字的前進寬度約 0.6em，58px 字級 ≈ 35px；再留 8px 間距，
+          不然 100 分那種三位數會直接壓到大數字上 */}
+      <text x={SVG_PAD + String(score).length * 35 + 8} y="150" fontSize="15" fill="#8a938a">
+        /100
+      </text>
+      <text x={SVG_PAD} y="176" fontSize="13" fontWeight="600" fill="#4e5a51">
+        {grade} · {gradeLabel}
+      </text>
+
+      {/* 五分類通過率：橫條，只在右端標數字，不是每格都寫 */}
+      {categories.map((c, i) => {
+        const y = 96 + i * 26;
+        const w = c.total > 0 ? (barW * c.passRate) / 100 : 0;
+        return (
+          <g key={c.name}>
+            <text x={barX - 12} y={y + 11} fontSize="11.5" fill="#4e5a51" textAnchor="end">
+              {c.name}
+            </text>
+            <rect x={barX} y={y} width={barW} height="14" rx="4" fill="#eeede3" />
+            {w > 0 && <rect x={barX} y={y} width={Math.max(w, 6)} height="14" rx="4" fill="#a8d128" />}
+            <text x={barX + barW + 10} y={y + 11} fontSize="11.5" fill="#101a14">
+              {c.total > 0 ? c.passRate : "—"}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* 狀態格陣：一格一項檢測 */}
+      {groups.map((g, gi) => {
+        const y = 236 + gi * (CELL + 12);
+        return (
+          <g key={g.name}>
+            <text x={SVG_PAD} y={y + CELL - 5} fontSize="11" fill="#4e5a51">
+              {g.name}
+            </text>
+            {g.items.map((it, ii) => {
+              const x = SVG_PAD + GRID_LABEL_W + ii * (CELL + CELL_GAP);
+              return (
+                <g key={`${it.label}-${ii}`}>
+                  <title>{`${it.label}：${STATUS_LABEL[it.status]}`}</title>
+                  <rect x={x} y={y} width={CELL} height={CELL} rx="4" fill={STATUS_COLOR[it.status]} />
+                  <text
+                    x={x + CELL / 2}
+                    y={y + CELL - 5}
+                    fontSize="11"
+                    fontWeight="700"
+                    fill="#fffefa"
+                    textAnchor="middle"
+                  >
+                    {GRID_GLYPH[it.status]}
+                  </text>
+                </g>
+              );
+            })}
+          </g>
+        );
+      })}
+
+      {/* 圖例：狀態一律「符號＋色塊＋文字」三重標示 */}
+      {(["ok", "warn", "fail"] as const).map((st, i) => {
+        const x = SVG_PAD + i * 108;
+        const y = H - 46;
+        return (
+          <g key={st}>
+            <rect x={x} y={y} width="14" height="14" rx="3" fill={STATUS_COLOR[st]} />
+            <text x={x + 7} y={y + 11} fontSize="9.5" fontWeight="700" fill="#fffefa" textAnchor="middle">
+              {GRID_GLYPH[st]}
+            </text>
+            <text x={x + 21} y={y + 11} fontSize="11" fill="#4e5a51">
+              {STATUS_LABEL[st]}
+            </text>
+          </g>
+        );
+      })}
+      <text x={SVG_W - SVG_PAD} y={H - 35} fontSize="11" fill="#8a938a" textAnchor="end">
+        geo.stack.com.tw
+      </text>
+    </svg>
+  );
+}
+
+// 下載：序列化畫面上那個 SVG 節點本身，所見即所得。PNG 走 canvas 轉檔給
+// 要貼進簡報／通訊軟體的人用（多數通訊軟體不吃 SVG）。
+function ReportSummary({
+  origin,
+  score,
+  grade,
+  gradeLabel,
+  categories,
+  groups,
+}: {
+  origin: string;
+  score: number;
+  grade: string;
+  gradeLabel: string;
+  categories: Category5[];
+  groups: GridGroup[];
+}) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [busy, setBusy] = useState(false);
+
+  function serialize(): { text: string; width: number; height: number } | null {
+    const node = svgRef.current;
+    if (!node) return null;
+    const clone = node.cloneNode(true) as SVGSVGElement;
+    const height = summarySvgHeight(groups);
+    // 畫面上是 width="100%"，檔案要有實際尺寸才不會在其他程式裡被拉成滿版
+    clone.setAttribute("width", String(SVG_W));
+    clone.setAttribute("height", String(height));
+    clone.removeAttribute("class");
+    return { text: new XMLSerializer().serializeToString(clone), width: SVG_W, height };
+  }
+
+  function save(blob: Blob, filename: string) {
+    const href = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = href;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(href);
+  }
+
+  const stem = `geo-check-${origin.replace(/^https?:\/\//, "").replace(/[^\w.-]/g, "-")}`;
+
+  function downloadSvg() {
+    const out = serialize();
+    if (!out) return;
+    save(new Blob([out.text], { type: "image/svg+xml;charset=utf-8" }), `${stem}.svg`);
+  }
+
+  function downloadPng() {
+    const out = serialize();
+    if (!out) return;
+    setBusy(true);
+    const scale = 2;
+    const img = new Image();
+    const url = URL.createObjectURL(new Blob([out.text], { type: "image/svg+xml;charset=utf-8" }));
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = out.width * scale;
+      canvas.height = out.height * scale;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.scale(scale, scale);
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob((b) => b && save(b, `${stem}.png`), "image/png");
+      }
+      URL.revokeObjectURL(url);
+      setBusy(false);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      setBusy(false);
+    };
+    img.src = url;
+  }
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="eyebrow">健檢總表</h2>
+        <div className="flex gap-2">
+          <button type="button" onClick={downloadSvg} className="btn-line text-xs">
+            下載 SVG
+          </button>
+          <button type="button" onClick={downloadPng} disabled={busy} className="btn-line text-xs">
+            {busy ? "產生中…" : "下載 PNG"}
+          </button>
+        </div>
+      </div>
+      <ReportSummarySvg
+        svgRef={svgRef}
+        origin={origin}
+        score={score}
+        grade={grade}
+        gradeLabel={gradeLabel}
+        categories={categories}
+        groups={groups}
+      />
+      <p className="mt-2 text-xs text-ink3">
+        一格是一項檢測，滑過去看是哪一項。整張圖可以下載，直接貼進報告或傳給合作對象。
+      </p>
+    </div>
+  );
+}
+
 // 健檢進行中的掃描動畫：純裝飾，不代表真實進度（真實進度是旁邊的 progress-track）。
 // 純 CSS/SVG，沒有引外部函式庫或圖檔。
 function RadarSweep() {
@@ -1978,6 +2270,27 @@ export default function HomeClient({
             <div className="mt-6">
               <CategoryOverview rows={buildCategoryRows(engine, status?.audit)} />
             </div>
+
+            {/* 健檢總表：報告下半部是一大片文字，這張圖讓人先用「看」的知道
+                哪個分類在出血，再決定要往下讀哪一段。也可以下載出去單獨用。 */}
+            {(() => {
+              const groups = buildStatusGrid(engine, status?.audit);
+              if (groups.length === 0) return null;
+              const cats = buildCategories5(engine, status?.audit);
+              const overall = computeOverallScore(cats);
+              return (
+                <div className="mt-6">
+                  <ReportSummary
+                    origin={engine.origin}
+                    score={overall.score}
+                    grade={overall.grade}
+                    gradeLabel={overall.gradeLabel}
+                    categories={cats}
+                    groups={groups}
+                  />
+                </div>
+              );
+            })()}
 
             {engine.brandVisibility.length > 0 && (
               <div className="mt-6">
