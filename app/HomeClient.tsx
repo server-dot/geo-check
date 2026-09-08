@@ -228,10 +228,18 @@ interface StatusResponse {
   error?: string;
 }
 
-const SIGNAL_BADGE: Record<SignalValue, { text: string; className: string }> = {
-  yes: { text: "允許", className: "border-ok/30 bg-ok/10 text-ok" },
-  no: { text: "不允許", className: "border-fail/30 bg-fail/10 text-fail" },
-  unset: { text: "未表態", className: "border-gray/30 bg-gray/10 text-gray" },
+// 狀態色（dataviz 技能的固定 status palette，不跟著品牌色跑）——CategoryOverview
+// 用內嵌 style 畫長條，跟新 token 的十六進位值保持一致。
+const STATUS_COLOR = { ok: "#2f6b45", warn: "#8a6410", fail: "#9e3529" } as const;
+const STATUS_LABEL = { ok: "正常", warn: "可優化", fail: "需處理" } as const;
+
+// 「不允許」刻意不用紅色：那是網站主動的表態（例如故意擋 AI 訓練），不是缺陷，
+// 塗紅色會讓人以為自己做錯了什麼。真正需要處理的是「未表態」那一態——留白讓各家
+// AI 自行認定。glyph 一律跟著色走，不靠顏色單獨表意。
+const SIGNAL_BADGE: Record<SignalValue, { text: string; className: string; glyph: string; color: string }> = {
+  yes: { text: "允許", className: "border-ok/30 bg-ok/10 text-ok", glyph: "✓", color: STATUS_COLOR.ok },
+  no: { text: "不允許", className: "border-ink/25 bg-ink/5 text-ink2", glyph: "✕", color: "#4e5a51" },
+  unset: { text: "未表態", className: "border-warn/30 bg-warn/10 text-warn", glyph: "?", color: STATUS_COLOR.warn },
 };
 
 const VISIBILITY: Record<VisibilityStatus, { label: string; className: string }> = {
@@ -271,10 +279,13 @@ const SUGGESTION_GLOSSARY: { term: string; href: string }[] = [
   { term: "WAF", href: "/geo/waf-blocks-despite-allow" },
 ].sort((a, b) => b.term.length - a.term.length);
 
-const SUGGESTION_GLOSSARY_PATTERN = new RegExp(
-  SUGGESTION_GLOSSARY.map((g) => g.term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"),
-  "g",
-);
+// 只存 pattern 字串，不存 RegExp 實例——帶 g 旗標的 RegExp 會把 lastIndex 記在
+// 物件上，跨呼叫共用等於共用可變狀態：伺服器端連續渲染好幾個 ImpactBox 時，
+// 前一次留下的 lastIndex 會讓後一次從中間才開始比對，算出跟瀏覽器端不一樣的
+// 結果，畫面直接 hydration mismatch。每次呼叫自己 new 一個才安全。
+const SUGGESTION_GLOSSARY_SOURCE = SUGGESTION_GLOSSARY.map((g) =>
+  g.term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+).join("|");
 
 // seen 是同一個檢測項目共用的一組已連過的術語：現況、影響、技術細節三段文字
 // 依序穿過同一個 Set，同一個詞在同一列只會變成一次連結。不去重的話「robots.txt」
@@ -284,13 +295,14 @@ const SUGGESTION_GLOSSARY_PATTERN = new RegExp(
 // a { text-decoration-color: ... } 沒包 @layer，一律贏過 utilities——原本寫的
 // decoration-current/40 其實從來沒生效過。
 function linkifyGlossary(text: string, seen?: Set<string>): React.ReactNode {
+  const pattern = new RegExp(SUGGESTION_GLOSSARY_SOURCE, "g");
   const tokens: React.ReactNode[] = [];
   let last = 0;
   let key = 0;
   let m: RegExpExecArray | null;
-  SUGGESTION_GLOSSARY_PATTERN.lastIndex = 0;
-  while ((m = SUGGESTION_GLOSSARY_PATTERN.exec(text))) {
+  while ((m = pattern.exec(text))) {
     const term = m[0];
+    // 已經連過的詞跳過不更新 last，那段文字會併進下一次的 slice 當純文字帶出去
     if (seen?.has(term)) continue;
     seen?.add(term);
     if (m.index > last) tokens.push(text.slice(last, m.index));
@@ -300,7 +312,7 @@ function linkifyGlossary(text: string, seen?: Set<string>): React.ReactNode {
         {term}
       </Link>,
     );
-    last = SUGGESTION_GLOSSARY_PATTERN.lastIndex;
+    last = pattern.lastIndex;
   }
   if (last < text.length) tokens.push(text.slice(last));
   return tokens;
@@ -308,23 +320,26 @@ function linkifyGlossary(text: string, seen?: Set<string>): React.ReactNode {
 
 // 「這代表什麼」——講後果，不教修法。工具的定位是讓對方認知到問題存在，
 // 真的要修的話下面有諮詢入口，那才是我們的服務範圍。
+// 吃已經算好的 ReactNode，不在這裡呼叫 linkifyGlossary——去重用的 Set 一旦當成
+// prop 傳進子元件、又在子元件 render 時被寫入，就是 render 期間的副作用：React 在
+// 開發模式會重複呼叫 render，第二次進來 Set 裡已經有值，於是不產生連結，跟伺服器
+// 端算出來的結果對不起來，畫面直接 hydration mismatch。三段文字改成在 CheckBody
+// 自己的 render body 裡一次算完，每次重算都從空的 Set 開始，才是純的。
 function ImpactBox({
   status,
   impact,
   consultFor,
   origin,
-  seen,
 }: {
   status: CheckStatus;
-  impact: string;
+  impact: React.ReactNode;
   consultFor?: string;
   origin?: string;
-  seen?: Set<string>;
 }) {
   return (
     <div className={`rounded-md border px-3 py-2 text-sm leading-relaxed ${CHECK_UI[status].badge}`}>
       <p className="mb-0.5 font-semibold">這代表什麼</p>
-      <p>{linkifyGlossary(impact, seen)}</p>
+      <p>{impact}</p>
       {status === "fail" && consultFor && (
         <div className="mt-2 flex justify-end border-t border-current/15 pt-2">
           <ConsultLink item={consultFor} origin={origin} />
@@ -350,9 +365,9 @@ function ConsultLink({ item, origin }: { item: string; origin?: string }) {
 // 技術細節：術語、判定依據、門檻值、原始證據字串都收在這裡，預設收合。
 // 不用 DetailsToggle（那是彈窗，給「問題頁面」那種需要捲動的長清單用的），
 // 沿用檔案裡已經有兩處在用的行內展開版型。
-function TechDetails({ c, seen }: { c: CheckItem; seen?: Set<string> }) {
+function TechDetails({ technical, evidence }: { technical: React.ReactNode; evidence?: string }) {
   const [open, setOpen] = useState(false);
-  if (!c.technical && !c.evidence) return null;
+  if (!technical && !evidence) return null;
   return (
     <div className="mt-2">
       <button
@@ -364,8 +379,8 @@ function TechDetails({ c, seen }: { c: CheckItem; seen?: Set<string> }) {
       </button>
       {open && (
         <div className="mt-2 rounded-lg border border-line bg-paper p-3 text-xs leading-relaxed text-ink2">
-          {c.technical && <p>{linkifyGlossary(c.technical, seen)}</p>}
-          {c.evidence && <p className={`evidence mono text-ink3 ${c.technical ? "mt-1.5" : ""}`}>{c.evidence}</p>}
+          {technical && <p>{technical}</p>}
+          {evidence && <p className={`evidence mono text-ink3 ${technical ? "mt-1.5" : ""}`}>{evidence}</p>}
         </div>
       )}
     </div>
@@ -376,24 +391,49 @@ function TechDetails({ c, seen }: { c: CheckItem; seen?: Set<string> }) {
 // 桌機表格版跟窄螢幕卡片版共用同一份，不要維護兩套排版邏輯。
 // seen 在這裡建立，讓三段文字共用一組去重過的術語連結。
 function CheckBody({ c, origin, withAdvice = true }: { c: CheckItem; origin?: string; withAdvice?: boolean }) {
+  // 三段依序穿過同一個 Set，同個術語在這一項裡只會連一次；Set 在這個 render body
+  // 裡建立也在這裡用完，不外流給子元件，重算幾次結果都一樣。
   const seen = new Set<string>();
+  const adviceNode = withAdvice ? linkifyGlossary(c.advice, seen) : null;
+  const impactNode = c.impact ? linkifyGlossary(c.impact, seen) : null;
+  const technicalNode = c.technical ? linkifyGlossary(c.technical, seen) : null;
   return (
     <>
-      {withAdvice && linkifyGlossary(c.advice, seen)}
-      {c.impact && (
+      {adviceNode}
+      {impactNode && (
         <div className={withAdvice ? "mt-2" : undefined}>
-          <ImpactBox status={c.status} impact={c.impact} consultFor={c.item} origin={origin} seen={seen} />
+          <ImpactBox status={c.status} impact={impactNode} consultFor={c.item} origin={origin} />
         </div>
       )}
-      <TechDetails c={c} seen={seen} />
+      <TechDetails technical={technicalNode} evidence={c.evidence} />
     </>
   );
 }
 
-// 狀態色（dataviz 技能的固定 status palette，不跟著品牌色跑）——CategoryOverview
-// 用內嵌 style 畫長條，跟新 token 的十六進位值保持一致。
-const STATUS_COLOR = { ok: "#2f6b45", warn: "#8a6410", fail: "#9e3529" } as const;
-const STATUS_LABEL = { ok: "正常", warn: "可優化", fail: "需處理" } as const;
+
+// 爬蟲狀態磚：8 家並排時要能一眼掃完，所以做成色塊＋符號，不是 8 列文字。
+// 一定要帶符號——warn 跟 fail 兩個色在正常視覺下 ΔE 只有 12.2，橘紅並排分不出來
+// （見 ReportSummarySvg 的說明）。unknown 用中性灰：那不是「壞」，是「我們讀不到」，
+// 塗成紅色會變成假警報，跟 robots.txt 三態同一個紀律。
+const BOT_TILE: Record<BotStatus, { glyph: string; color: string }> = {
+  allowed: { glyph: "✓", color: STATUS_COLOR.ok },
+  blocked: { glyph: "✕", color: STATUS_COLOR.fail },
+  mismatch: { glyph: "!", color: STATUS_COLOR.warn },
+  unknown: { glyph: "?", color: "#8a938a" },
+};
+
+// 一格狀態方塊，格陣、爬蟲磚、內容授權卡共用同一個視覺語言
+function StatusChip({ glyph, color, size = 18 }: { glyph: string; color: string; size?: number }) {
+  return (
+    <span
+      aria-hidden
+      className="inline-flex shrink-0 items-center justify-center rounded font-bold text-paper"
+      style={{ width: size, height: size, backgroundColor: color, fontSize: size * 0.62 }}
+    >
+      {glyph}
+    </span>
+  );
+}
 
 interface CategoryRow {
   name: string;
@@ -1576,101 +1616,179 @@ function botAccessImpact(status: BotStatus, label: string): { impact: string; te
   }
   return null;
 }
-const BOT_SUGGESTION_STATUS: Partial<Record<BotStatus, CheckStatus>> = { blocked: "fail", mismatch: "warn" };
 
-function BotAccessList({ results, origin }: { results: AiBotResult[]; origin?: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const uniform = results.length > 0 && results.every((r) => r.status === results[0].status);
+// 內容使用授權：三張並排的狀態卡。原本是三列「標籤＋說明＋徽章」的文字，
+// 但這一項的重點就是「搜尋索引／AI 引用／AI 訓練是三個獨立的開關」——並排才
+// 看得出是三個開關，直排會被讀成一份清單。
+function ContentSignalsSection({ signals }: { signals: ContentSignals }) {
+  return (
+    <div className="mt-8">
+      <h2 className="eyebrow mb-3">內容使用授權（Content Signals）</h2>
+    <div className="rounded-[10px] border border-line bg-card p-5">
+        <p className="mb-4 max-w-[38em] text-sm leading-relaxed text-ink2">
+          {signals.declared
+            ? "這個網站有表態，分別宣告了內容可以被拿去做什麼："
+            : "這個網站三項都還沒表態。這是 Cloudflare 在 2025 年提出、寫在 robots.txt 裡的欄位，可以把下面三件事分開講——想擋訓練但保留 AI 引用，只有它做得到，用 Allow / Disallow 表達不了。"}
+        </p>
 
-  // 結果一致時，逐項列表本身沒有參考價值——每一列除了名字以外全部一樣，
-  // 展開只是把同一句話複製 8 次。這裡改成展開一份「我們檢查了哪些爬蟲」的
-  // 名稱清單（不重複貼狀態徽章），單純給對照用，不假裝有診斷意義。
-  if (uniform) {
-    const status = results[0].status;
-    const suggestStatus = BOT_SUGGESTION_STATUS[status];
-    const detail = suggestStatus && botAccessImpact(status, `這 ${results.length} 家 AI 引擎`);
-    return (
-      <div className="rounded-[10px] border border-line bg-card p-5">
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-ink2">
-            {results.length} 個 AI 爬蟲的結果一致：
-            <span className={`ml-2 rounded-full border px-3 py-1 text-sm font-medium ${BADGE[status].className}`}>
-              {BADGE[status].text}
-            </span>
-          </p>
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            className="mono shrink-0 text-xs text-ink3 underline decoration-limeDark decoration-2 underline-offset-2 hover:text-ink"
-          >
-            {expanded ? "收合" : "這是哪幾個爬蟲？"}
-          </button>
+        {/* 三張並排的狀態卡取代原本三列文字：這一項的重點就是「三件事是
+            分開的」，並排才看得出那是三個獨立的開關，直排會讀成一份清單。 */}
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+          {signals.items.map((s) => (
+            <div key={s.key} className={`rounded-lg border p-3 ${SIGNAL_BADGE[s.value].className}`}>
+              <div className="flex items-center gap-1.5">
+                <StatusChip glyph={SIGNAL_BADGE[s.value].glyph} color={SIGNAL_BADGE[s.value].color} size={16} />
+                <span className="text-[11px] font-semibold">{SIGNAL_BADGE[s.value].text}</span>
+              </div>
+              <p className="mt-2 text-sm font-medium text-ink">{s.label}</p>
+              <p className="mt-0.5 text-xs leading-snug text-ink3">{s.meaning}</p>
+            </div>
+          ))}
         </div>
-        {expanded && (
-          <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
-            {results.map((r) => (
-              <span
-                key={r.ua}
-                title={`${r.ua} · ${r.matchedRule}`}
-                className="mono rounded-full border border-line px-3 py-1 text-xs text-ink2"
-              >
-                {r.label}
-              </span>
-            ))}
-          </div>
-        )}
-        {suggestStatus && detail && (
+
+        {/* 只對「未表態」講影響：有明確表態（不管允許或不允許）都是網站主動
+            的立場，不是缺陷，不該去建議別人改立場。 */}
+        {signals.items.filter((s) => s.value === "unset").length > 0 && (
           <div className="mt-4">
             <CheckBody
-              c={{ key: "aiCrawlers", level: "", category: "", item: "AI 爬蟲的存取權限", status: suggestStatus, advice: "", impact: detail.impact, technical: detail.technical }}
-              origin={origin}
+              c={{
+                key: "contentSignals",
+                level: "",
+                category: "",
+                item: "內容使用授權",
+                status: "warn",
+                advice: "",
+                impact: `${signals.items
+                  .filter((s) => s.value === "unset")
+                  .map((s) => s.label)
+                  .join("、")}你還沒表態，等於留給各家 AI 引擎自己認定要不要這樣用你的內容。它們認定的方向不一定跟你想的一樣，而且不會通知你。`,
+                technical: `在 robots.txt 的 Content-Signal 欄位加上 ${signals.items
+                  .filter((s) => s.value === "unset")
+                  .map((s) => `${s.key}=yes`)
+                  .join(" 或 ")}（要封鎖就寫 =no）就是明確表態。`,
+              }}
               withAdvice={false}
             />
           </div>
         )}
-      </div>
-    );
-  }
 
-  // 不一致才是真正有故事可講的情況（部分被擋、政策跟實測不一致），逐項列表才有意義
-  return (
-    <div className="divide-y divide-line rounded-[10px] border border-line bg-card">
-      {results.map((r) => {
-        const suggestStatus = BOT_SUGGESTION_STATUS[r.status];
-        const detail = suggestStatus && botAccessImpact(r.status, r.label);
-        return (
-          <div key={r.ua} className="px-5 py-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="font-medium text-ink">{r.label}</p>
-                <p className="mono text-xs text-ink3">
-                  {r.ua} · {r.matchedRule}
-                </p>
-              </div>
-              <span className={`shrink-0 rounded-full border px-3 py-1 text-sm font-medium ${BADGE[r.status].className}`}>
-                {BADGE[r.status].text}
-              </span>
-            </div>
-            {suggestStatus && detail && (
-              <div className="mt-3">
-                <CheckBody
-                  c={{ key: r.ua, level: "", category: "", item: `${r.label} 的存取權限`, status: suggestStatus, advice: "", impact: detail.impact, technical: `${r.matchedRule}。${detail.technical}` }}
-                  origin={origin}
-                  withAdvice={false}
-                />
-              </div>
-            )}
-          </div>
-        );
-      })}
+        {signals.declared && (
+          <p className="mono mt-4 text-xs break-all text-ink3">
+            Content-Signal: {signals.raw}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
 
-// Perplexity／GPT-4o 回傳的答案本身是 markdown（**粗體**、[1] 這種引用角標），
-// 直接塞進 <div> 只會看到一堆星號跟中括號。這裡不上完整 markdown 套件
-// （答案就是一段話，不需要標題、清單、表格那些),自己解析這兩種語法就夠：
-// **粗體** 轉真的粗體，[N] 轉成連去對應引用來源的角標連結。
+function BotAccessList({ results, origin }: { results: AiBotResult[]; origin?: string }) {
+  const [showRules, setShowRules] = useState(false);
+  if (results.length === 0) return null;
+
+  const count = (st: BotStatus) => results.filter((r) => r.status === st).length;
+  const blocked = results.filter((r) => r.status === "blocked");
+  const mismatch = results.filter((r) => r.status === "mismatch");
+  const unknown = count("unknown");
+
+  // 一句話結論擺最上面，磚牆是佐證。原本這裡是「結果一致就收合、不一致才展開
+  // 逐項」兩套分支——改成磚之後不需要分支了：8 塊全綠本身就是最好的一致性表達，
+  // 而且比一句「結果一致」更有說服力（看得到是哪 8 家）。
+  const headline =
+    blocked.length + mismatch.length === 0
+      ? unknown === results.length
+        ? `${results.length} 家 AI 爬蟲全部無法判定`
+        : `${results.length} 家 AI 爬蟲都讀得到你的網站`
+      : `${results.length} 家裡有 ${blocked.length + mismatch.length} 家進不來`;
+
+  // 有問題的才給影響說明，而且依狀態合併成一則，不是每家各講一次同樣的話
+  const problems: { status: BotStatus; list: AiBotResult[] }[] = [
+    { status: "blocked" as const, list: blocked },
+    { status: "mismatch" as const, list: mismatch },
+  ].filter((p) => p.list.length > 0);
+
+  return (
+    <div className="rounded-[10px] border border-line bg-card p-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <p className="text-sm font-medium text-ink">{headline}</p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink3">
+          {(["allowed", "mismatch", "blocked", "unknown"] as const)
+            .filter((st) => count(st) > 0)
+            .map((st) => (
+              <span key={st} className="flex items-center gap-1.5">
+                <StatusChip glyph={BOT_TILE[st].glyph} color={BOT_TILE[st].color} size={13} />
+                {BADGE[st].text} {count(st)}
+              </span>
+            ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        {results.map((r) => (
+          <div
+            key={r.ua}
+            title={`${r.ua} · ${r.matchedRule}`}
+            className="rounded-lg border border-line bg-paper p-2.5"
+          >
+            <div className="flex items-center gap-1.5">
+              <StatusChip glyph={BOT_TILE[r.status].glyph} color={BOT_TILE[r.status].color} size={16} />
+              <span className="truncate text-[11px] font-medium text-ink2">{BADGE[r.status].text}</span>
+            </div>
+            <p className="mt-1.5 text-xs leading-snug font-medium text-ink">{r.label}</p>
+            <p className="mono mt-0.5 truncate text-[10px] text-ink3">{r.ua}</p>
+          </div>
+        ))}
+      </div>
+
+      {problems.map((p) => {
+        const names = p.list.length === results.length ? `這 ${results.length} 家 AI 引擎` : p.list.map((r) => r.label).join("、");
+        const detail = botAccessImpact(p.status, names);
+        if (!detail) return null;
+        return (
+          <div key={p.status} className="mt-4">
+            <CheckBody
+              c={{
+                key: `bot-${p.status}`,
+                level: "",
+                category: "",
+                item: "AI 爬蟲的存取權限",
+                status: p.status === "blocked" ? "fail" : "warn",
+                advice: "",
+                impact: detail.impact,
+                technical: `${p.list.map((r) => `${r.ua}：${r.matchedRule}`).join("；")}。${detail.technical}`,
+              }}
+              origin={origin}
+              withAdvice={false}
+            />
+          </div>
+        );
+      })}
+
+      {/* 全部正常時也要給得出「憑什麼這樣判」——判定依據收在這裡，不佔版面 */}
+      {problems.length === 0 && (
+        <div className="mt-4">
+          <button
+            type="button"
+            onClick={() => setShowRules((v) => !v)}
+            className="mono text-xs text-ink3 underline decoration-limeDark decoration-2 underline-offset-2 hover:text-ink"
+          >
+            {showRules ? "收合判定依據" : "判定依據"}
+          </button>
+          {showRules && (
+            <div className="mt-2 space-y-1 rounded-lg border border-line bg-paper p-3">
+              {results.map((r) => (
+                <p key={r.ua} className="mono text-[11px] leading-relaxed text-ink3">
+                  <span className="text-ink2">{r.ua}</span>：{r.matchedRule}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function renderAnswerMarkdown(text: string, citations: { url: string }[]): React.ReactNode {
   const paragraphs = text.split(/\n{2,}/).filter((p) => p.trim());
   return paragraphs.map((para, pi) => (
@@ -2554,65 +2672,7 @@ export default function HomeClient({
             <h2 className="eyebrow mt-8 mb-3">各家 AI 爬蟲的存取權限</h2>
             <BotAccessList results={engine.results} origin={engine.origin} />
 
-            {engine.contentSignals && (
-              <div className="mt-8">
-                <h2 className="eyebrow mb-3">內容使用授權（Content Signals）</h2>
-                <div className="rounded-[10px] border border-line bg-card p-5">
-                  {engine.contentSignals.declared ? (
-                    <>
-                      <p className="text-sm text-ink2">這個網站有表態，宣告內容可以被拿去做什麼用途：</p>
-                      <div className="mt-4 space-y-3">
-                        {engine.contentSignals.items.map((s) => (
-                          <div key={s.key}>
-                            <div className="flex items-start justify-between gap-4">
-                              <div>
-                                <p className="text-sm font-medium text-ink">{s.label}</p>
-                                <p className="text-xs text-ink3">{s.meaning}</p>
-                              </div>
-                              <span
-                                className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${SIGNAL_BADGE[s.value].className}`}
-                              >
-                                {SIGNAL_BADGE[s.value].text}
-                              </span>
-                            </div>
-                            {/* 這裡只對「未表態」給建議：declared=true 代表網站已經在用
-                                Content-Signal，其他欄位有明確表態，唯獨這項沒寫，才是留白
-                                可以補的地方。「不允許」是網站主動的表態（例如故意擋 AI
-                                訓練），不是缺陷，不該建議使用者去改別人的立場。 */}
-                            {s.value === "unset" && (
-                              <div className="mt-2">
-                                <CheckBody
-                                  c={{
-                                    key: s.key,
-                                    level: "",
-                                    category: "",
-                                    item: `${s.label}授權`,
-                                    status: "warn",
-                                    advice: "",
-                                    impact: `${s.label}這一項你還沒表態，等於留給各家 AI 引擎自己認定要不要這樣用你的內容。它們認定的方向不一定跟你想的一樣，而且你不會收到通知。`,
-                                    technical: `在 robots.txt 的 Content-Signal 欄位加上 ${s.key}=yes 或 ${s.key}=no 就是明確表態。`,
-                                  }}
-                                  withAdvice={false}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      <p className="mono mt-4 text-xs break-all text-ink3">
-                        Content-Signal: {engine.contentSignals.raw}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-sm leading-relaxed text-ink2">
-                      這個網站還沒有宣告 Content Signals。這是 Cloudflare 在 2025 年提出、寫在 robots.txt
-                      裡的新欄位，可以分別表明你的內容<strong>能不能被搜尋索引、能不能當 AI 回答的來源、能不能拿去訓練模型</strong>
-                      ——這三件事是分開的。想擋訓練但保留 AI 引用，就得靠它，光用 Allow / Disallow 表達不了。
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
+            {engine.contentSignals && <ContentSignalsSection signals={engine.contentSignals} />}
 
             {engine.llmsTxt.exists !== null && <LlmsTxtCard llmsTxt={engine.llmsTxt} />}
 
