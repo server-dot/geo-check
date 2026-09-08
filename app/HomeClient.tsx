@@ -5,6 +5,7 @@ import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
 import Section from "@/components/marketing/Section";
 import Footer from "@/components/marketing/Footer";
+import { tallyCitedDomains } from "@/lib/geo-cited-domains";
 
 // 首頁 hero 下面的三格數字帶，掛載時跑一次 1100ms 的 ease-out-cubic count-up
 // （跟設計稿 dc-runtime 的 componentDidMount 那段動畫邏輯一致）。
@@ -1566,6 +1567,24 @@ export default function HomeClient({
     : [];
   const activeKeywords = [...addedSuggestions, ...customKeywords];
 
+  // 把所有關鍵字查詢的引用來源彙總成一份「AI 目前的推薦名單」。
+  // 純前端計算，資料是已經查回來的 keywordResults，不會多花任何 API 額度。
+  const citedDomains = tallyCitedDomains(
+    Object.entries(keywordResults).flatMap(([keyword, results]) =>
+      results.map((r) => ({ keyword, citations: r.citations })),
+    ),
+  );
+  // Perplexity 一個回答就會帶 20 筆引用，兩個關鍵字查下來動輒四十個網域，
+  // 其中絕大多數只出現一次——那是長尾，不是 AI 真的在推的名單。畫面只列前十，
+  // 剩下的用一句話帶過就好，不要逼使用者自己從四十行裡找重點。
+  const TOP_DOMAINS = 10;
+  const topDomains = citedDomains.slice(0, TOP_DOMAINS);
+  const restDomainCount = citedDomains.length - topDomains.length;
+  // 自己有被引用、但排在前十以外時要單獨補一列出來——不然畫面上既看不到自己、
+  // 又不會出現「沒進名單」那句話，等於什麼都沒講。
+  const selfRank = citedDomains.findIndex((d) => d.isSelf);
+  const selfBelowTop = selfRank >= TOP_DOMAINS ? { rank: selfRank + 1, domain: citedDomains[selfRank] } : null;
+
   function addSuggestedKeyword(k: string) {
     setAddedSuggestions((prev) => [...prev, k]);
   }
@@ -1987,6 +2006,66 @@ export default function HomeClient({
                         </div>
                       </div>
                     ))}
+                </div>
+              )}
+
+              {citedDomains.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-[17px] font-bold text-ink">這些關鍵字底下，AI 在推誰</h3>
+                  <p className="mb-3 mt-1.5 max-w-[34em] text-xs text-ink3">
+                    把上面每個回答的引用來源依網域彙總起來，就是 AI 目前的推薦名單，依被引用次數排序。名單裡通常會混進百科、社群、論壇——那是 AI 找資料的地方，不是你的同業；要看的是跟你做同一件事、卻被引用到的那幾個網域。
+                  </p>
+                  <div className="rounded-[10px] border border-line bg-card p-6">
+                    <ol className="space-y-2.5">
+                      {topDomains.map((d, i) => (
+                        <li key={d.domain} className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                          <span className="mono w-5 shrink-0 text-right text-xs text-ink3">{i + 1}</span>
+                          <a href={d.sampleUrl} target="_blank" rel="noopener noreferrer" className="mono break-all text-sm">
+                            {d.domain}
+                          </a>
+                          {d.isSelf && (
+                            <span className="rounded-full border border-lime px-2 py-0.5 text-[11px] font-semibold text-ink">
+                              你的網站
+                            </span>
+                          )}
+                          <span className="mono text-xs text-ink3">{d.count} 次</span>
+                          <span className="text-xs text-ink3">
+                            {d.keywords.map((k) => `「${k}」`).join("")}
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                    {selfBelowTop && (
+                      <div className="mt-3 flex flex-wrap items-baseline gap-x-2.5 gap-y-1 border-t border-line pt-3">
+                        <span className="mono w-5 shrink-0 text-right text-xs text-ink3">{selfBelowTop.rank}</span>
+                        <a
+                          href={selfBelowTop.domain.sampleUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mono break-all text-sm"
+                        >
+                          {selfBelowTop.domain.domain}
+                        </a>
+                        <span className="rounded-full border border-lime px-2 py-0.5 text-[11px] font-semibold text-ink">
+                          你的網站
+                        </span>
+                        <span className="mono text-xs text-ink3">{selfBelowTop.domain.count} 次</span>
+                        <span className="text-xs text-ink3">
+                          {selfBelowTop.domain.keywords.map((k) => `「${k}」`).join("")}
+                        </span>
+                      </div>
+                    )}
+                    {restDomainCount > 0 && (
+                      <p className="mt-3 text-xs text-ink3">
+                        另外還有 {restDomainCount} 個網域被引用過，多半只出現一次，屬於長尾，這裡不列。
+                      </p>
+                    )}
+                    {!citedDomains.some((d) => d.isSelf) && (
+                      <p className="mt-4 border-t border-line pt-3 text-sm text-ink2">
+                        你的網站沒有出現在這份名單裡。AI 現在拿來當答案的是上面那些網域。
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
