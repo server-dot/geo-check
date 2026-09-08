@@ -98,7 +98,7 @@ export default function SchemaArticlePage() {
           <div>
             <div className="k">本文對應的檢測項目</div>
             <div className="mt-3.5 rounded-[10px] bg-ink p-5 text-paper">
-              <p className="text-[15px] font-semibold">結構化資料 (Schema)</p>
+              <p className="text-[15px] font-semibold">有沒有讓 AI 看懂的結構化資料</p>
               <p className="mono mt-2 text-xs leading-[1.7] text-[#a9b5ac]">
                 正常 / 可優化 / 需處理
               </p>

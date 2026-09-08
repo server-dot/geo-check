@@ -179,9 +179,9 @@ export interface SchemaPage {
   jsonLdNodes: JsonLdNode[];
 }
 
-// 「Local Business 標籤設定」：逐頁檢查 LocalBusiness 家族節點的關鍵欄位完整度
+// 「有沒有標示店家資訊」：逐頁檢查 LocalBusiness 家族節點的關鍵欄位完整度
 export function buildLocalBizCheck(pages: SchemaPage[]): CheckResult {
-  const base = { key: 'localbiz', level: LEVEL.EFFICIENCY, category: CATEGORY.LOCAL_BRAND, item: 'Local Business 標籤設定' };
+  const base = { key: 'localbiz', level: LEVEL.EFFICIENCY, category: CATEGORY.LOCAL_BRAND, item: '有沒有標示店家資訊' };
   const foundTypes = new Set<string>();
   const details: { url: string; note: string }[] = [];
   let deployedPages = 0;
@@ -216,25 +216,30 @@ export function buildLocalBizCheck(pages: SchemaPage[]): CheckResult {
       return {
         ...base,
         status: 'ok',
-        advice: '未部署 LocalBusiness 標籤，但 Organization 已帶聯絡地址——LocalBusiness 是給有實體可到訪地點的商家用的加分標籤，純線上服務不需要加',
-        evidence: 'Organization 已含 address',
+        advice: '沒有標成「實體店家」，但已經有標示聯絡地址——實體店家標籤是給有門市、客人可以走進來的生意用的，純線上服務不用加',
+        technical: '未偵測到 LocalBusiness 家族節點，但 Organization 已帶 address。',
+        evidence: '已含聯絡地址',
       };
     }
     return {
       ...base,
       status: 'warn',
-      advice: '全站未偵測到 LocalBusiness 標籤，也沒有其他管道揭露聯絡地址。如果有實體門市或可到訪地點，建議部署 LocalBusiness 標籤方便在地搜尋收錄；純線上服務可以不用理會這項',
+      advice: '全站找不到店家資訊，也沒有任何地方寫出聯絡地址。',
+      impact: '有人問 AI「附近有沒有推薦的 OO」時，AI 要先知道你有實體地點、在哪裡、幾點開，才可能把你算進去。這些資訊沒有標出來，在地推薦的名單就不會有你。純線上服務可以不用理會這一項。',
+      technical: '未偵測到 LocalBusiness 家族節點，Organization 也沒帶 address。有實體門市的話補上 LocalBusiness 標籤。',
       evidence: '（無）',
     };
   }
   const typesText = [...foundTypes].join('、');
   if (completePages === deployedPages) {
-    return { ...base, status: 'ok', advice: `全站已部署 ${typesText} 標籤，地址、電話、營業時間欄位皆完整（${completePages}/${deployedPages} 頁）`, evidence: `${completePages}/${deployedPages} 頁欄位完整` };
+    return { ...base, status: 'ok', advice: `店家資訊完整，地址、電話、營業時間都有（${completePages}/${deployedPages} 頁）`, technical: `已部署 ${typesText} 標籤。`, evidence: `${completePages}/${deployedPages} 頁欄位完整` };
   }
   return {
     ...base,
     status: 'warn',
-    advice: `全站已部署 ${typesText} 標籤，但 ${deployedPages - completePages}/${deployedPages} 頁欄位不完整，例如：${details.slice(0, 3).map((d) => d.note).join('；')}。建議把缺漏的欄位補齊，欄位越完整，AI 越容易正確解讀你的商家／商品資訊。`,
+    advice: `有標示店家資訊，但 ${deployedPages} 頁裡有 ${deployedPages - completePages} 頁沒填完，例如：${details.slice(0, 3).map((d) => d.note).join('；')}。`,
+    impact: '缺哪一欄，AI 回答時就答不出那一項。少了營業時間，別人問「現在有開嗎」就輪不到你被推薦。',
+    technical: `已部署 ${typesText} 標籤，但關鍵欄位有缺。補齊缺漏欄位即可。`,
     evidence: `${completePages}/${deployedPages} 頁欄位完整`,
     details,
   };
@@ -258,9 +263,9 @@ function isAbsoluteUrl(u: string): boolean {
   return /^https?:\/\//i.test(u);
 }
 
-// 「結構化數據 (Schema)」：純規則判斷全站 JSON-LD 完整度，不再叫 AI 猜
+// 「有沒有讓 AI 看懂的結構化資料」：純規則判斷全站 JSON-LD 完整度，不再叫 AI 猜
 export function buildSchemaCompletenessCheck(pages: SchemaPage[]): CheckResult {
-  const base = { key: 'schema', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '結構化資料 (Schema)' };
+  const base = { key: 'schema', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '有沒有讓 AI 看懂的結構化資料' };
   const allTypes = new Set<string>();
   const details: { url: string; note: string }[] = [];
   let importantNodeCount = 0;
@@ -285,19 +290,21 @@ export function buildSchemaCompletenessCheck(pages: SchemaPage[]): CheckResult {
   }
 
   if (allTypes.size === 0) {
-    return { ...base, status: 'fail', advice: '全站原始碼找不到任何 JSON-LD 結構化資料。建議依頁面性質部署對應的 Schema（例如商家頁用 LocalBusiness、商品頁用 Product、文章頁用 Article，並搭配 BreadcrumbList），讓 AI 更容易正確解讀頁面內容。', evidence: '（無）' };
+    return { ...base, status: 'fail', advice: '全站找不到任何結構化資料。', impact: '結構化資料是把「這是商家、這是商品、這是文章，地址電話是什麼」直接標給機器看。沒有的話，AI 只能從版面自己猜——猜錯就會把你的價格、地址、服務內容講錯，而且你不會知道它講錯了。', technical: '全站原始碼沒有 JSON-LD。依頁面性質部署：商家頁用 LocalBusiness、商品頁用 Product、文章頁用 Article，搭配 BreadcrumbList。', evidence: '（無）' };
   }
   const typesText = [...allTypes].join('、');
   if (importantNodeCount === 0) {
-    return { ...base, status: 'warn', advice: `全站偵測到 ${typesText}，但未偵測到 LocalBusiness / Product / Article 等關鍵型別。建議依頁面性質補上對應的 Schema（商家頁用 LocalBusiness、商品頁用 Product、文章頁用 Article），這些是 AI 判讀業務內容最直接依賴的型別。`, evidence: typesText };
+    return { ...base, status: 'warn', advice: '有結構化資料，但只標了網頁本身的基本資訊，沒有標出你實際在賣什麼。', impact: '目前標的都是「這是一個網頁」「這是麵包屑」這類技術性資訊，AI 從裡面看不出你是店家、賣什麼商品、寫了什麼文章——而那些才是它介紹你的時候真正會用到的資訊。', technical: `全站偵測到 ${typesText}，但沒有 LocalBusiness／Product／Article 這類關鍵型別。依頁面性質補上。`, evidence: typesText };
   }
   if (incompleteCount === 0) {
-    return { ...base, status: 'ok', advice: `全站偵測到 ${typesText}，關鍵型別（LocalBusiness / Product / Article）欄位皆完整`, evidence: typesText };
+    return { ...base, status: 'ok', advice: '結構化資料完整，該標的都標了、欄位也都有填', technical: `全站偵測到 ${typesText}，關鍵型別（LocalBusiness／Product／Article）欄位皆完整。`, evidence: typesText };
   }
   return {
     ...base,
     status: 'warn',
-    advice: `全站偵測到 ${typesText}，其中 ${incompleteCount}/${importantNodeCount} 個關鍵節點欄位不完整，例如：${details.slice(0, 3).map((d) => d.note).join('；')}。建議把缺漏的欄位補齊，欄位越完整，AI 越容易正確解讀這些節點代表的商家／商品／文章資訊。`,
+    advice: `有結構化資料，但 ${importantNodeCount} 個關鍵標記裡有 ${incompleteCount} 個沒填完，例如：${details.slice(0, 3).map((d) => d.note).join('；')}。`,
+    impact: '缺哪一欄，AI 回答時就答不出那一項——沒填價格就答不出多少錢，沒填作者就看不出這篇文章是誰寫的。缺得越多，AI 越只能拿別人的資料來補。',
+    technical: `全站偵測到 ${typesText}。把缺漏欄位補齊即可，型別本身已經對了。`,
     evidence: typesText,
     details,
   };

@@ -58,14 +58,14 @@ const VERDICTS = [
 
 const CATEGORIES = [
   { name: "AI 可達性", contains: "爬蟲存取 8 項 + Content Signals + llms.txt", count: "10 項" },
-  { name: "內容與追蹤", contains: "重複內容、外部連結、追蹤碼、title/description 長度", count: "4 項" },
-  { name: "結構化資料", contains: "結構化資料完整度、Local Business 標籤設定", count: "2 項" },
+  { name: "內容與追蹤", contains: "重複內容、引用外部來源、流量分析工具、每頁標題與描述", count: "4 項" },
+  { name: "結構化資料", contains: "結構化資料完整度、店家資訊標示", count: "2 項" },
   {
     name: "技術與索引",
-    contains: "sitemap、robots、索引、h1/h2、llms.txt、404、viewport、麵包屑、內外部連結、首頁、圖片 alt/格式",
+    contains: "網站地圖、robots.txt、收錄設定、大小標題、llms.txt、失效頁面、手機排版、頁面位置標示、內部連結、首頁、圖片說明與格式",
     count: "13 項",
   },
-  { name: "品牌與權威", contains: "E-E-A-T、分類層級是否清楚", count: "2 項" },
+  { name: "品牌與權威", contains: "網站可信度、分類層級", count: "2 項" },
 ];
 
 const FAQS = [

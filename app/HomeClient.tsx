@@ -131,7 +131,8 @@ interface ContentSignals {
 
 interface WafHint {
   vendor: string;
-  advice: string;
+  impact: string;
+  technical: string;
 }
 
 interface VisibilityCardData {
@@ -164,6 +165,7 @@ interface LlmsTxtQuality {
   links: LlmsTxtLink[];
   charCount: number;
   advice: string;
+  technical?: string;
 }
 
 interface EngineResult {
@@ -189,6 +191,8 @@ interface CheckItem {
   item: string;
   status: CheckStatus;
   advice: string;
+  impact?: string;
+  technical?: string;
   evidence?: string;
   details?: { url: string; note: string }[];
 }
@@ -249,37 +253,14 @@ const CHECK_UI: Record<CheckStatus, { badge: string; text: string }> = {
   fail: { badge: "bg-fail/10 text-fail border-fail/30", text: "需處理" },
 };
 
-// advice 是「現況＋建議」寫在同一句的自由文字（21 種檢測各自組字串，格式不統一），
-// 不是結構化的兩個欄位。只在句號斷句能切出一句完整的「建議」句子時才拆
-// （例如「...沒有其他管道揭露聯絡地址。如果有實體門市，建議部署...」）；
-// 曾經多加一條「逗號＋建議」的退路，實測會切出「補齊並控制長度」這種脫離
-// 上下文的殘句（原句是「...Description 過長 23，建議補齊並控制長度」，
-// 「補齊」什麼、「控制」什麼的長度，切開後完全看不出來）——這種半吊子的
-// 建議框比不切還糟，所以拿掉，寧可整段照舊當一般文字顯示。
-function splitAdviceSuggestion(advice: string): { diagnosis: string; suggestion: string | null } {
-  const sentences = advice.split("。").filter((s) => s.trim());
-  if (sentences.length >= 2 && sentences[sentences.length - 1].includes("建議")) {
-    const suggestion = sentences[sentences.length - 1].trim().replace(/^建議[：:]?\s*/, "");
-    const diagnosis = sentences.slice(0, -1).join("。") + "。";
-    return { diagnosis, suggestion };
-  }
-  return { diagnosis: advice, suggestion: null };
-}
+// 現況文字。原本這裡還有一個 splitAdviceSuggestion()，用「句號切開、看最後一句
+// 有沒有『建議』兩字」去猜哪裡是建議——它的註解自己記錄過切出「補齊並控制長度」
+// 這種脫離上下文的殘句。後端改成明確給 advice／impact／technical 三個欄位之後，
+// 前端不用再猜，整個解析器連同 AdviceDiagnosis 一起刪掉。
 
-// 現況文字＋ mono 證據數據（不含建議提示框——桌機表格版要把提示框拉出去
-// 獨立一整列，卡片版才會把它接在下面一起顯示，所以現況跟建議框拆成兩個
-// 元件，各自的排版各自組合，不要耦合在一起）。
-function AdviceDiagnosis({ c, diagnosis }: { c: CheckItem; diagnosis: string }) {
-  return (
-    <>
-      {diagnosis}
-      {c.evidence && <p className="evidence mono mt-1 text-xs text-ink3">{c.evidence}</p>}
-    </>
-  );
-}
-
-// 改善建議常常提到專有名詞（robots.txt、WAF、Content-Signal…），使用者不一定知道
-// 那是什麼、去哪裡查——直接連去對應的 GEO 知識文章，不用自己再搜尋一次。
+// 報告文案刻意保留少數幾個專有名詞——不是沒清乾淨，是這幾個有對應的知識文章，
+// 留著才有錨點可以把讀者帶進 /geo 知識庫。沒有文章可連的術語（TKD、canonical、
+// noindex、SSR/SSG、aria-hidden…）一律收進技術細節區，不留在白話文案裡。
 // 按長度由長到短排序，避免「Content-Signal」被短的子字串先搶走比對。
 const SUGGESTION_GLOSSARY: { term: string; href: string }[] = [
   { term: "Content-Signal", href: "/geo/content-signals-declare" },
@@ -295,17 +276,28 @@ const SUGGESTION_GLOSSARY_PATTERN = new RegExp(
   "g",
 );
 
-function linkifySuggestion(text: string): React.ReactNode {
+// seen 是同一個檢測項目共用的一組已連過的術語：現況、影響、技術細節三段文字
+// 依序穿過同一個 Set，同一個詞在同一列只會變成一次連結。不去重的話「robots.txt」
+// 一列出現三次就變成三個一模一樣的連結，看起來像在洗內部連結。
+//
+// 連結樣式用具名 class 不用 Tailwind 的 decoration-* utility：globals.css 的
+// a { text-decoration-color: ... } 沒包 @layer，一律贏過 utilities——原本寫的
+// decoration-current/40 其實從來沒生效過。
+function linkifyGlossary(text: string, seen?: Set<string>): React.ReactNode {
   const tokens: React.ReactNode[] = [];
   let last = 0;
   let key = 0;
   let m: RegExpExecArray | null;
+  SUGGESTION_GLOSSARY_PATTERN.lastIndex = 0;
   while ((m = SUGGESTION_GLOSSARY_PATTERN.exec(text))) {
+    const term = m[0];
+    if (seen?.has(term)) continue;
+    seen?.add(term);
     if (m.index > last) tokens.push(text.slice(last, m.index));
-    const entry = SUGGESTION_GLOSSARY.find((g) => g.term === m![0]);
+    const entry = SUGGESTION_GLOSSARY.find((g) => g.term === term);
     tokens.push(
-      <Link key={key++} href={entry!.href} className="underline decoration-current/40 underline-offset-2 hover:decoration-current">
-        {m[0]}
+      <Link key={key++} href={entry!.href} className="glossary-link">
+        {term}
       </Link>,
     );
     last = SUGGESTION_GLOSSARY_PATTERN.lastIndex;
@@ -314,27 +306,86 @@ function linkifySuggestion(text: string): React.ReactNode {
   return tokens;
 }
 
-function SuggestionBox({ status, suggestion }: { status: CheckStatus; suggestion: string }) {
+// 「這代表什麼」——講後果，不教修法。工具的定位是讓對方認知到問題存在，
+// 真的要修的話下面有諮詢入口，那才是我們的服務範圍。
+function ImpactBox({
+  status,
+  impact,
+  consultFor,
+  origin,
+  seen,
+}: {
+  status: CheckStatus;
+  impact: string;
+  consultFor?: string;
+  origin?: string;
+  seen?: Set<string>;
+}) {
   return (
     <div className={`rounded-md border px-3 py-2 text-sm leading-relaxed ${CHECK_UI[status].badge}`}>
-      <p className="mb-0.5 font-semibold">改善建議</p>
-      <p>{linkifySuggestion(suggestion)}</p>
+      <p className="mb-0.5 font-semibold">這代表什麼</p>
+      <p>{linkifyGlossary(impact, seen)}</p>
+      {status === "fail" && consultFor && (
+        <div className="mt-2 flex justify-end border-t border-current/15 pt-2">
+          <ConsultLink item={consultFor} origin={origin} />
+        </div>
+      )}
     </div>
   );
 }
 
-// 窄螢幕卡片版：現況跟建議框直接疊在同一塊裡（沒有 colspan 這種表格限定的概念，
-// 疊在一起本來就是卡片自然的排法）。桌機表格版另外處理，見 AuditTable。
-function AdviceCell({ c }: { c: CheckItem }) {
-  const split = c.status !== "ok" ? splitAdviceSuggestion(c.advice) : null;
+// 只掛在「需處理」的項目上。刻意做成一行小字連結而不是按鈕——一份報告可能有
+// 六七項需處理，每項一顆色塊按鈕整頁會變成業配。視覺重量跟旁邊的「技術細節」
+// 對齊，讀者掃描時可以直接略過。
+function ConsultLink({ item, origin }: { item: string; origin?: string }) {
+  const params = new URLSearchParams({ topic: "report", item });
+  if (origin) params.set("url", origin);
   return (
-    <>
-      <AdviceDiagnosis c={c} diagnosis={split?.suggestion ? split.diagnosis : c.advice} />
-      {split?.suggestion && (
-        <div className="mt-2">
-          <SuggestionBox status={c.status} suggestion={split.suggestion} />
+    <Link href={`/contact?${params.toString()}`} className="glossary-link mono text-xs">
+      找我們處理這一項 →
+    </Link>
+  );
+}
+
+// 技術細節：術語、判定依據、門檻值、原始證據字串都收在這裡，預設收合。
+// 不用 DetailsToggle（那是彈窗，給「問題頁面」那種需要捲動的長清單用的），
+// 沿用檔案裡已經有兩處在用的行內展開版型。
+function TechDetails({ c, seen }: { c: CheckItem; seen?: Set<string> }) {
+  const [open, setOpen] = useState(false);
+  if (!c.technical && !c.evidence) return null;
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="mono text-xs text-ink3 underline decoration-limeDark decoration-2 underline-offset-2 hover:text-ink"
+      >
+        {open ? "收合技術細節" : "技術細節"}
+      </button>
+      {open && (
+        <div className="mt-2 rounded-lg border border-line bg-paper p-3 text-xs leading-relaxed text-ink2">
+          {c.technical && <p>{linkifyGlossary(c.technical, seen)}</p>}
+          {c.evidence && <p className={`evidence mono text-ink3 ${c.technical ? "mt-1.5" : ""}`}>{c.evidence}</p>}
         </div>
       )}
+    </div>
+  );
+}
+
+// 一個檢測項目的完整內容：現況 → 影響框（含諮詢入口）→ 技術細節。
+// 桌機表格版跟窄螢幕卡片版共用同一份，不要維護兩套排版邏輯。
+// seen 在這裡建立，讓三段文字共用一組去重過的術語連結。
+function CheckBody({ c, origin, withAdvice = true }: { c: CheckItem; origin?: string; withAdvice?: boolean }) {
+  const seen = new Set<string>();
+  return (
+    <>
+      {withAdvice && linkifyGlossary(c.advice, seen)}
+      {c.impact && (
+        <div className={withAdvice ? "mt-2" : undefined}>
+          <ImpactBox status={c.status} impact={c.impact} consultFor={c.item} origin={origin} seen={seen} />
+        </div>
+      )}
+      <TechDetails c={c} seen={seen} />
     </>
   );
 }
@@ -704,7 +755,7 @@ function DetailsToggle({ title, details }: { title: string; details: { url: stri
 // 單一深度健檢項目的「卡片列」呈現（狀態徽章＋項目名稱＋建議說明＋問題頁面連結）。
 // AuditTable 的窄螢幕卡片版跟「結構化資料」專區共用同一份呈現邏輯，保持視覺語言一致，
 // 不要兩份幾乎一樣的 JSX 各自維護。
-function CheckRow({ c }: { c: CheckItem }) {
+function CheckRow({ c, origin }: { c: CheckItem; origin?: string }) {
   const ui = CHECK_UI[c.status];
   return (
     <div className="flex flex-col gap-1.5 p-4">
@@ -713,7 +764,7 @@ function CheckRow({ c }: { c: CheckItem }) {
         <p className="text-sm font-medium text-ink">{c.item}</p>
       </div>
       <div className="text-sm text-ink2">
-        <AdviceCell c={c} />
+        <CheckBody c={c} origin={origin} />
       </div>
       {c.details && c.details.length > 0 && (
         <div className="flex justify-end">
@@ -1073,7 +1124,7 @@ function SchemaSection({
           <>
             {schemaCards.length === 0 && schemaCheck && (
               <div className="rounded-[10px] border border-ink/15 bg-card">
-                <CheckRow c={schemaCheck} />
+                <CheckRow c={schemaCheck} origin={origin} />
               </div>
             )}
 
@@ -1087,7 +1138,7 @@ function SchemaSection({
 
             {needsLocalBizNote && (
               <div className={`rounded-[10px] border border-ink/15 bg-card ${schemaCards.length > 0 ? "mt-3" : ""}`}>
-                <CheckRow c={localBizCheck!} />
+                <CheckRow c={localBizCheck!} origin={origin} />
               </div>
             )}
           </>
@@ -1099,7 +1150,7 @@ function SchemaSection({
   );
 }
 
-function AuditTable({ checks }: { checks: CheckItem[] }) {
+function AuditTable({ checks, origin }: { checks: CheckItem[]; origin?: string }) {
   const groups = new Map<string, CheckItem[]>();
   for (const c of checks) {
     const g = groups.get(c.category) ?? [];
@@ -1151,26 +1202,24 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
                   <tr>
                     <th>狀態</th>
                     <th>項目</th>
-                    <th>建議</th>
+                    <th>現況</th>
                     <th>問題頁面</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((c) => {
                     const ui = CHECK_UI[c.status];
-                    const split = c.status !== "ok" ? splitAdviceSuggestion(c.advice) : null;
+                    const hasDetail = !!(c.impact || c.technical || c.evidence);
                     return (
                       <Fragment key={c.key}>
-                        <tr className={split?.suggestion ? "has-suggestion" : undefined}>
+                        <tr className={hasDetail ? "has-detail" : undefined}>
                           <td>
                             <span className={`mono rounded-full border px-2 py-0.5 text-xs font-medium ${ui.badge}`}>
                               {ui.text}
                             </span>
                           </td>
                           <td className="item">{c.item}</td>
-                          <td className="text-ink2">
-                            <AdviceDiagnosis c={c} diagnosis={split?.suggestion ? split.diagnosis : c.advice} />
-                          </td>
+                          <td className="text-ink2">{linkifyGlossary(c.advice)}</td>
                           <td>
                             {c.details && c.details.length > 0 ? (
                               <DetailsToggle title={c.item} details={c.details} />
@@ -1179,12 +1228,12 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
                             )}
                           </td>
                         </tr>
-                        {/* 改善建議獨立一整列橫跨到底，不縮在建議欄裡——欄寬只有 58%，
-                            長一點的建議文字擠在裡面比擠在整列窄很多，橫跨可以用滿版面寬度。 */}
-                        {split?.suggestion && (
-                          <tr className="suggestion-row">
+                        {/* 影響框與技術細節獨立一整列橫跨到底，不縮在現況欄裡——那欄寬度
+                            只剩三百多 px，長一點的文字擠在裡面會被逼到逐字斷行。 */}
+                        {hasDetail && (
+                          <tr className="detail-row">
                             <td colSpan={4}>
-                              <SuggestionBox status={c.status} suggestion={split.suggestion} />
+                              <CheckBody c={c} origin={origin} withAdvice={false} />
                             </td>
                           </tr>
                         )}
@@ -1204,7 +1253,7 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
             <p className="mono mb-2 text-lg font-semibold tracking-wide text-lime-dark uppercase">{category}</p>
             <div className="divide-y divide-line2 rounded-[10px] border border-ink/15 bg-card">
               {rows.map((c) => (
-                <CheckRow key={c.key} c={c} />
+                <CheckRow key={c.key} c={c} origin={origin} />
               ))}
             </div>
           </div>
@@ -1218,20 +1267,26 @@ function AuditTable({ checks }: { checks: CheckItem[] }) {
 // 對所有 bot 一視同仁）收成一行摘要，不要 8 列一字不差的重複；
 // 有落差時（真正有故事可講——部分被擋、政策跟實測不一致）才展開逐項列表。
 // 收合只是預設呈現方式，不是藏資訊——一鍵可以展開看明細。
-// blocked／mismatch 才給建議：allowed 沒什麼好改的，unknown 是我們讀不到答案，
-// 沒有能指出的具體動作，硬塞建議只是空話。
-function botAccessSuggestion(status: BotStatus, label: string): string | null {
+// blocked／mismatch 才有話講：allowed 沒什麼好說的，unknown 是我們讀不到答案，
+// 硬塞一段影響說明只是空話。回傳白話影響 + 技術細節兩段，跟深度健檢同一套結構。
+function botAccessImpact(status: BotStatus, label: string): { impact: string; technical: string } | null {
   if (status === "blocked") {
-    return `在 robots.txt 加一條 Allow: /（或拿掉目前擋住 ${label} 的 Disallow 規則），這家引擎才能讀到你的頁面。`;
+    return {
+      impact: `${label}被你的 robots.txt 擋在門外。它讀不到你的頁面，就不可能在回答裡引用你——這不是「排名比較後面」，是根本不在名單裡。`,
+      technical: `robots.txt 有一條 Disallow 規則命中這個爬蟲。加一條 Allow: /，或拿掉那條 Disallow 規則。`,
+    };
   }
   if (status === "mismatch") {
-    return `robots.txt 已經允許 ${label}，但實測連線被擋下，問題出在 WAF／CDN，不是 robots.txt。去防火牆設定裡把這個爬蟲的 User-Agent 或官方公告的來源 IP 段加進白名單。`;
+    return {
+      impact: `你的 robots.txt 明明允許${label}，但實際連線被擋下來了。問題出在 WAF，不是 robots.txt——你以為開著的門，其實是關的，而且從外面看不出來。`,
+      technical: `政策層允許，但用該爬蟲的 User-Agent 實測請求被擋。到防火牆設定把這個 User-Agent，或官方公告的來源 IP 段加進白名單。注意進階 WAF 會同時核對來源 IP，我們的探測不是從官方 IP 發出的，這裡只能說「UA 測試被擋」。`,
+    };
   }
   return null;
 }
 const BOT_SUGGESTION_STATUS: Partial<Record<BotStatus, CheckStatus>> = { blocked: "fail", mismatch: "warn" };
 
-function BotAccessList({ results }: { results: AiBotResult[] }) {
+function BotAccessList({ results, origin }: { results: AiBotResult[]; origin?: string }) {
   const [expanded, setExpanded] = useState(false);
   const uniform = results.length > 0 && results.every((r) => r.status === results[0].status);
 
@@ -1241,7 +1296,7 @@ function BotAccessList({ results }: { results: AiBotResult[] }) {
   if (uniform) {
     const status = results[0].status;
     const suggestStatus = BOT_SUGGESTION_STATUS[status];
-    const suggestion = suggestStatus && botAccessSuggestion(status, `這 ${results.length} 家 AI 引擎`);
+    const detail = suggestStatus && botAccessImpact(status, `這 ${results.length} 家 AI 引擎`);
     return (
       <div className="rounded-[10px] border border-line bg-card p-5">
         <div className="flex items-center justify-between gap-4">
@@ -1272,9 +1327,13 @@ function BotAccessList({ results }: { results: AiBotResult[] }) {
             ))}
           </div>
         )}
-        {suggestStatus && suggestion && (
+        {suggestStatus && detail && (
           <div className="mt-4">
-            <SuggestionBox status={suggestStatus} suggestion={suggestion} />
+            <CheckBody
+              c={{ key: "aiCrawlers", level: "", category: "", item: "AI 爬蟲的存取權限", status: suggestStatus, advice: "", impact: detail.impact, technical: detail.technical }}
+              origin={origin}
+              withAdvice={false}
+            />
           </div>
         )}
       </div>
@@ -1286,7 +1345,7 @@ function BotAccessList({ results }: { results: AiBotResult[] }) {
     <div className="divide-y divide-line rounded-[10px] border border-line bg-card">
       {results.map((r) => {
         const suggestStatus = BOT_SUGGESTION_STATUS[r.status];
-        const suggestion = suggestStatus && botAccessSuggestion(r.status, r.label);
+        const detail = suggestStatus && botAccessImpact(r.status, r.label);
         return (
           <div key={r.ua} className="px-5 py-4">
             <div className="flex items-center justify-between gap-4">
@@ -1300,9 +1359,13 @@ function BotAccessList({ results }: { results: AiBotResult[] }) {
                 {BADGE[r.status].text}
               </span>
             </div>
-            {suggestStatus && suggestion && (
+            {suggestStatus && detail && (
               <div className="mt-3">
-                <SuggestionBox status={suggestStatus} suggestion={suggestion} />
+                <CheckBody
+                  c={{ key: r.ua, level: "", category: "", item: `${r.label} 的存取權限`, status: suggestStatus, advice: "", impact: detail.impact, technical: `${r.matchedRule}。${detail.technical}` }}
+                  origin={origin}
+                  withAdvice={false}
+                />
               </div>
             )}
           </div>
@@ -1839,7 +1902,22 @@ export default function HomeClient({
                   {engine.wafHint && (
                     <div className="mt-3 rounded-lg border border-line bg-paper p-3 text-left">
                       <p className="text-xs font-semibold text-ink3">偵測到可能的原因：{engine.wafHint.vendor}</p>
-                      <p className="mt-1 text-sm text-ink2">{engine.wafHint.advice}</p>
+                      <div className="mt-2 text-sm text-ink2">
+                        <CheckBody
+                          c={{
+                            key: "waf",
+                            level: "",
+                            category: "",
+                            item: "防火牆把 AI 爬蟲擋在外面",
+                            status: "fail",
+                            advice: "",
+                            impact: engine.wafHint.impact,
+                            technical: engine.wafHint.technical,
+                          }}
+                          origin={engine.origin}
+                          withAdvice={false}
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2161,7 +2239,7 @@ export default function HomeClient({
             )}
 
             <h2 className="eyebrow mt-8 mb-3">各家 AI 爬蟲的存取權限</h2>
-            <BotAccessList results={engine.results} />
+            <BotAccessList results={engine.results} origin={engine.origin} />
 
             {engine.contentSignals && (
               <div className="mt-8">
@@ -2190,9 +2268,18 @@ export default function HomeClient({
                                 訓練），不是缺陷，不該建議使用者去改別人的立場。 */}
                             {s.value === "unset" && (
                               <div className="mt-2">
-                                <SuggestionBox
-                                  status="warn"
-                                  suggestion={`${s.label}還沒表態，等於留給各家 AI 引擎自行認定。想明確允許或封鎖，在 robots.txt 的 Content-Signal 加上 ${s.key}=yes 或 ${s.key}=no。`}
+                                <CheckBody
+                                  c={{
+                                    key: s.key,
+                                    level: "",
+                                    category: "",
+                                    item: `${s.label}授權`,
+                                    status: "warn",
+                                    advice: "",
+                                    impact: `${s.label}這一項你還沒表態，等於留給各家 AI 引擎自己認定要不要這樣用你的內容。它們認定的方向不一定跟你想的一樣，而且你不會收到通知。`,
+                                    technical: `在 robots.txt 的 Content-Signal 欄位加上 ${s.key}=yes 或 ${s.key}=no 就是明確表態。`,
+                                  }}
+                                  withAdvice={false}
                                 />
                               </div>
                             )}
@@ -2221,7 +2308,10 @@ export default function HomeClient({
                 進行中的畫面統一由最外層那張進度卡負責，這裡不用再重複一份。 */}
             <div className="mt-10">
               {status?.audit && (
-                <AuditTable checks={status.audit.filter((c) => c.key !== "schema" && c.key !== "localbiz")} />
+                <AuditTable
+                  checks={status.audit.filter((c) => c.key !== "schema" && c.key !== "localbiz")}
+                  origin={engine.origin}
+                />
               )}
             </div>
           </div>

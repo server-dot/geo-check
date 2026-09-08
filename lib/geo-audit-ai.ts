@@ -45,6 +45,8 @@ async function askOpenRouter(prompt: string, apiKey: string): Promise<string> {
   return data.choices?.[0]?.message?.content ?? '';
 }
 
+// prompt 裡的【文字規範】是必要的，不是保險：這一項的 advice／impact 是模型直接生成的，
+// 前端沒有任何過濾層擋得住它吐 E-E-A-T、JSON-LD 這種術語出來——要白話就得在源頭要求。
 function buildPrompt(input: AiAuditInput): string {
   return `你是資深 SEO／GEO 技術顧問。以下是一個網頁的內文摘要，請判斷 E-E-A-T 權威訊號足不足，給一個狀態與一句中文說明。
 
@@ -62,16 +64,22 @@ ${input.mainText || '（抓不到內文）'}
 - 可查證的客戶評論／實績（不是自我宣稱的「成功案例」文案，要有具體、可核實的細節）
 「有」的項目要引用內文原句當證據；「無」的項目直接寫「無」，不要編造理由。四項都無或幾乎都無→"fail"；有一兩項但薄弱→"warn"；多數項目充足→"ok"。
 
-針對「無」或薄弱的項目，給一句具體、可執行的改善建議——要根據這個頁面實際寫了什麼去建議，不能是「加強內容」這種空泛的話。例如：如果內文提到參與過講座、擔任業師、有具體專案案例，但沒有明顯寫出來或沒有外部連結佐證，就建議「把 XX 這個身份/連結放到更明顯的位置」；如果完全沒有任何線索，才建議「補上一段作者簡介」這類從零開始的建議。如果四項都已經足夠（status 是 "ok"），suggestion 可以留空字串。
+針對「無」或薄弱的項目，寫出這件事對這個品牌的實際影響——要根據這個頁面實際寫了什麼去講，不能是「會影響權威性」這種空泛的話。例如內文提到參與過講座、擔任業師、有具體專案案例，但沒有寫清楚也沒有外部連結佐證，就講「這些經歷 AI 讀不出來，別人問誰比較專業時你拿不出證據」。四項都已經足夠（status 是 "ok"）時，impact 留空字串。
 
-重要：evidence 跟 suggestion 都必須是你根據上面【頁面內文摘要】實際判斷出來的結果，不可以套用任何範例句子或制式說法交差；如果摘要裡真的找不到某一項的具體內容，evidence 就只寫「無」，不要杜撰細節。
+【文字規範】message 與 impact 這兩欄會直接顯示給不懂技術的品牌經營者看：
+- 只能用白話。不可以出現 E-E-A-T、schema、JSON-LD、author、Person、SERP、canonical 這類術語。
+- 不可以是祈使句，不可以出現「建議」「請」「加上」「補上」「部署」這類字眼。這份報告的用途是讓對方知道問題在哪，不是教他怎麼修。
+- 講「現在缺什麼、這對這個品牌的生意有什麼影響」，不要講怎麼做。
+- evidence 欄不受此限，那欄是給技術人員看的，維持原本格式。
+
+重要：evidence 跟 impact 都必須是你根據上面【頁面內文摘要】實際判斷出來的結果，不可以套用任何範例句子或制式說法交差；如果摘要裡真的找不到某一項的具體內容，evidence 就只寫「無」，不要杜撰細節。
 
 只回傳 JSON，格式如下（<> 內是需要你自己填入的內容，不是可以照抄的範例文字）：
-{"eeat":{"status":"<ok|warn|fail>","message":"<繁體中文一句話總結現況>","evidence":"作者資訊：<有/無>（<你判斷出的證據或留白>）｜專業證照：<有/無>（<證據或留白>）｜媒體報導：<有/無>（<證據或留白>）｜客戶評論：<有/無>（<證據或留白>）","suggestion":"<針對缺口的具體改善建議，或空字串>"}}`;
+{"eeat":{"status":"<ok|warn|fail>","message":"<繁體中文一句話總結現況，白話，不含術語與建議>","evidence":"作者資訊：<有/無>（<你判斷出的證據或留白>）｜專業證照：<有/無>（<證據或留白>）｜媒體報導：<有/無>（<證據或留白>）｜客戶評論：<有/無>（<證據或留白>）","impact":"<這些缺口對這個品牌的實際影響，一到兩句白話，或空字串>"}}`;
 }
 
 function parseAiJson(text: string): {
-  eeat?: { status?: string; message?: string; evidence?: string; suggestion?: string };
+  eeat?: { status?: string; message?: string; evidence?: string; impact?: string };
 } | null {
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) return null;
@@ -89,10 +97,18 @@ function normStatus(s: string | undefined): CheckStatus {
 export async function runAiChecks(input: AiAuditInput): Promise<CheckResult[]> {
   const apiKey = process.env.OPENROUTER_API_KEY;
 
-  const EEAT = { key: 'eeat', level: LEVEL.EFFICIENCY, category: CATEGORY.EXTERNAL, item: '符合 E-E-A-T 原則' };
+  const EEAT = { key: 'eeat', level: LEVEL.EFFICIENCY, category: CATEGORY.EXTERNAL, item: '網站看起來夠不夠可信' };
 
+  // 跑不出結果時要老實說「這次沒判斷出來」，不能講成「沒問題」也不能講成「有問題」——
+  // 跟 robots.txt 的三態同一個紀律。原因（缺 key、呼叫失敗）是我們的事，收進技術細節。
   const fallback = (reason: string): CheckResult[] => [
-    { ...EEAT, status: 'warn', advice: `未經 AI 判斷（${reason}）。建議稍後重新檢測，或請站方確認 OpenRouter API 額度／金鑰是否正常。` },
+    {
+      ...EEAT,
+      status: 'warn',
+      advice: '這一項這次沒有判斷出結果。',
+      impact: '這一項是靠 AI 讀你的內容來判斷的，這次沒跑成功。不代表你的網站有問題，也不代表沒問題——過一陣子重跑通常就有結果。',
+      technical: `未執行原因：${reason}`,
+    },
   ];
 
   if (!apiKey) return fallback('缺少 OPENROUTER_API_KEY');
@@ -108,13 +124,15 @@ export async function runAiChecks(input: AiAuditInput): Promise<CheckResult[]> {
   if (!parsed) return fallback('AI 回覆無法解析');
 
   const message = parsed.eeat?.message ?? '（AI 未提供說明）';
-  const suggestion = parsed.eeat?.suggestion?.trim();
+  const impact = parsed.eeat?.impact?.trim();
 
   return [
     {
       ...EEAT,
       status: normStatus(parsed.eeat?.status),
-      advice: suggestion ? `${message} 建議：${suggestion}` : message,
+      advice: message,
+      impact: impact || undefined,
+      // 四項信任訊號的逐項判定結果本來就是技術性的證據列，正好就是技術細節要放的東西
       evidence: parsed.eeat?.evidence,
     },
   ];

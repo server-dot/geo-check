@@ -66,18 +66,18 @@ export async function aggregateAuditChecks(
   // 1. GA / GSC 追蹤碼
   const analytics = [...new Set(pages.flatMap((p) => p.analytics))];
   out.push(analytics.length
-    ? { key: 'analytics', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: '網站有無串接 GA、GSC 等資料分析軟體', status: 'ok', advice: `全站偵測到：${analytics.join('、')}`, evidence: analytics.join('、') }
-    : { key: 'analytics', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: '網站有無串接 GA、GSC 等資料分析軟體', status: 'fail', advice: '全站原始碼找不到 GA4 / GTM / GSC 追蹤碼。建議安裝 GA4 或串接 GSC，才能追蹤流量與成效，沒有數據會很難判斷優化有沒有用。', evidence: '（無）' });
+    ? { key: 'analytics', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: '有沒有裝流量分析工具', status: 'ok', advice: `已裝：${analytics.join('、')}`, evidence: analytics.join('、') }
+    : { key: 'analytics', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: '有沒有裝流量分析工具', status: 'fail', advice: '網站上找不到任何流量分析工具。', impact: '沒有數據就看不到有多少人來、從哪裡來、看了哪幾頁。之後不管做什麼優化，都沒辦法判斷到底有沒有效。', technical: '全站原始碼找不到 GA4 / GTM / GSC 的追蹤碼。安裝 GA4 或串接 Google Search Console。', evidence: '（無）' });
 
   // 2. Sitemap
   out.push(sitemapExists && sitemapUrls.length
-    ? { key: 'sitemap', level: LEVEL.RANK, category: CATEGORY.TECH, item: '正確提交或建立 Sitemap', status: 'ok', advice: `sitemap.xml 存在，共 ${sitemapUrls.length} 個網址`, evidence: `${origin}/sitemap.xml` }
-    : { key: 'sitemap', level: LEVEL.RANK, category: CATEGORY.TECH, item: '正確提交或建立 Sitemap', status: 'fail', advice: 'sitemap.xml 不存在或讀不到。建議建立 sitemap.xml 並提交到 Google Search Console，讓搜尋引擎跟 AI 爬蟲更快找到所有頁面。', evidence: `${origin}/sitemap.xml` });
+    ? { key: 'sitemap', level: LEVEL.RANK, category: CATEGORY.TECH, item: '有沒有給搜尋引擎的網站地圖', status: 'ok', advice: `有網站地圖，列了 ${sitemapUrls.length} 個網址`, evidence: `${origin}/sitemap.xml` }
+    : { key: 'sitemap', level: LEVEL.RANK, category: CATEGORY.TECH, item: '有沒有給搜尋引擎的網站地圖', status: 'fail', advice: '網站上沒有網站地圖，或是讀不到。', impact: '網站地圖是一份「我有哪些頁面」的清單。沒有的話，搜尋引擎跟 AI 只能一頁一頁點連結慢慢找，新頁面或藏得比較深的頁面很容易整個被漏掉。', technical: '讀不到 sitemap.xml。建立 sitemap.xml 並提交到 Google Search Console。', evidence: `${origin}/sitemap.xml` });
 
   // 3. robots.txt
   out.push(robotsExists
-    ? { key: 'robots', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '建立 robots.txt', status: 'ok', advice: 'robots.txt 存在', evidence: `${origin}/robots.txt` }
-    : { key: 'robots', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '建立 robots.txt', status: 'fail', advice: 'robots.txt 不存在或讀不到。建議在網站根目錄建立 robots.txt，明確表態允許哪些爬蟲存取，避免規則不清楚被誤判。', evidence: `${origin}/robots.txt` });
+    ? { key: 'robots', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '有沒有 robots.txt', status: 'ok', advice: '有 robots.txt', evidence: `${origin}/robots.txt` }
+    : { key: 'robots', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '有沒有 robots.txt', status: 'fail', advice: '網站上沒有 robots.txt，或是讀不到。', impact: 'robots.txt 是你對各家爬蟲表態的地方——誰能看、誰不能看。沒有這個檔案時規範上預設「全部都可以」，但那是預設值，不是你的意思：等於你從來沒表過態，也隨時可能被別人的設定誤傷。', technical: '讀不到 robots.txt。在網站根目錄建立，並明確寫出允許哪些爬蟲存取。', evidence: `${origin}/robots.txt` });
 
   // 4. 有無建立索引：沒有 GSC，退回 noindex 標籤判斷（實際收錄狀況無法在這裡確認）
   {
@@ -87,8 +87,8 @@ export async function aggregateAuditChecks(
     // 的檢測極限（沒有對方的 GSC 授權，讀不到實際收錄狀況），是註記，不是
     // 扣分理由。
     out.push(noindex.length
-      ? { key: 'indexing', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '有無建立索引', status: 'warn', advice: `${noindex.length}/${Y} 頁設有 noindex（會被排除索引），例如：${noindex.slice(0, 5).map((p) => toPath(origin, p.url)).join('、')}。建議確認這些頁面是不是刻意設成 noindex；如果不是，拿掉 noindex 標籤，並用 GSC 或 site: 查詢複核實際收錄狀況。`, evidence: `${noindex.length}/${Y} 頁 noindex`, details: noindex.map((p) => ({ url: p.url, note: '設有 noindex，會被排除索引' })) }
-      : { key: 'indexing', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '有無建立索引', status: 'ok', advice: `爬取頁面未發現 noindex，沒有東西在擋搜尋引擎索引；實際收錄狀況建議另外用 GSC 或 site: 查詢複核${rangeNote}`, evidence: `0/${Y} 頁 noindex` });
+      ? { key: 'indexing', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '有沒有頁面被設成不給收錄', status: 'warn', advice: `${Y} 頁裡有 ${noindex.length} 頁被設定成「不要收錄」，例如：${noindex.slice(0, 5).map((p) => toPath(origin, p.url)).join('、')}。`, impact: '這幾頁不會出現在搜尋結果裡，AI 也拿不到。如果是你刻意設的（例如後台頁、測試頁）那沒問題；如果不是，這幾頁等於白做了。', technical: '這些頁面帶有 noindex 標籤。實際收錄狀況要另外用 GSC 或 site: 查詢複核。', evidence: `${noindex.length}/${Y} 頁 noindex`, details: noindex.map((p) => ({ url: p.url, note: '設成不給收錄（noindex）' })) }
+      : { key: 'indexing', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '有沒有頁面被設成不給收錄', status: 'ok', advice: `爬到的頁面沒有一頁被擋住收錄${rangeNote}`, technical: '未發現 noindex 標籤。實際收錄狀況建議另外用 GSC 或 site: 查詢複核。', evidence: `0/${Y} 頁 noindex` });
   }
 
   // 5. Local Business：純規則核對欄位完整度（地址／電話／營業時間），不再是「建議人工複核」的空話
@@ -97,19 +97,19 @@ export async function aggregateAuditChecks(
   // 6. 麵包屑——首頁不用排除在外會被誤判：首頁本來就沒有「上一層」可以
   // 顯示麵包屑，不裝麵包屑是正常的，不是缺陷。只看首頁以外的頁面夠不夠。
   {
-    const base = { key: 'breadcrumb', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '有無麵包屑' };
+    const base = { key: 'breadcrumb', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '頁面有沒有標示所在位置' };
     const nonHomePages = htmlPages.filter((p) => !p.isHome);
     if (nonHomePages.length === 0) {
-      out.push({ ...base, status: 'ok', advice: '只爬到首頁，首頁本來就不需要麵包屑', evidence: '（僅首頁）' });
+      out.push({ ...base, status: 'ok', advice: '只爬到首頁，首頁本來就不需要標示所在位置', evidence: '（僅首頁）' });
     } else {
       const NY = nonHomePages.length;
       const noBc = nonHomePages.filter((p) => !p.hasBreadcrumb);
       const bc = NY - noBc.length;
       out.push(bc === 0
-        ? { ...base, status: 'warn', advice: `除首頁外，其餘頁面皆未偵測到麵包屑（0/${NY}）。建議在非首頁的頁面加上 BreadcrumbList 結構化資料與可見的麵包屑導覽，幫助 AI 跟使用者理解頁面在網站架構中的位置。`, evidence: `0/${NY} 頁有麵包屑（不計首頁）`, details: noBc.map((p) => ({ url: p.url, note: '未偵測到麵包屑' })) }
+        ? { ...base, status: 'warn', advice: `首頁以外的 ${NY} 頁，沒有一頁標示自己在網站的哪個位置。`, impact: '像「首頁 › 服務 › 網站健檢」這種一層層的路徑，是在告訴 AI 這頁屬於哪個分類、跟其他頁面什麼關係。沒有的話，每一頁在 AI 眼中都是孤立的，看不出你的服務有幾類、哪個是主打。', technical: '未偵測到 BreadcrumbList 結構化資料或可見的麵包屑導覽。', evidence: `0/${NY} 頁有標示（不計首頁）`, details: noBc.map((p) => ({ url: p.url, note: '沒有標示所在位置' })) }
         : bc < NY
-          ? { ...base, status: 'warn', advice: `除首頁外，僅 ${bc}/${NY} 頁有麵包屑。建議把剩下沒有麵包屑的頁面也補上 BreadcrumbList，讓全站導覽一致。`, evidence: `${bc}/${NY} 頁有麵包屑（不計首頁）`, details: noBc.map((p) => ({ url: p.url, note: '未偵測到麵包屑' })) }
-          : { ...base, status: 'ok', advice: `除首頁外，其餘頁面皆有麵包屑（${bc}/${NY}）`, evidence: `${bc}/${NY} 頁有麵包屑（不計首頁）` });
+          ? { ...base, status: 'warn', advice: `首頁以外的 ${NY} 頁裡，只有 ${bc} 頁標示了自己在網站的哪個位置。`, impact: '有標的頁面 AI 看得懂層級關係，沒標的那幾頁就看不出來，全站導覽不一致。', technical: '缺少的頁面沒有 BreadcrumbList 結構化資料或可見的麵包屑導覽。', evidence: `${bc}/${NY} 頁有標示（不計首頁）`, details: noBc.map((p) => ({ url: p.url, note: '沒有標示所在位置' })) }
+          : { ...base, status: 'ok', advice: `首頁以外的頁面都有標示所在位置（${bc}/${NY}）`, evidence: `${bc}/${NY} 頁有標示（不計首頁）` });
     }
   }
 
@@ -118,16 +118,16 @@ export async function aggregateAuditChecks(
     const noLink = htmlPages.filter((p) => p.internalLinks.length === 0);
     const avg = Math.round(htmlPages.reduce((s, p) => s + p.internalLinks.length, 0) / Y);
     out.push(noLink.length
-      ? { key: 'internalLinks', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '內部連結結構', status: 'warn', advice: `有 ${noLink.length}/${Y} 頁沒有任何內部連結（平均每頁 ${avg} 條）。建議在這些頁面加上相關內容或麵包屑之類的內部連結，讓 AI 爬蟲跟使用者能從其他頁面連過來，也幫助排名權重傳遞。`, evidence: `平均 ${avg} 條/頁，${noLink.length} 頁無內部連結`, details: noLink.map((p) => ({ url: p.url, note: '沒有任何內部連結' })) }
-      : { key: 'internalLinks', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '內部連結結構', status: 'ok', advice: `內部連結結構合理（平均每頁約 ${avg} 條）`, evidence: `平均 ${avg} 條/頁` });
+      ? { key: 'internalLinks', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '頁面之間有沒有互相連結', status: 'warn', advice: `${Y} 頁裡有 ${noLink.length} 頁完全沒有連到站內其他頁面（平均每頁 ${avg} 條）。`, impact: '爬蟲是順著連結一頁一頁走的。沒有連結進出的頁面等於一座孤島，爬蟲不容易走到，走到了也看不出它跟你其他內容的關係。', technical: `平均每頁 ${avg} 條內部連結。可加上相關內容推薦或麵包屑導覽。`, evidence: `平均 ${avg} 條/頁，${noLink.length} 頁沒有`, details: noLink.map((p) => ({ url: p.url, note: '沒有連到站內其他頁面' })) }
+      : { key: 'internalLinks', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '頁面之間有沒有互相連結', status: 'ok', advice: `頁面之間互相連得夠密（平均每頁約 ${avg} 條）`, evidence: `平均 ${avg} 條/頁` });
   }
 
   // 8. 無效連結
   {
     const broken = pages.filter((p) => p.status >= 400);
     out.push(broken.length
-      ? { key: 'brokenLinks', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '無效連結檢查', status: 'fail', advice: `爬取 ${pages.length} 頁中有 ${broken.length} 頁連到壞頁（4xx/5xx），例如：${broken.slice(0, 5).map((p) => `${toPath(origin, p.url)}（${p.status || '連不上'}）`).join('、')}。建議修正這些連結指向的網址，如果連結本身已經沒用就直接移除，避免爬蟲跟使用者點到死路。`, evidence: `${broken.length}/${pages.length} 頁異常`, details: broken.map((p) => ({ url: p.url, note: `回應 ${p.status || '連不上'}` })) }
-      : { key: 'brokenLinks', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '無效連結檢查', status: 'ok', advice: `爬取 ${pages.length} 頁未發現壞連結`, evidence: `0/${pages.length} 頁異常` });
+      ? { key: 'brokenLinks', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '有沒有點不開的連結', status: 'fail', advice: `爬到的 ${pages.length} 頁裡，有 ${broken.length} 頁點開是壞的，例如：${broken.slice(0, 5).map((p) => `${toPath(origin, p.url)}（${p.status || '連不上'}）`).join('、')}。`, impact: '客戶點到會直接離開，爬蟲走到死路也會浪費原本可以拿去讀你其他內容的次數。壞連結多的網站在 AI 眼中也顯得沒在維護。', technical: `這些網址回應 4xx／5xx。修正連結指向的網址，或直接移除已經沒用的連結。`, evidence: `${broken.length}/${pages.length} 頁點不開`, details: broken.map((p) => ({ url: p.url, note: `回應 ${p.status || '連不上'}` })) }
+      : { key: 'brokenLinks', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '有沒有點不開的連結', status: 'ok', advice: `爬到的 ${pages.length} 頁都點得開`, evidence: `0/${pages.length} 頁點不開` });
   }
 
   // 9. 重複內容：沒有 GSC，退回 canonical + 重複標題判斷
@@ -149,30 +149,30 @@ export async function aggregateAuditChecks(
       ...dupGroups.flatMap(([title, g]) => g.map((p) => ({ url: p.url, note: `標題重複：${title}` }))),
     ];
     out.push(problems.length
-      ? { key: 'duplicate', level: LEVEL.RANK, category: CATEGORY.CONTENT, item: '檢查重複內容', status: 'warn', advice: `${problems.join('、')}，容易產生重複內容。建議幫缺 canonical 的頁面補上 canonical 標籤，標題重複的頁面則人工檢查是否該合併或改成不同標題。`, evidence: problems.join('、'), details: dupDetails }
-      : { key: 'duplicate', level: LEVEL.RANK, category: CATEGORY.CONTENT, item: '檢查重複內容', status: 'ok', advice: '頁面皆有 canonical、未發現重複標題', evidence: `0 問題（共 ${Y} 頁）` });
+      ? { key: 'duplicate', level: LEVEL.RANK, category: CATEGORY.CONTENT, item: '有沒有內容重複的頁面', status: 'warn', advice: `${problems.join('、')}。`, impact: '同樣的內容出現在多個網址時，搜尋引擎跟 AI 得自己猜哪一個才是正版。猜錯就是把你的能見度分散到不同網址上，兩邊都拿不到好位置。', technical: '缺 canonical 標籤的頁面要補上，指向正版網址；標題重複的頁面要人工判斷該合併還是改標題。', evidence: problems.join('、'), details: dupDetails }
+      : { key: 'duplicate', level: LEVEL.RANK, category: CATEGORY.CONTENT, item: '有沒有內容重複的頁面', status: 'ok', advice: '每頁都指定了正版網址，也沒有標題重複的頁面', evidence: `0 問題（共 ${Y} 頁）` });
   }
 
-  // 10. TKD 完整性
+  // 10. 每頁的標題與描述完不完整（TKD）
   {
     const charLen = (s: string) => [...s.trim()].length;
     let te = 0, tl = 0, de = 0, dl = 0;
     const tkdDetails: { url: string; note: string }[] = [];
     for (const p of htmlPages) {
       const probs: string[] = [];
-      if (!p.title) { te++; probs.push('Title 留空'); }
+      if (!p.title) { te++; probs.push('標題留空'); }
       else {
         const px = estimateTitlePixelWidth(p.title.trim());
-        if (px > TITLE_SAFE_PX) { tl++; probs.push(`Title 過長（估算 ${px}px，桌面版安全上限 ${TITLE_SAFE_PX}px，可能被 SERP 截斷）`); }
+        if (px > TITLE_SAFE_PX) { tl++; probs.push(`標題太長（估算 ${px}px，安全上限 ${TITLE_SAFE_PX}px，搜尋結果會被切掉）`); }
       }
-      if (!p.description) { de++; probs.push('Description 留空'); }
-      else if (charLen(p.description) > 80) { dl++; probs.push(`Description 過長（${charLen(p.description)} 字）`); }
+      if (!p.description) { de++; probs.push('描述留空'); }
+      else if (charLen(p.description) > 80) { dl++; probs.push(`描述太長（${charLen(p.description)} 字）`); }
       if (probs.length) tkdDetails.push({ url: p.url, note: probs.join('、') });
     }
     const issues = te + tl + de + dl;
     out.push(issues
-      ? { key: 'tkd', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: 'TKD 完整性', status: 'fail', advice: `共 ${Y} 頁中：Title 留空 ${te}、估算像素寬度超過 ${TITLE_SAFE_PX}px 過長 ${tl}（按全形≈${FULLWIDTH_PX}px／半形≈${HALFWIDTH_PX}px 估算，比純字數門檻更貼近 Google SERP 實際截斷點）；Description 留空 ${de}、過長(>80 字) ${dl}。建議把留空的 Title／Description 補上，過長的部分濃縮到安全長度內（Title 控制在 ${TITLE_SAFE_PX}px 估算寬度內、Description 80 字以內），避免在 SERP 或 AI 摘要被截斷。`, evidence: `T空${te}/長${tl}｜D空${de}/長${dl}（共 ${Y} 頁）`, details: tkdDetails }
-      : { key: 'tkd', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: 'TKD 完整性', status: 'ok', advice: `爬取 ${Y} 頁 Title / Description 皆有填，Title 估算像素寬度都在 ${TITLE_SAFE_PX}px 安全上限內，長度適當`, evidence: `共 ${Y} 頁皆正常` });
+      ? { key: 'tkd', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: '每頁的標題與描述完不完整', status: 'fail', advice: `${Y} 頁裡，標題留空 ${te} 頁、太長 ${tl} 頁；描述留空 ${de} 頁、太長 ${dl} 頁。`, impact: '標題跟描述是 Google 和 AI 判斷「這頁在講什麼」的第一手依據，也是客戶在搜尋結果上唯一看得到的兩行字。留空等於沒自我介紹，太長會被切掉，客戶看到的是半句話。', technical: `標題長度改用像素寬度估算（全形≈${FULLWIDTH_PX}px／半形≈${HALFWIDTH_PX}px，安全上限 ${TITLE_SAFE_PX}px），比純字數門檻更貼近 Google 搜尋結果的實際截斷點；描述以 80 字為門檻。`, evidence: `標題 空${te}/長${tl}｜描述 空${de}/長${dl}（共 ${Y} 頁）`, details: tkdDetails }
+      : { key: 'tkd', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: '每頁的標題與描述完不完整', status: 'ok', advice: `爬到的 ${Y} 頁，標題跟描述都有填，長度也都在安全範圍內`, evidence: `共 ${Y} 頁皆正常` });
   }
 
   // 11. h1、h2 使用
@@ -181,20 +181,20 @@ export async function aggregateAuditChecks(
     const multiH1 = htmlPages.filter((p) => p.h1 > 1).length;
     const noH2 = htmlPages.filter((p) => p.h2 === 0).length;
     const problems: string[] = [];
-    if (noH1) problems.push(`${noH1} 頁缺 h1`);
-    if (multiH1) problems.push(`${multiH1} 頁有多個 h1`);
-    if (noH2) problems.push(`${noH2} 頁缺 h2`);
+    if (noH1) problems.push(`${noH1} 頁沒有主標題`);
+    if (multiH1) problems.push(`${multiH1} 頁有兩個以上的主標題`);
+    if (noH2) problems.push(`${noH2} 頁沒有小標題`);
     const headingDetails: { url: string; note: string }[] = [];
     for (const p of htmlPages) {
       const probs: string[] = [];
-      if (p.h1 === 0) probs.push('缺 h1');
-      else if (p.h1 > 1) probs.push(`有 ${p.h1} 個 h1`);
-      if (p.h2 === 0) probs.push('缺 h2');
+      if (p.h1 === 0) probs.push('沒有主標題');
+      else if (p.h1 > 1) probs.push(`有 ${p.h1} 個主標題`);
+      if (p.h2 === 0) probs.push('沒有小標題');
       if (probs.length) headingDetails.push({ url: p.url, note: probs.join('、') });
     }
     out.push(problems.length
-      ? { key: 'headings', level: LEVEL.RANK, category: CATEGORY.TECH, item: 'h1、h2 使用', status: 'fail', advice: `共 ${Y} 頁中：${problems.join('、')}。建議每頁補齊缺少的 h1／h2，多個 h1 的頁面改成只留一個，讓標題結構清楚，AI／搜尋引擎才好判斷內容架構。`, evidence: problems.join('、'), details: headingDetails }
-      : { key: 'headings', level: LEVEL.RANK, category: CATEGORY.TECH, item: 'h1、h2 使用', status: 'ok', advice: `爬取 ${Y} 頁標題結構完整`, evidence: `共 ${Y} 頁皆正常` });
+      ? { key: 'headings', level: LEVEL.RANK, category: CATEGORY.TECH, item: '每頁有沒有清楚的大小標題', status: 'fail', advice: `${Y} 頁裡：${problems.join('、')}。`, impact: '大小標題是內容的骨架，AI 靠它判斷這頁的重點是什麼、哪些是主題哪些是細節。沒有主標題等於整頁是一團沒有分段的文字；有兩個主標題等於同時宣稱兩件事是重點，AI 只能挑一個猜。', technical: '對應 HTML 的 <h1>／<h2> 標籤。每頁只留一個 <h1>，並用 <h2> 分出段落層次。', evidence: problems.join('、'), details: headingDetails }
+      : { key: 'headings', level: LEVEL.RANK, category: CATEGORY.TECH, item: '每頁有沒有清楚的大小標題', status: 'ok', advice: `爬到的 ${Y} 頁標題層次都完整`, evidence: `共 ${Y} 頁皆正常` });
   }
 
   // 12a. Schema：純規則核對全站 JSON-LD 欄位完整度，不用 AI 猜
@@ -263,31 +263,31 @@ export async function aggregateAuditChecks(
 
   // 13. llms.txt
   out.push(llmsExists
-    ? { key: 'llmsSeo', level: LEVEL.RANK, category: CATEGORY.TECH, item: '網站根目錄有無部署 llms.txt', status: 'ok', advice: 'llms.txt 存在', evidence: `${origin}/llms.txt` }
-    : { key: 'llmsSeo', level: LEVEL.RANK, category: CATEGORY.TECH, item: '網站根目錄有無部署 llms.txt', status: 'warn', advice: 'llms.txt 不存在。建議在網站根目錄部署 llms.txt，整理網站重點內容的摘要與連結，讓 AI 引擎更容易理解你的網站在做什麼。', evidence: `${origin}/llms.txt` });
+    ? { key: 'llmsSeo', level: LEVEL.RANK, category: CATEGORY.TECH, item: '有沒有 llms.txt', status: 'ok', advice: '有 llms.txt', evidence: `${origin}/llms.txt` }
+    : { key: 'llmsSeo', level: LEVEL.RANK, category: CATEGORY.TECH, item: '有沒有 llms.txt', status: 'warn', advice: '網站上沒有 llms.txt。', impact: 'llms.txt 是專門寫給 AI 看的網站導覽——用一頁講清楚你是誰、有哪些重點內容。沒有的話，AI 得自己從整個網站東拼西湊，拼出來的版本不一定是你想被講的版本。這還不是強制規範，但主動放的網站目前還很少，是搶先表態的機會。', technical: '在網站根目錄放 llms.txt，格式參考 llmstxt.org。', evidence: `${origin}/llms.txt` });
 
   // 14. 有無網址 404 / soft-404
   {
     const bad = pages.filter((p) => p.status >= 400);
     const details = [
       ...bad.map((p) => ({ url: p.url, note: `回應 ${p.status || '連不上'}` })),
-      ...shells.map((p) => ({ url: p.url, note: 'soft-404（回 200 但內容為空／錯誤頁）' })),
+      ...shells.map((p) => ({ url: p.url, note: '打得開但內容是空的' })),
     ];
     const parts: string[] = [];
-    if (bad.length) parts.push(`${bad.length} 頁回應異常（含 404）`);
-    if (shells.length) parts.push(`${shells.length} 頁 soft-404`);
+    if (bad.length) parts.push(`${bad.length} 頁打不開`);
+    if (shells.length) parts.push(`${shells.length} 頁打得開但內容是空的`);
     out.push(details.length
-      ? { key: 'page', level: LEVEL.QUALITY, category: CATEGORY.TECH, item: '有無網址 404', status: 'warn', advice: `爬取 ${pages.length} 頁中：${parts.join('、')}。建議修正這些頁面的內容或連結，如果頁面已經不需要，記得從 sitemap 移除，避免爬蟲一直爬到壞頁或空殼頁。`, evidence: `異常 ${bad.length}｜soft-404 ${shells.length}（共 ${pages.length} 頁）`, details }
-      : { key: 'page', level: LEVEL.QUALITY, category: CATEGORY.TECH, item: '有無網址 404', status: 'ok', advice: `爬取 ${pages.length} 頁皆正常回應，未發現 404`, evidence: `0/${pages.length} 頁異常` });
+      ? { key: 'page', level: LEVEL.QUALITY, category: CATEGORY.TECH, item: '有沒有失效的頁面', status: 'warn', advice: `爬到的 ${pages.length} 頁裡：${parts.join('、')}。`, impact: '空頁面對 AI 來說跟壞頁面一樣沒有價值，還會佔掉爬蟲原本可以拿去讀你正常內容的次數。已經不需要的頁面留著，也會讓網站看起來沒在維護。', technical: `打不開的是 4xx／5xx；「打得開但內容是空的」是 soft-404（回 200 但沒有實質內容）。修正內容或移除連結，並從 sitemap 拿掉。`, evidence: `打不開 ${bad.length}｜空頁 ${shells.length}（共 ${pages.length} 頁）`, details }
+      : { key: 'page', level: LEVEL.QUALITY, category: CATEGORY.TECH, item: '有沒有失效的頁面', status: 'ok', advice: `爬到的 ${pages.length} 頁都正常打得開`, evidence: `0/${pages.length} 頁異常` });
   }
 
-  // 15. 手機端優化
+  // 15. 手機上排版正不正常（viewport）
   {
     const noVp = htmlPages.filter((p) => !p.hasViewport);
     const vp = Y - noVp.length;
     out.push(vp === Y
-      ? { key: 'viewport', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '手機端優化', status: 'ok', advice: `爬取 ${Y} 頁皆有設定 viewport`, evidence: `${vp}/${Y} 頁` }
-      : { key: 'viewport', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '手機端優化', status: 'warn', advice: `僅 ${vp}/${Y} 頁設定 viewport，其餘手機端排版可能異常。建議在缺少的頁面加上 <meta name="viewport" content="width=device-width, initial-scale=1">，確保手機瀏覽跟排版正常。`, evidence: `${vp}/${Y} 頁`, details: noVp.map((p) => ({ url: p.url, note: '缺少 viewport' })) });
+      ? { key: 'viewport', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '手機上排版正不正常', status: 'ok', advice: `爬到的 ${Y} 頁都有為手機做設定`, evidence: `${vp}/${Y} 頁` }
+      : { key: 'viewport', level: LEVEL.EFFICIENCY, category: CATEGORY.TECH, item: '手機上排版正不正常', status: 'warn', advice: `${Y} 頁裡有 ${Y - vp} 頁沒有為手機做設定。`, impact: '這幾頁在手機上會照桌機寬度縮小顯示：字小到看不清楚，要一直放大跟左右拉。現在多數人是用手機看你的網站，這幾頁等於進來就走。', technical: '缺少 <meta name="viewport" content="width=device-width, initial-scale=1">。', evidence: `${vp}/${Y} 頁`, details: noVp.map((p) => ({ url: p.url, note: '沒有為手機做設定' })) });
   }
 
   // 16. 分類層級是否清楚
@@ -300,30 +300,30 @@ export async function aggregateAuditChecks(
       }
     });
     const maxDepth = depths.length ? Math.max(...depths) : 0;
-    // 跟第 6 項「有無麵包屑」用同一個排除首頁的算法，不然這裡顯示的
+    // 跟第 6 項「頁面有沒有標示所在位置」用同一個排除首頁的算法，不然這裡顯示的
     // 「X/Y 頁有麵包屑」跟上面那項的分母對不起來，看起來像兩個數字打架。
     const nonHomeForDepth = htmlPages.filter((p) => !p.isHome);
     const depthDenominator = nonHomeForDepth.length || Y;
     const bc = (nonHomeForDepth.length ? nonHomeForDepth : htmlPages).filter((p) => p.hasBreadcrumb).length;
     out.push(bc > 0 || maxDepth >= 1
-      ? { key: 'categoryDepth', level: LEVEL.EFFICIENCY, category: CATEGORY.LOCAL_BRAND, item: '分類層級是否清楚', status: 'ok', advice: `網址層級最深 ${maxDepth} 層、${bc}/${depthDenominator} 頁有麵包屑（不計首頁），分類尚屬清楚`, evidence: `最深 ${maxDepth} 層｜麵包屑 ${bc}/${depthDenominator}` }
-      : { key: 'categoryDepth', level: LEVEL.EFFICIENCY, category: CATEGORY.LOCAL_BRAND, item: '分類層級是否清楚', status: 'warn', advice: '未偵測到明顯分類層級（網址扁平且無麵包屑）。建議規劃清楚的分類架構（例如網址加上分類路徑）並補上麵包屑，讓 AI 跟使用者能理解頁面之間的層級關係。', evidence: `最深 ${maxDepth} 層` });
+      ? { key: 'categoryDepth', level: LEVEL.EFFICIENCY, category: CATEGORY.LOCAL_BRAND, item: '網站分類層級清不清楚', status: 'ok', advice: `網址最深 ${maxDepth} 層、${bc}/${depthDenominator} 頁有標示所在位置（不計首頁），分類看得出來`, evidence: `最深 ${maxDepth} 層｜有標示 ${bc}/${depthDenominator}` }
+      : { key: 'categoryDepth', level: LEVEL.EFFICIENCY, category: CATEGORY.LOCAL_BRAND, item: '網站分類層級清不清楚', status: 'warn', advice: '看不出網站有分類——所有網址都擠在同一層，頁面上也沒有標示所在位置。', impact: 'AI 判斷你「主要在做什麼」，一部分是看你把內容怎麼分類、哪一類的頁面最多。全部擠在同一層，它就看不出你的主力業務是哪一塊。', technical: `網址路徑最深 ${maxDepth} 層。可在網址加上分類路徑，並補上麵包屑導覽。`, evidence: `最深 ${maxDepth} 層` });
   }
 
   // 17. 首頁內容優化
   {
     const home = pages.find((p) => p.isHome);
     if (!home || !home.ok) {
-      out.push({ key: 'homepage', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '首頁內容優化', status: 'warn', advice: '抓不到首頁內容。建議人工打開首頁確認是不是被擋掉（例如 WAF 或需要 JavaScript 才能渲染），排除問題後重新檢測。', evidence: origin });
+      out.push({ key: 'homepage', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '首頁內容夠不夠', status: 'warn', advice: '抓不到你的首頁內容。', impact: '我們抓不到，AI 爬蟲很可能也抓不到。這通常是被 WAF 擋住，或是內容要靠 JavaScript 才長得出來。', technical: '首頁請求失敗或回傳空殼。人工打開首頁確認是不是被防火牆擋下、或需要 JavaScript 才能渲染，排除後重新檢測。', evidence: origin });
     } else {
       const problems: string[] = [];
-      if (home.h1 === 0) problems.push('缺少 <h1>');
-      else if (home.h1 > 1) problems.push(`<h1> 有 ${home.h1} 個`);
-      if (home.h2 === 0) problems.push('缺少 <h2>');
-      const evidence = `首頁 h1 × ${home.h1}，h2 × ${home.h2}`;
+      if (home.h1 === 0) problems.push('沒有主標題');
+      else if (home.h1 > 1) problems.push(`有 ${home.h1} 個主標題`);
+      if (home.h2 === 0) problems.push('沒有小標題');
+      const evidence = `首頁 主標題 ${home.h1} 個、小標題 ${home.h2} 個`;
       out.push(problems.length
-        ? { key: 'homepage', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '首頁內容優化', status: 'fail', advice: `首頁${problems.join('、')}。建議補齊首頁的標題結構（確保只有一個 h1、並有清楚的 h2 副標），讓 AI 一眼就能看懂首頁在講什麼。`, evidence }
-        : { key: 'homepage', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '首頁內容優化', status: 'ok', advice: '首頁標題結構完整；文案吸引力建議人工複核', evidence });
+        ? { key: 'homepage', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '首頁內容夠不夠', status: 'fail', advice: `首頁${problems.join('、')}。`, impact: '首頁是 AI 認識你的第一頁，也是它拿來回答「這家是做什麼的」的主要依據。首頁沒有一句明確的主標題，AI 就只能從選單跟零散文案自己拼湊。', technical: '對應首頁的 <h1>／<h2>。確保只有一個 <h1> 講清楚你是做什麼的，並用 <h2> 帶出服務或賣點。', evidence }
+        : { key: 'homepage', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '首頁內容夠不夠', status: 'ok', advice: '首頁標題層次完整；文案本身好不好還是要人看過', evidence });
     }
   }
 
@@ -333,8 +333,8 @@ export async function aggregateAuditChecks(
     const emptyImg = htmlPages.reduce((s, p) => s + p.imgAltEmpty, 0);
     const emptyPages = htmlPages.filter((p) => p.imgAltEmpty > 0);
     out.push(emptyImg
-      ? { key: 'imgAlt', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '圖片 ALT 標記', status: 'fail', advice: `全站 ${emptyImg}/${totalImg} 張圖 alt 留空（分布於 ${emptyPages.length} 頁）。建議為這些圖片補上描述性的 alt 文字，AI 讀不到圖片本身時，還能透過文字知道圖片內容。`, evidence: `${emptyImg}/${totalImg} 張空白`, details: emptyPages.map((p) => ({ url: p.url, note: `${p.imgAltEmpty} 張圖 alt 留空` })) }
-      : { key: 'imgAlt', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '圖片 ALT 標記', status: 'ok', advice: `爬取頁面圖片皆有 alt（共 ${totalImg} 張）`, evidence: `0/${totalImg} 張空白` });
+      ? { key: 'imgAlt', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '圖片有沒有文字說明', status: 'fail', advice: `全站 ${totalImg} 張圖裡有 ${emptyImg} 張沒有文字說明，分布在 ${emptyPages.length} 頁。`, impact: 'AI 讀的是文字，不是圖。你放的產品照、菜單、實績照片，只要沒有文字說明，對 AI 來說就是不存在的——照片裡的資訊完全傳達不出去。', technical: `這些 <img> 的 alt 屬性留空。補上描述圖片內容的文字。`, evidence: `${emptyImg}/${totalImg} 張沒有說明`, details: emptyPages.map((p) => ({ url: p.url, note: `${p.imgAltEmpty} 張圖沒有文字說明` })) }
+      : { key: 'imgAlt', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '圖片有沒有文字說明', status: 'ok', advice: `爬到的圖片都有文字說明（共 ${totalImg} 張）`, evidence: `0/${totalImg} 張沒有說明` });
   }
 
   // 19. 縮圖及多媒體優化
@@ -343,16 +343,16 @@ export async function aggregateAuditChecks(
     const legacy = htmlPages.reduce((s, p) => s + p.imgLegacy, 0);
     const legacyPages = htmlPages.filter((p) => p.imgLegacy > 0);
     out.push(legacy
-      ? { key: 'imgFormat', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '縮圖及多媒體優化', status: 'warn', advice: `全站 ${legacy}/${totalImg} 張圖為非 WebP/AVIF 格式。建議把這些圖片轉成 WebP 或 AVIF 並適度壓縮，減少檔案大小、加快頁面載入速度。`, evidence: `${legacy}/${totalImg} 張非現代格式`, details: legacyPages.map((p) => ({ url: p.url, note: `${p.imgLegacy} 張非現代格式` })) }
-      : { key: 'imgFormat', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '縮圖及多媒體優化', status: 'ok', advice: `爬取頁面圖片皆為現代格式（共 ${totalImg} 張）`, evidence: `0/${totalImg} 張` });
+      ? { key: 'imgFormat', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '圖片格式會不會拖慢速度', status: 'warn', advice: `全站 ${totalImg} 張圖裡有 ${legacy} 張還在用比較舊的格式。`, impact: '舊格式的圖檔案大，頁面載入慢。人會等不及先關掉，爬蟲也可能還沒讀完就先跳走。', technical: `這些圖不是 WebP／AVIF。轉檔並適度壓縮可以明顯縮小檔案。`, evidence: `${legacy}/${totalImg} 張是舊格式`, details: legacyPages.map((p) => ({ url: p.url, note: `${p.imgLegacy} 張是舊格式` })) }
+      : { key: 'imgFormat', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '圖片格式會不會拖慢速度', status: 'ok', advice: `爬到的圖片都用了新一代格式（共 ${totalImg} 張）`, evidence: `0/${totalImg} 張` });
   }
 
   // 20. 外部連結
   {
     const totalExt = htmlPages.reduce((s, p) => s + p.externalCount, 0);
     out.push(totalExt === 0
-      ? { key: 'externalLinks', level: LEVEL.RANK, category: CATEGORY.CONTENT, item: '外部連結檢查', status: 'warn', advice: '全站幾乎沒有外部連結。建議在內容裡適度引用權威來源（例如官方文件、研究報告、新聞報導）並附上連結，有助於 AI 判斷內容的可信度。', evidence: '0 條外部連結' }
-      : { key: 'externalLinks', level: LEVEL.RANK, category: CATEGORY.CONTENT, item: '外部連結檢查', status: 'ok', advice: `全站約 ${totalExt} 條外部連結，連結有效性與品質建議人工複核`, evidence: `約 ${totalExt} 條外部連結` });
+      ? { key: 'externalLinks', level: LEVEL.RANK, category: CATEGORY.CONTENT, item: '有沒有引用外部來源', status: 'warn', advice: '全站幾乎沒有連到任何外部網站。', impact: '有憑有據的內容，通常會引用官方文件、研究報告或新聞報導。完全不引用任何外部來源，AI 比較難判斷你講的東西可不可信——這一項本身不會扣你分，但會讓你在「誰比較專業」的比較裡吃虧。', technical: '在內容中適度引用權威來源並附上連結。', evidence: '0 條外部連結' }
+      : { key: 'externalLinks', level: LEVEL.RANK, category: CATEGORY.CONTENT, item: '有沒有引用外部來源', status: 'ok', advice: `全站約 ${totalExt} 條外部連結；連的對象好不好還是要人看過`, evidence: `約 ${totalExt} 條外部連結` });
   }
 
   return sortByOrder(out);

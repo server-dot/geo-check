@@ -291,14 +291,25 @@ code {
   color: var(--ink2);
 }
 .report-table td.item { font-weight: 500; }
-/* 改善建議橫跨整列（colspan=4）緊接在自己所屬的檢測列下面：檢測列少留一點
-   下方留白，建議列不要重複畫上邊框（會變成兩條線夾住一個提示框，很怪）。 */
-.report-table tr.has-suggestion td { padding-bottom: 6px; }
-.report-table tr.suggestion-row td { padding-top: 0; padding-bottom: 12px; border-top: none; }
+/* 影響框與技術細節橫跨整列（colspan=4）緊接在自己所屬的檢測列下面：檢測列少留
+   一點下方留白，這一列不要重複畫上邊框（會變成兩條線夾住一個提示框，很怪）。 */
+.report-table tr.has-detail td { padding-bottom: 6px; }
+.report-table tr.detail-row td { padding-top: 0; padding-bottom: 12px; border-top: none; }
 /* 證據字串常是完整網址，break-word 遇到長字會硬切在任意字元中間
    （像 llms.txt 斷成 llm/s.txt），改用 anywhere 讓瀏覽器優先在 / 這類
    標點處斷行，真的沒地方斷才會硬切。 */
 .report-table td .evidence { overflow-wrap: anywhere; word-break: normal; }
+
+/* 報告內文裡的專有名詞自動連到 /geo 知識文章。要用具名 class 不能用 Tailwind 的
+   decoration-* utility——上面 a {} 那組規則沒包 @layer，一律贏過 utilities，
+   原本寫的 decoration-current/40 其實從來沒生效過（跟 .btn-lime 同一個坑）。
+   底線刻意做細、半透明：這是輔助連結，不該搶走內文本身的注意力。 */
+.glossary-link {
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.glossary-link:hover { text-decoration-color: currentColor; }
 
 .progress-track {
   height: 6px;

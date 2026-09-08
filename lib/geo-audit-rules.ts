@@ -66,6 +66,14 @@ export const DEEP_AUDIT_KEYS = [
   'externalLinks', 'llmsSeo', 'eeat',
 ] as const;
 
+// 三段式文案，對應報告上三種讀者需求：
+//   advice    現況——現在是什麼狀況（帶數字），白話，不含修法
+//   impact    影響——所以 AI 那邊／客戶那邊會發生什麼事，白話，不含修法
+//   technical 技術細節——原本那套技術說明與修法，收進可展開區給懂的人看
+// 拆成三個欄位是為了取代前端「用句號切開、看最後一句有沒有『建議』兩字」
+// 那個猜測式的切法：切點猜錯就會生出「補齊並控制長度」這種脫離上下文的殘句。
+// 工具的定位是讓對方認知到問題存在，所以 impact 講後果、不教修法——
+// 要修的話有底下的諮詢入口。
 export type CheckResult = {
   key: string;
   level: string;
@@ -73,6 +81,8 @@ export type CheckResult = {
   item: string;
   status: CheckStatus;
   advice: string;
+  impact?: string;
+  technical?: string;
   evidence?: string;
   details?: { url: string; note: string }[];
 };

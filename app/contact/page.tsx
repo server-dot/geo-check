@@ -26,7 +26,21 @@ const POLICIES = [
 const STACK_FORM_URL = "https://stack.com.tw/%e8%81%af%e7%b5%a1%e6%88%91%e5%80%91/#form";
 const LINE_URL = "https://lin.ee/UhKq8H1";
 
-export default function ContactPage() {
+// 健檢報告每一項「需處理」旁邊的諮詢連結會帶 ?topic=report&item=<項目>&url=<受檢網址>
+// 進來，這裡先幫他把諮詢事項勾好、把詢問內容填好，不要讓人看完報告點進來還得
+// 自己重打一次是哪一項有問題。Next 16 的 searchParams 是 Promise，要 await。
+// 代價是這頁從靜態變成動態渲染——這頁本來就掛 Google Maps iframe 跟外部表單，
+// 靜態化沒有實質好處，換到的轉換率比較重要。
+export default async function ContactPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ topic?: string; item?: string; url?: string }>;
+}) {
+  const { topic, item, url } = await searchParams;
+  const inquiryDraft = item
+    ? `健檢報告裡「${item}」這一項顯示需處理${url ? `（${url}）` : ''}，想知道該怎麼確認跟處理。`
+    : '';
+
   return (
     <div className="marketing">
       <Masthead active="contact" />
@@ -71,7 +85,7 @@ export default function ContactPage() {
 
               <div className="sm:col-span-2 mt-1">
                 <span className="lbl">諮詢事項（可多選）</span>
-                <ContactTopicChips />
+                <ContactTopicChips defaultTopicKey={topic} />
               </div>
 
               <div className="sm:col-span-2">
@@ -79,6 +93,7 @@ export default function ContactPage() {
                 <textarea
                   className="fld"
                   rows={5}
+                  defaultValue={inquiryDraft}
                   placeholder="例如：ChatGPT 問我們的品牌都回答同業，想知道是哪裡的問題。"
                 />
               </div>

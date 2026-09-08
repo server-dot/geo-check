@@ -34,7 +34,7 @@ export interface ContentVisibility {
   orgName: string; // JSON-LD Organization/LocalBusiness 的 name——比 <title> 可靠的品牌名來源
                     // （<title> 常被 SEO 文案佔掉第一段，例如「SEO GEO專業團隊｜...｜真正的品牌名」）
   summary: string;  // 一句話總結點評——給人看的重點結論，放在最前面
-  advice: string;   // 底下支撐 summary 的技術細節（字數、重複內容等）
+  advice: string;   // 底下支撐 summary 的技術細節（字數、重複內容等）——術語放這裡，收在技術細節區
   duplicateBlockChars: number; // 偵測到結構性重複區塊（例如跑馬燈為做無縫循環而複製兩份）並排除掉的字數
 }
 
@@ -264,18 +264,18 @@ export function analyzeContentVisibility(html: string): ContentVisibility {
     status = 'empty';
     advice =
       htmlLength > BIG_HTML && scriptCount > 0
-        ? `AI 爬蟲讀到的內容幾乎是空的（只有 ${textLength} 個字）。頁面有 ${scriptCount} 個腳本、HTML 共 ${htmlLength} 字元，內容應該是靠 JavaScript 在瀏覽器端才長出來的。AI 爬蟲不執行 JavaScript，所以看到的就是這片空白——建議改用伺服器端渲染（SSR）或預先渲染（SSG）。`
-        : `AI 爬蟲讀到的內容幾乎是空的（只有 ${textLength} 個字），這一頁在 AI 眼中等於沒有內容。`;
+        ? `判定依據：可讀文字只有 ${textLength} 字，但 HTML 原始碼有 ${htmlLength} 字元、${scriptCount} 個 script 標籤——內容在客戶端渲染。要讓爬蟲讀得到，HTML 必須在伺服器端就先產生好（SSR／SSG）。`
+        : `判定依據：可讀文字只有 ${textLength} 字（門檻 ${EMPTY_TEXT} 字）。`;
   } else if (textLength < THIN_TEXT) {
     status = 'thin';
-    advice = `AI 爬蟲只讀到 ${textLength} 個字（正文約 ${substantiveChars} 字、選單／標籤約 ${furnitureChars} 字），內容偏單薄。AI 要有足夠的文字才能理解並引用你的頁面，建議首頁至少寫清楚你是誰、提供什麼。`;
+    advice = `判定依據：可讀文字 ${textLength} 字（正文約 ${substantiveChars} 字、選單／標籤約 ${furnitureChars} 字），低於 ${THIN_TEXT} 字的單薄門檻。`;
   } else {
     status = 'ok';
-    advice = `AI 爬蟲能讀到 ${textLength} 個字（正文約 ${substantiveChars} 字、選單／標籤約 ${furnitureChars} 字），不需要執行 JavaScript 就看得到。`;
+    advice = `判定依據：可讀文字 ${textLength} 字（正文約 ${substantiveChars} 字、選單／標籤約 ${furnitureChars} 字），不需要執行 JavaScript 就取得得到。`;
   }
 
   if (duplicateBlockChars > 0) {
-    advice += ` 另外偵測到約 ${duplicateBlockChars} 個字的內容在頁面裡重複渲染了兩份（常見於跑馬燈／無限捲動效果為了無縫循環而複製的第二份，也可能是響應式版面同時渲染手機版/桌機版兩份選單），這段已經從上面的字數和預覽排除。建議把重複的那份加上 aria-hidden="true"，避免稀釋 AI 讀到的有效內容比例。`;
+    advice += ` 另外偵測到約 ${duplicateBlockChars} 字的區塊在同一頁渲染了兩份（跑馬燈為做無縫循環複製的第二份，或響應式版面同時輸出手機／桌機兩套選單），已從上面的字數與預覽扣除。技術上這種複製區塊可以用 aria-hidden 標記排除。`;
   }
 
   // summary：給人看的一句話總結，優先於底下的技術細節（advice）。
@@ -288,33 +288,33 @@ export function analyzeContentVisibility(html: string): ContentVisibility {
   // 獨立算好這句話，empty/thin 直接接一句，ok 狀態下保證一定被列出。
   const duplicateBlockNote =
     duplicateBlockChars > 0
-      ? `偵測到約 ${duplicateBlockChars} 字重複渲染內容（常見於跑馬燈或響應式雙份選單），建議加上 aria-hidden 排除`
+      ? `有約 ${duplicateBlockChars} 個字在同一頁重複出現兩次（常見於跑馬燈，或手機版跟桌機版各放一份選單），AI 會因此低估你這頁的實際資訊量`
       : '';
 
   let summary: string;
   if (status === 'empty') {
-    summary = 'AI 幾乎讀不到你的內容，等於你的網站在 AI 眼中是空的——這是最優先要處理的問題。';
+    summary = 'AI 讀到的是一片空白。你網站上的文字是靠 JavaScript 在瀏覽器裡才長出來的，AI 爬蟲不會跑 JavaScript，它看到的就是空的——等於你的網站在 AI 眼中不存在。這是整份報告裡最優先要處理的一項。';
     if (duplicateBlockNote) summary += `另外，${duplicateBlockNote}。`;
   } else if (status === 'thin') {
-    summary = 'AI 讀得到內容，但份量偏薄，建議加寫更多說明文字，AI 才有足夠依據理解並引用你的頁面。';
+    summary = 'AI 讀得到你的內容，但份量偏薄。文字太少時 AI 沒有足夠依據判斷你是做什麼的，回答別人的問題時就不太會想到你。';
     if (duplicateBlockNote) summary += `另外，${duplicateBlockNote}。`;
   } else {
     const furnitureRatio = textLength > 0 ? furnitureChars / textLength : 0;
     const issues: string[] = [];
     if (furnitureRatio > 0.3) {
       issues.push(
-        `選單／標籤字占比偏高（約 ${Math.round(furnitureRatio * 100)}%），正文其實只有約 ${substantiveChars} 字，可以考慮精簡導覽或標籤數量`
+        `選單、按鈕這類介面文字占了約 ${Math.round(furnitureRatio * 100)}%，真正的正文其實只有約 ${substantiveChars} 字`
       );
     }
     if (!description) {
-      issues.push('沒有寫 meta description，建議補一段簡短說明，這是 AI 判斷頁面主題的重要依據');
+      issues.push('沒有寫頁面摘要——那是搜尋結果跟 AI 判斷這頁主題最直接的一句話');
     }
     const capped = issues.slice(0, 2);
     if (duplicateBlockNote) capped.push(duplicateBlockNote);
     summary =
       capped.length === 0
-        ? '內容量足夠、標題與描述也清楚，AI 應該能正確理解你的網站在做什麼，沒有發現明顯需要處理的問題。'
-        : `內容量足夠，AI 讀得到理解你網站所需要的文字。可以再優化的地方：${capped.join('；')}。`;
+        ? '內容量足夠、標題跟摘要也清楚，AI 讀得懂你的網站在做什麼，沒有發現明顯的問題。'
+        : `內容量足夠，AI 讀得到理解你網站所需要的文字。比較可惜的地方：${capped.join('；')}。`;
   }
 
   const previewBlocks = truncateBlocks(fullBlocks, 800);
