@@ -422,6 +422,64 @@ const BOT_TILE: Record<BotStatus, { glyph: string; color: string }> = {
   unknown: { glyph: "?", color: "#8a938a" },
 };
 
+// AI 讀到的內容是由什麼組成的：正文 vs 選單／標籤那些「網站家具」。
+// 原本是一行 mono 文字（「共 X 字：正文約 Y 字、選單／標籤約 Z 字（占 N%）」），
+// 三個數字擠在一句話裡要自己換算比例；改成一條兩段的比例條，比例本身就是圖。
+//
+// 兩個色跑過 dataviz 驗證：深萊姆 #6e8f1f 對中性灰 #b3b8ad，正常視覺 ΔE 21.1、
+// 綠色覺 19.3，都遠高於 15 的門檻。灰色對背景的對比只有 2.01（低於 3:1），
+// 規範要求這種情況必須有「可見標籤」當補償——所以兩段都直接標上名稱與字數，
+// 不是只靠顏色配圖例。
+const MIX_COLOR = { body: "#6e8f1f", furniture: "#b3b8ad" };
+
+function ContentMixBar({
+  total,
+  substantive,
+  furniture,
+}: {
+  total: number;
+  substantive: number;
+  furniture: number;
+}) {
+  if (total <= 0) return null;
+  const pct = (n: number) => Math.round((n / total) * 100);
+  const segs = [
+    { key: "body", label: "正文", value: substantive, color: MIX_COLOR.body },
+    { key: "furniture", label: "選單／標籤", value: furniture, color: MIX_COLOR.furniture },
+  ].filter((x) => x.value > 0);
+
+  return (
+    <div className="mt-3 rounded-lg border border-line bg-paper p-4">
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <p className="text-xs font-medium text-ink3">AI 讀到的內容是由什麼組成的</p>
+        <p className="mono text-xs text-ink2">
+          共 <b className="font-semibold text-ink">{total.toLocaleString()}</b> 字
+        </p>
+      </div>
+      {/* 段與段之間留 2px 底色縫，兩端 4px 圓角 */}
+      <div className="flex h-4 w-full gap-[2px] overflow-hidden">
+        {segs.map((sg, i) => (
+          <div
+            key={sg.key}
+            title={`${sg.label} ${sg.value.toLocaleString()} 字（${pct(sg.value)}%）`}
+            className={`h-full ${i === 0 ? "rounded-l" : ""} ${i === segs.length - 1 ? "rounded-r" : ""}`}
+            style={{ width: `${(sg.value / total) * 100}%`, backgroundColor: sg.color }}
+          />
+        ))}
+      </div>
+      {/* 直接標籤：文字一律用 ink 色階，識別靠旁邊的色點，不讓文字染上資料色 */}
+      <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
+        {segs.map((sg) => (
+          <span key={sg.key} className="flex items-center gap-1.5 text-xs text-ink2">
+            <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: sg.color }} />
+            {sg.label} <span className="mono text-ink3">{sg.value.toLocaleString()} 字 · {pct(sg.value)}%</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // 一格狀態方塊，格陣、爬蟲磚、內容授權卡共用同一個視覺語言
 function StatusChip({ glyph, color, size = 18 }: { glyph: string; color: string; size?: number }) {
   return (
@@ -2585,13 +2643,11 @@ export default function HomeClient({
                 <div className={`rounded-[10px] border p-6 ${VISIBILITY[engine.visibility.status].className}`}>
                   <p className="text-lg font-bold text-ink">{VISIBILITY[engine.visibility.status].label}</p>
                   <p className="mt-2 text-sm font-medium leading-relaxed text-ink">{engine.visibility.summary}</p>
-                  <p className="mono mt-1 text-xs text-ink3">
-                    共 {engine.visibility.textLength} 字：正文約 {engine.visibility.substantiveChars} 字、選單／標籤約{" "}
-                    {engine.visibility.furnitureChars} 字
-                    {engine.visibility.textLength > 0
-                      ? `（占 ${Math.round((engine.visibility.furnitureChars / engine.visibility.textLength) * 100)}%）`
-                      : ""}
-                  </p>
+                  <ContentMixBar
+                    total={engine.visibility.textLength}
+                    substantive={engine.visibility.substantiveChars}
+                    furniture={engine.visibility.furnitureChars}
+                  />
 
                   <div className="mt-4 rounded-lg border border-line bg-paper p-4">
                     <p className="text-xs font-medium text-ink3">AI 從這幾項判斷你網站是做什麼的：</p>
@@ -2602,7 +2658,7 @@ export default function HomeClient({
                       <p className="mt-1 text-sm leading-relaxed text-ink2">{engine.visibility.description}</p>
                     ) : (
                       <p className="mt-1 text-sm text-warn">
-                        （沒有寫 meta description，AI 只能自己從標題和正文猜，建議補上一段簡短描述）
+                        （這頁沒有寫摘要，AI 只能自己從標題和正文猜你這頁在講什麼）
                       </p>
                     )}
                     {engine.visibility.h1.length > 0 && (
@@ -2650,15 +2706,6 @@ export default function HomeClient({
                       );
                     })()}
 
-                  {/* 只剩一個統計數字（可讀字數）——結構化資料移到獨立的「結構化資料」
-                      專區，不再擠在這裡。單欄用 grid-cols-1，理由同舊註解：不要為了呼應
-                      「figs」這個共用 class 名稱硬撐出根本不存在的欄位。 */}
-                  <dl className="figs mt-4 grid-cols-1">
-                    <div>
-                      <b>{engine.visibility.textLength}</b>
-                      <span>可讀字數</span>
-                    </div>
-                  </dl>
                 </div>
               </div>
             )}
