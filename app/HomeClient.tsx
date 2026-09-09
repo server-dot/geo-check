@@ -2016,7 +2016,12 @@ function SchemaSection({
   );
 }
 
+// 19 項逐條展開是報告裡最大一片文字。該先做的四項健檢報告圖的「優先處理順序」
+// 已經挑出來了，這張表是「要查證時才翻」的明細，不該用一整片文字擋在路上，所以
+// 預設收合。跟 BotAccessList 同一個原則：收合是預設呈現方式，不是藏資訊——標題列
+// 保留三個狀態的數量，一鍵展開看全部。
 function AuditTable({ checks, origin }: { checks: CheckItem[]; origin?: string }) {
+  const [open, setOpen] = useState(false);
   const groups = new Map<string, CheckItem[]>();
   for (const c of checks) {
     const g = groups.get(c.category) ?? [];
@@ -2032,12 +2037,23 @@ function AuditTable({ checks, origin }: { checks: CheckItem[]; origin?: string }
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 className="eyebrow">深度健檢（{checks.length} 項）</h2>
-        <div className="mono flex gap-3 text-xs">
-          <span className="text-fail">需處理 {sc.fail}</span>
-          <span className="text-warn">可優化 {sc.warn}</span>
-          <span className="text-ok">正常 {sc.ok}</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="mono flex gap-3 text-xs">
+            <span className="text-fail">需處理 {sc.fail}</span>
+            <span className="text-warn">可優化 {sc.warn}</span>
+            <span className="text-ok">正常 {sc.ok}</span>
+          </div>
+          <button type="button" onClick={() => setOpen((v) => !v)} className="btn-line text-xs">
+            {open ? "收合明細" : `展開 ${checks.length} 項明細`}
+          </button>
         </div>
       </div>
+      {!open && (
+        <p className="text-xs leading-relaxed text-ink3">
+          該先處理的幾項已經列在上面「健檢報告圖」的優先處理順序。這裡是全部 {checks.length}{" "}
+          項的判定依據與量到的值，要查證某一項再展開。
+        </p>
+      )}
       {/* 640px 以上維持表格；再窄下去三欄硬擠只會逼中文逐字斷行，改成每列一張卡片，
           資訊順序不變（狀態＋項目在上，說明／證據在中，問題頁面連結靠右），不需要橫向捲動。
           每個分類各自一張獨立的卡片＋表格（照設計稿的版型），不是一張大表裡面塞分類分隔列——
@@ -2049,6 +2065,7 @@ function AuditTable({ checks, origin }: { checks: CheckItem[]; origin?: string }
           700px 時表格會出現水平捲軸——但 Mac 預設隱藏捲軸，使用者看不出來還能捲，
           就像被裁掉一樣。固定寬三欄 + 中間欄無下限，表格永遠塞得進容器，不會有
           「其實可以捲動、但看不出來」這個陷阱。 */}
+      {open && (
       <div className="hidden space-y-5 sm:block">
         {[...groups.entries()].map(([category, rows]) => (
           <div key={category}>
@@ -2112,7 +2129,9 @@ function AuditTable({ checks, origin }: { checks: CheckItem[]; origin?: string }
           </div>
         ))}
       </div>
+      )}
 
+      {open && (
       <div className="space-y-5 sm:hidden">
         {[...groups.entries()].map(([category, rows]) => (
           <div key={category}>
@@ -2125,6 +2144,7 @@ function AuditTable({ checks, origin }: { checks: CheckItem[]; origin?: string }
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }
