@@ -678,15 +678,29 @@ function rbShort(n: number): string {
   return n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(n);
 }
 
-function RbCard({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+// printOnly 的卡片刻意不在 inline style 裡寫 display——inline style 贏過所有
+// class 規則，`.rb-print-only { display:none }` 會被自己的 `display:flex` 蓋掉，
+// 只能靠 !important 硬壓。把 display 交給 class 決定就不用打這一架。
+function RbCard({
+  children,
+  style,
+  className,
+  printOnly = false,
+}: {
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+  className?: string;
+  printOnly?: boolean;
+}) {
   return (
     <div
+      className={[printOnly ? "rb-print-only" : "", className ?? ""].filter(Boolean).join(" ") || undefined}
       style={{
         background: "var(--rb-card)",
         border: "1px solid var(--rb-hair)",
         borderRadius: 12,
         padding: 20,
-        display: "flex",
+        ...(printOnly ? null : { display: "flex" }),
         flexDirection: "column",
         // grid 的 fr 預設以 min-content 為下限：內容長的那張卡會把同列其他卡擠窄，
         // 欄寬比例就跑掉了（標題被迫換行）。歸零才會照 1.4/1.05/1.1 分。
@@ -912,6 +926,62 @@ function buildPriorities(engine: EngineResult, audit: CheckItem[] | undefined, c
       return rate(a.group) - rate(b.group);
     })
     .slice(0, 4);
+}
+
+// 檢測結果分佈：報告圖裡是列印用（整張戰情表要完整），螢幕上改放在「深度健檢」
+// 正上方——它講的就是那張表的組成，貼著它才是圖文對照，擺在報告圖裡離得太遠。
+function RbCheckDistribution({ cats, printOnly = false }: { cats: Category5[]; printOnly?: boolean }) {
+  const totals = cats.reduce(
+    (acc, c) => ({ ok: acc.ok + c.ok, warn: acc.warn + c.warn, fail: acc.fail + c.fail }),
+    { ok: 0, warn: 0, fail: 0 },
+  );
+  const checkTotal = totals.ok + totals.warn + totals.fail;
+  const overall = computeOverallScore(cats);
+  return (
+    <RbCard printOnly={printOnly} style={{ gap: 16 }}>
+      <div style={{ fontSize: 15, fontWeight: 600 }}>{checkTotal} 項檢測結果分佈</div>
+      {/* 這張卡在報告圖裡是三欄之一（約 320px），單獨放在報告欄裡卻有 736px——
+          不封頂的話圖例會被拉開成一整排，數字飄到很右邊。 */}
+      <div style={{ display: "flex", alignItems: "center", gap: 18, maxWidth: 420 }}>
+        <RbDonut
+          segments={[
+            { value: totals.ok, color: "var(--rb-ok)" },
+            { value: totals.warn, color: "var(--rb-warn)" },
+            { value: totals.fail, color: "var(--rb-fail)" },
+          ]}
+          center={<div style={{ fontSize: 30, fontWeight: 700, letterSpacing: "-0.04em", lineHeight: 1 }}>{checkTotal}</div>}
+          sub="項"
+        />
+        <div style={{ display: "flex", flexDirection: "column", gap: 11, flex: 1 }}>
+          {([["正常", totals.ok, "ok"], ["可優化", totals.warn, "warn"], ["需處理", totals.fail, "fail"]] as const).map(
+            ([label, n, st]) => (
+              <div key={label} style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                <span style={{ width: 9, height: 9, borderRadius: 2, background: RB_STATUS_VAR[st], flex: "none" }} />
+                <span style={{ fontSize: 13, color: "var(--rb-ink2)", flex: 1 }}>{label}</span>
+                <span className="mono" style={{ fontSize: 13 }}>{n}</span>
+                <span className="mono" style={{ fontSize: 11.5, color: "var(--rb-ink3)", width: 34, textAlign: "right" }}>
+                  {checkTotal > 0 ? Math.round((n / checkTotal) * 100) : 0}%
+                </span>
+              </div>
+            ),
+          )}
+        </div>
+      </div>
+      <div style={{ paddingTop: 14, borderTop: "1px solid var(--rb-hair2)", fontSize: 12.5, lineHeight: 1.65, color: "var(--rb-ink3)" }}>
+        總分 {overall.score} 是五分類通過率的平均：（{cats.map((c) => c.passRate).join("＋")}）÷ {cats.length}。
+      </div>
+    </RbCard>
+  );
+}
+
+// 螢幕上單獨放一張報告圖的卡片時，要自己帶 --rb-* 色票（那組變數是 scope 在
+// .report-board 裡的），不然全部 var() 解不出來。
+function RbSoloCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={className} style={RB_VARS}>
+      {children}
+    </div>
+  );
 }
 
 function ReportBoard({
@@ -1150,8 +1220,11 @@ function ReportBoard({
         </RbCard>
       )}
 
-      {/* 四道關卡 / 結果分佈 / AI 眼中的你 */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.45fr 1fr 1fr", gap: 16, alignItems: "stretch" }}>
+      {/* 六張卡放同一個 grid：螢幕上有三張是 .rb-print-only（下面都有完整版本，
+          圖上再放一次是同一件事講兩次），剩下三張剛好排成一列；列印時六張全開，
+          兩列三欄，就是完整的戰情表。兩個獨立 grid 做不到這件事——藏掉其中一欄
+          會留下一個空格。 */}
+      <div className="rb-grid">
         <RbCard style={{ gap: 18 }}>
           <RbCardTitle title="AI 引用你的四道關卡" note="每一關的實測通過率" />
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, alignItems: "end", height: 132 }}>
@@ -1177,37 +1250,7 @@ function ReportBoard({
           </div>
         </RbCard>
 
-        <RbCard style={{ gap: 16 }}>
-          <div style={{ fontSize: 15, fontWeight: 600 }}>{checkTotal} 項檢測結果分佈</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-            <RbDonut
-              segments={[
-                { value: totals.ok, color: "var(--rb-ok)" },
-                { value: totals.warn, color: "var(--rb-warn)" },
-                { value: totals.fail, color: "var(--rb-fail)" },
-              ]}
-              center={<div style={{ fontSize: 30, fontWeight: 700, letterSpacing: "-0.04em", lineHeight: 1 }}>{checkTotal}</div>}
-              sub="項"
-            />
-            <div style={{ display: "flex", flexDirection: "column", gap: 11, flex: 1 }}>
-              {([["正常", totals.ok, "ok"], ["可優化", totals.warn, "warn"], ["需處理", totals.fail, "fail"]] as const).map(
-                ([label, n, st]) => (
-                  <div key={label} style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                    <span style={{ width: 9, height: 9, borderRadius: 2, background: RB_STATUS_VAR[st], flex: "none" }} />
-                    <span style={{ fontSize: 13, color: "var(--rb-ink2)", flex: 1 }}>{label}</span>
-                    <span className="mono" style={{ fontSize: 13 }}>{n}</span>
-                    <span className="mono" style={{ fontSize: 11.5, color: "var(--rb-ink3)", width: 34, textAlign: "right" }}>
-                      {checkTotal > 0 ? Math.round((n / checkTotal) * 100) : 0}%
-                    </span>
-                  </div>
-                ),
-              )}
-            </div>
-          </div>
-          <div style={{ paddingTop: 14, borderTop: "1px solid var(--rb-hair2)", fontSize: 12.5, lineHeight: 1.65, color: "var(--rb-ink3)" }}>
-            總分 {overall.score} 是五分類通過率的平均：（{cats.map((c) => c.passRate).join("＋")}）÷ {cats.length}。
-          </div>
-        </RbCard>
+        <RbCheckDistribution cats={cats} printOnly />
 
         <RbCard style={{ gap: 16 }}>
           <RbCardTitle title="AI 眼中的你" note="僅首頁" />
@@ -1254,10 +1297,7 @@ function ReportBoard({
             <div style={rbEmpty}>沒有量到首頁內容。</div>
           )}
         </RbCard>
-      </div>
 
-      {/* 雷達 / 爬蟲權限 / AI 認不認得你 */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1.05fr 1.1fr", gap: 16, alignItems: "stretch" }}>
         <RbCard style={{ gap: 16 }}>
           <RbCardTitle title="五分類通過率" note={`平均 ${overall.score}`} />
           <svg viewBox="-58 0 438 300" style={{ width: "100%", height: 238, display: "block" }}>
@@ -1306,7 +1346,7 @@ function ReportBoard({
           </div>
         </RbCard>
 
-        <RbCard style={{ gap: 14 }}>
+        <RbCard printOnly style={{ gap: 14 }}>
           <RbCardTitle title="各家 AI 爬蟲的存取權限" note="政策 × 實測" />
           <div style={{ display: "flex", flexDirection: "column" }}>
             {bots.map((b, i) => {
@@ -1369,7 +1409,7 @@ function ReportBoard({
           )}
         </RbCard>
 
-        <RbCard style={{ gap: 14 }}>
+        <RbCard printOnly style={{ gap: 14 }}>
           <RbCardTitle title="AI 認不認得你？" note={`${engines.length} 家引擎實測`} />
           {engines.length > 0 ? (
             <>
@@ -3172,8 +3212,14 @@ export default function HomeClient({
 
             {/* 深度健檢：多頁爬蟲＋規則＋AI 語意判斷。這個區塊外層已經整包包在
                 status.status === "completed" 底下，跑到這裡 status.audit 一定有值——
-                進行中的畫面統一由最外層那張進度卡負責，這裡不用再重複一份。 */}
-            <div className="mt-10">
+                進行中的畫面統一由最外層那張進度卡負責，這裡不用再重複一份。
+                上面那張分佈圖講的就是這張表的組成，貼著放才是圖文對照。 */}
+            {status?.audit && (
+              <RbSoloCard className="mt-10 print:hidden">
+                <RbCheckDistribution cats={buildCategories5(engine, status.audit)} />
+              </RbSoloCard>
+            )}
+            <div className="mt-6">
               {status?.audit && (
                 <AuditTable
                   checks={status.audit.filter((c) => c.key !== "schema" && c.key !== "localbiz")}

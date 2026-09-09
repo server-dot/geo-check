@@ -520,3 +520,24 @@ mark.lime-highlight {
   }
 }
 
+
+/* 健檢報告圖：螢幕跟列印看到的不是同一組卡片。
+   螢幕上「檢測結果分佈」「各家 AI 爬蟲的存取權限」「AI 認不認得你？」下面都有
+   完整版本（含 AI 原話、引用來源、每家爬蟲的判定依據），圖上再放一次是同一件事
+   講兩次；列印出來的是一張要單獨帶走的戰情表，那三張就必須在。
+   六張卡共用同一個 grid：藏掉其中一張只是少一格，不會像兩個獨立 grid 那樣
+   在某一欄留下一個空洞。 */
+.rb-grid {
+  display: grid;
+  gap: 16px;
+  align-items: stretch;
+  grid-template-columns: 1.4fr 1fr 1.05fr;
+}
+.rb-print-only {
+  display: none;
+}
+@media print {
+  .rb-print-only {
+    display: flex;
+  }
+}
