@@ -306,8 +306,8 @@ export async function aggregateAuditChecks(
     const depthDenominator = nonHomeForDepth.length || Y;
     const bc = (nonHomeForDepth.length ? nonHomeForDepth : htmlPages).filter((p) => p.hasBreadcrumb).length;
     out.push(bc > 0 || maxDepth >= 1
-      ? { key: 'categoryDepth', level: LEVEL.EFFICIENCY, category: CATEGORY.LOCAL_BRAND, item: '網站分類層級清不清楚', status: 'ok', advice: `網址最深 ${maxDepth} 層、${bc}/${depthDenominator} 頁有標示所在位置（不計首頁），分類看得出來`, evidence: `最深 ${maxDepth} 層｜有標示 ${bc}/${depthDenominator}` }
-      : { key: 'categoryDepth', level: LEVEL.EFFICIENCY, category: CATEGORY.LOCAL_BRAND, item: '網站分類層級清不清楚', status: 'warn', advice: '看不出網站有分類——所有網址都擠在同一層，頁面上也沒有標示所在位置。', impact: 'AI 判斷你「主要在做什麼」，一部分是看你把內容怎麼分類、哪一類的頁面最多。全部擠在同一層，它就看不出你的主力業務是哪一塊。', technical: `網址路徑最深 ${maxDepth} 層。可在網址加上分類路徑，並補上麵包屑導覽。`, evidence: `最深 ${maxDepth} 層` });
+      ? { key: 'categoryDepth', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '網站分類層級清不清楚', status: 'ok', advice: `網址最深 ${maxDepth} 層、${bc}/${depthDenominator} 頁有標示所在位置（不計首頁），分類看得出來`, evidence: `最深 ${maxDepth} 層｜有標示 ${bc}/${depthDenominator}` }
+      : { key: 'categoryDepth', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '網站分類層級清不清楚', status: 'warn', advice: '看不出網站有分類——所有網址都擠在同一層，頁面上也沒有標示所在位置。', impact: 'AI 判斷你「主要在做什麼」，一部分是看你把內容怎麼分類、哪一類的頁面最多。全部擠在同一層，它就看不出你的主力業務是哪一塊。', technical: `網址路徑最深 ${maxDepth} 層。可在網址加上分類路徑，並補上麵包屑導覽。`, evidence: `最深 ${maxDepth} 層` });
   }
 
   // 17. 首頁內容優化

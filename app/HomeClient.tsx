@@ -529,7 +529,10 @@ const CATEGORY5_KEY_MAP: Record<string, string> = {
   imgAlt: "技術與索引",
   imgFormat: "技術與索引",
   eeat: "品牌與權威",
-  categoryDepth: "品牌與權威",
+  // categoryDepth 量的是「網址最深幾層 + 幾頁有麵包屑」，那是網站結構，不是品牌
+  // 權威。它原本掛在品牌與權威底下，讓一個只有 2 項的分類憑一個技術指標拿到 75 分
+  // ——一個連 GSC 都沒裝的網站不可能有 75 分的品牌權威。移到技術與索引。
+  categoryDepth: "技術與索引",
 };
 const CATEGORY5_ORDER = ["AI 可達性", "內容與追蹤", "結構化資料", "技術與索引", "品牌與權威"];
 
@@ -678,29 +681,24 @@ function rbShort(n: number): string {
   return n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(n);
 }
 
-// printOnly 的卡片刻意不在 inline style 裡寫 display——inline style 贏過所有
-// class 規則，`.rb-print-only { display:none }` 會被自己的 `display:flex` 蓋掉，
-// 只能靠 !important 硬壓。把 display 交給 class 決定就不用打這一架。
 function RbCard({
   children,
   style,
   className,
-  printOnly = false,
 }: {
   children: React.ReactNode;
   style?: React.CSSProperties;
   className?: string;
-  printOnly?: boolean;
 }) {
   return (
     <div
-      className={[printOnly ? "rb-print-only" : "", className ?? ""].filter(Boolean).join(" ") || undefined}
+      className={className}
       style={{
         background: "var(--rb-card)",
         border: "1px solid var(--rb-hair)",
         borderRadius: 12,
         padding: 20,
-        ...(printOnly ? null : { display: "flex" }),
+        display: "flex",
         flexDirection: "column",
         // grid 的 fr 預設以 min-content 為下限：內容長的那張卡會把同列其他卡擠窄，
         // 欄寬比例就跑掉了（標題被迫換行）。歸零才會照 1.4/1.05/1.1 分。
@@ -930,7 +928,7 @@ function buildPriorities(engine: EngineResult, audit: CheckItem[] | undefined, c
 
 // 檢測結果分佈：報告圖裡是列印用（整張戰情表要完整），螢幕上改放在「深度健檢」
 // 正上方——它講的就是那張表的組成，貼著它才是圖文對照，擺在報告圖裡離得太遠。
-function RbCheckDistribution({ cats, printOnly = false }: { cats: Category5[]; printOnly?: boolean }) {
+function RbCheckDistribution({ cats }: { cats: Category5[] }) {
   const totals = cats.reduce(
     (acc, c) => ({ ok: acc.ok + c.ok, warn: acc.warn + c.warn, fail: acc.fail + c.fail }),
     { ok: 0, warn: 0, fail: 0 },
@@ -938,7 +936,7 @@ function RbCheckDistribution({ cats, printOnly = false }: { cats: Category5[]; p
   const checkTotal = totals.ok + totals.warn + totals.fail;
   const overall = computeOverallScore(cats);
   return (
-    <RbCard printOnly={printOnly} style={{ gap: 16 }}>
+    <RbCard style={{ gap: 16 }}>
       <div style={{ fontSize: 15, fontWeight: 600 }}>{checkTotal} 項檢測結果分佈</div>
       {/* 這張卡在報告圖裡是三欄之一（約 320px），單獨放在報告欄裡卻有 736px——
           不封頂的話圖例會被拉開成一整排，數字飄到很右邊。 */}
@@ -980,6 +978,140 @@ function RbSoloCard({ children, className = "" }: { children: React.ReactNode; c
   return (
     <div className={className} style={RB_VARS}>
       {children}
+    </div>
+  );
+}
+
+// withTable：底下那排「分類｜分數｜項目數」只有列印版要——螢幕上分數已經寫在
+// 雷達的軸標籤旁邊了，再列一次是同一組數字講兩次。
+function RbRadar({ cats, withTable = false }: { cats: Category5[]; withTable?: boolean }) {
+  return (
+    <>
+        <svg viewBox="-58 0 438 300" style={{ width: "100%", height: 238, display: "block" }}>
+          <polygon points={rbPoly(60, cats.length)} fill="none" stroke="rgba(48,60,84,0.16)" />
+          <polygon points={rbPoly(120, cats.length)} fill="none" stroke="rgba(48,60,84,0.26)" />
+          {cats.map((_, i) => {
+            const [x, y] = rbRadarPoint(i, 120);
+            return <line key={i} x1="160" y1="160" x2={x} y2={y} stroke="rgba(48,60,84,0.16)" />;
+          })}
+          <polygon
+            points={rbPoly((i) => (120 * cats[i].passRate) / 100, cats.length)}
+            fill="rgba(252,180,24,0.22)"
+            stroke="#fcb418"
+            strokeWidth="2.5"
+          />
+          {cats.map((c, i) => {
+            const [x, y] = rbRadarPoint(i, (120 * c.passRate) / 100);
+            const weak = c.fail > 0;
+            return <circle key={c.name} cx={x} cy={y} r={weak ? 5 : 4} fill={weak ? "var(--rb-fail)" : "#fcb418"} />;
+          })}
+          {cats.map((c, i) => {
+            // 底下兩個角的標籤已經貼近 viewBox 下緣，分數那行要往上讓一點才不會被切掉
+            const y = RB_RADAR_LABEL[i].y - (RB_RADAR_LABEL[i].y > 260 ? 7 : 0);
+            const color = c.fail > 0 ? "#b8342c" : "#4a5468";
+            return (
+              <g key={c.name}>
+                <text x={RB_RADAR_LABEL[i].x} y={y} textAnchor={RB_RADAR_LABEL[i].anchor} fontSize="14" fill={color}>
+                  {c.name}
+                </text>
+                <text
+                  x={RB_RADAR_LABEL[i].x}
+                  y={y + 17}
+                  textAnchor={RB_RADAR_LABEL[i].anchor}
+                  fontSize="15"
+                  fontWeight="600"
+                  fill={color}
+                >
+                  {c.total > 0 ? c.passRate : "—"}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      {withTable && (
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${cats.length},1fr)`, gap: 6, paddingTop: 14, borderTop: "1px solid var(--rb-hair2)" }}>
+          {/* 分數旁邊一定要帶項目數：品牌與權威只有 1 項檢測，跟技術與索引的 14 項
+              在雷達上長得一樣大。不寫出來，讀者會以為 50 分跟 82 分是同一種可信度。 */}
+          {cats.map((c) => (
+            <div key={c.name} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 11.5, color: "var(--rb-ink3)" }}>{c.name}</span>
+              <span className="mono" style={{ fontSize: 14, color: c.fail > 0 ? "var(--rb-fail)" : undefined }}>
+                {c.total > 0 ? c.passRate : "—"}
+              </span>
+              <span className="mono" style={{ fontSize: 10.5, color: "var(--rb-ink3)" }}>{c.total} 項</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+// 環形總分。螢幕上的總覽卡用，圓周 2π×54。
+function RbScoreRing({ score }: { score: number }) {
+  const r = 54;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg width="132" height="132" viewBox="0 0 132 132" style={{ transform: "rotate(-90deg)" }}>
+      <circle cx="66" cy="66" r={r} fill="none" stroke="rgba(48,60,84,0.12)" strokeWidth="10" />
+      <circle
+        cx="66"
+        cy="66"
+        r={r}
+        fill="none"
+        stroke="var(--rb-lime)"
+        strokeWidth="10"
+        strokeLinecap="round"
+        strokeDasharray={c}
+        strokeDashoffset={c * (1 - Math.min(100, Math.max(0, score)) / 100)}
+      />
+    </svg>
+  );
+}
+
+// 螢幕上「健檢報告圖」只顯示這一張：總分＋等第＋三個狀態計數＋五分類雷達。
+// 其餘每一張圖在報告下面都有對應的完整段落，圖上再放一次就是同一件事講兩次；
+// 完整的戰情表留給列印（PDF）——那是一張要單獨帶走的東西，該有的都要在。
+function RbScoreSummary({ cats }: { cats: Category5[] }) {
+  const overall = computeOverallScore(cats);
+  const totals = cats.reduce(
+    (acc, c) => ({ ok: acc.ok + c.ok, warn: acc.warn + c.warn, fail: acc.fail + c.fail }),
+    { ok: 0, warn: 0, fail: 0 },
+  );
+  return (
+    <div className="rb-screen-only" style={{ ...RB_VARS, background: "var(--rb-card)", border: "1px solid var(--rb-hair)", borderRadius: 12, padding: 24 }}>
+      <div className="grid gap-6 sm:grid-cols-[168px_1fr] sm:items-center">
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+          <div style={{ position: "relative", width: 132, height: 132 }}>
+            <RbScoreRing score={overall.score} />
+            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+              <b style={{ fontSize: 34, fontWeight: 700, letterSpacing: "-0.04em", lineHeight: 1, color: "var(--rb-ink)" }}>
+                {overall.score}
+              </b>
+              <span className="mono" style={{ fontSize: 10.5, letterSpacing: "0.12em", color: "var(--rb-ink3)" }}>總分</span>
+            </div>
+          </div>
+          <span
+            className="mono"
+            style={{ background: "var(--rb-lime)", border: "1px solid rgba(140,90,5,0.35)", borderRadius: 999, padding: "5px 14px", fontSize: 12.5, fontWeight: 600, color: "var(--rb-ink)" }}
+          >
+            {overall.grade} 級・{overall.gradeLabel}
+          </span>
+          <div className="mono" style={{ display: "flex", gap: 16, textAlign: "center", fontSize: 12 }}>
+            {([["正常", totals.ok, "ok"], ["可優化", totals.warn, "warn"], ["需處理", totals.fail, "fail"]] as const).map(
+              ([label, n, st]) => (
+                <div key={label}>
+                  <b style={{ display: "block", fontSize: 16, color: RB_STATUS_VAR[st] }}>{n}</b>
+                  <span style={{ color: "var(--rb-ink3)" }}>{label}</span>
+                </div>
+              ),
+            )}
+          </div>
+        </div>
+        <div style={{ color: "var(--rb-ink)" }}>
+          <RbRadar cats={cats} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -1087,16 +1219,15 @@ function ReportBoard({
       className="report-board"
       style={{
         ...RB_VARS,
-        width: 1200,
-        background: "var(--rb-bg)",
         color: "var(--rb-ink)",
         fontFamily: "var(--font-archivo), 'Noto Sans TC', 'PingFang TC', system-ui, sans-serif",
-        padding: "32px 36px 40px",
-        display: "flex",
-        flexDirection: "column",
-        gap: 20,
       }}
     >
+      <RbScoreSummary cats={cats} />
+
+      {/* 以下整包只在列印時出現。螢幕上這些圖每一張在報告下面都有對應的完整段落，
+          放在這裡就是同一件事講兩次；PDF 是一張要單獨帶走的戰情表，該有的都要在。 */}
+      <div className="rb-print-only-block rb-print-stack">
       {/* 抬頭 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 24 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
@@ -1220,10 +1351,11 @@ function ReportBoard({
         </RbCard>
       )}
 
-      {/* 六張卡放同一個 grid：螢幕上有三張是 .rb-print-only（下面都有完整版本，
-          圖上再放一次是同一件事講兩次），剩下三張剛好排成一列；列印時六張全開，
-          兩列三欄，就是完整的戰情表。兩個獨立 grid 做不到這件事——藏掉其中一欄
-          會留下一個空格。 */}
+      {/* 六張卡放同一個 grid。螢幕上只留五分類雷達——其餘每一張在報告下面都有
+          完整版本（爬蟲存取、AI 認不認得你、AI 眼中的你、結構化資料、深度健檢），
+          圖上再放一次就是同一件事講兩次。列印時六張全開排兩列三欄，那才是要單獨
+          帶走的完整戰情表。用同一個 grid 是因為藏掉其中一張只會少一格，不會像
+          兩個獨立 grid 那樣在某一欄留下空洞。 */}
       <div className="rb-grid">
         <RbCard style={{ gap: 18 }}>
           <RbCardTitle title="AI 引用你的四道關卡" note="每一關的實測通過率" />
@@ -1250,7 +1382,7 @@ function ReportBoard({
           </div>
         </RbCard>
 
-        <RbCheckDistribution cats={cats} printOnly />
+        <RbCheckDistribution cats={cats} />
 
         <RbCard style={{ gap: 16 }}>
           <RbCardTitle title="AI 眼中的你" note="僅首頁" />
@@ -1300,53 +1432,13 @@ function ReportBoard({
 
         <RbCard style={{ gap: 16 }}>
           <RbCardTitle title="五分類通過率" note={`平均 ${overall.score}`} />
-          <svg viewBox="-58 0 438 300" style={{ width: "100%", height: 238, display: "block" }}>
-            <polygon points={rbPoly(60, cats.length)} fill="none" stroke="rgba(48,60,84,0.16)" />
-            <polygon points={rbPoly(120, cats.length)} fill="none" stroke="rgba(48,60,84,0.26)" />
-            {cats.map((_, i) => {
-              const [x, y] = rbRadarPoint(i, 120);
-              return <line key={i} x1="160" y1="160" x2={x} y2={y} stroke="rgba(48,60,84,0.16)" />;
-            })}
-            <polygon
-              points={rbPoly((i) => (120 * cats[i].passRate) / 100, cats.length)}
-              fill="rgba(252,180,24,0.22)"
-              stroke="#fcb418"
-              strokeWidth="2.5"
-            />
-            {cats.map((c, i) => {
-              const [x, y] = rbRadarPoint(i, (120 * c.passRate) / 100);
-              const weak = c.fail > 0;
-              return <circle key={c.name} cx={x} cy={y} r={weak ? 5 : 4} fill={weak ? "var(--rb-fail)" : "#fcb418"} />;
-            })}
-            {cats.map((c, i) => (
-              <text
-                key={c.name}
-                x={RB_RADAR_LABEL[i].x}
-                y={RB_RADAR_LABEL[i].y}
-                textAnchor={RB_RADAR_LABEL[i].anchor}
-                fontSize="15"
-                fill={c.fail > 0 ? "#b8342c" : "#4a5468"}
-              >
-                {c.name}
-              </text>
-            ))}
-          </svg>
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${cats.length},1fr)`, gap: 6, paddingTop: 14, borderTop: "1px solid var(--rb-hair2)" }}>
-            {cats.map((c) => (
-              <div key={c.name} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span style={{ fontSize: 11.5, color: "var(--rb-ink3)" }}>{c.name}</span>
-                <span className="mono" style={{ fontSize: 14, color: c.fail > 0 ? "var(--rb-fail)" : undefined }}>
-                  {c.total > 0 ? c.passRate : "—"}
-                </span>
-              </div>
-            ))}
-          </div>
+          <RbRadar cats={cats} withTable />
           <div className="mono" style={{ marginTop: "auto", paddingTop: 14, borderTop: "1px solid var(--rb-hair2)", fontSize: 11.5, lineHeight: 1.6, color: "var(--rb-ink3)" }}>
             （正常 ×1 ＋ 可優化 ×0.5）÷ 項目數
           </div>
         </RbCard>
 
-        <RbCard printOnly style={{ gap: 14 }}>
+        <RbCard style={{ gap: 14 }}>
           <RbCardTitle title="各家 AI 爬蟲的存取權限" note="政策 × 實測" />
           <div style={{ display: "flex", flexDirection: "column" }}>
             {bots.map((b, i) => {
@@ -1409,7 +1501,7 @@ function ReportBoard({
           )}
         </RbCard>
 
-        <RbCard printOnly style={{ gap: 14 }}>
+        <RbCard style={{ gap: 14 }}>
           <RbCardTitle title="AI 認不認得你？" note={`${engines.length} 家引擎實測`} />
           {engines.length > 0 ? (
             <>
@@ -1532,6 +1624,7 @@ function ReportBoard({
         <div>AI 搜尋能見度健檢 · {host} · {today}</div>
         <div>⚪ 無法判定不等於通過 — 每一項都是實測結果，不是預估值</div>
       </div>
+      </div>
     </div>
   );
 }
@@ -1541,16 +1634,17 @@ function ReportBoardSection(props: React.ComponentProps<typeof ReportBoard>) {
   return (
     <div>
       <div className="report-board-actions mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="eyebrow">健檢報告圖</h2>
+        <h2 className="eyebrow">五分類總覽</h2>
         <button type="button" onClick={() => window.print()} className="btn-line text-xs">
-          列印 / 存成 PDF
+          列印完整戰情表 / 存成 PDF
         </button>
       </div>
       <div className="report-board-scroll">
         <ReportBoard {...props} />
       </div>
       <p className="report-board-actions mt-2 text-xs text-ink3">
-        整份報告壓成一張圖。可以列印或存成 PDF，直接轉給合作對象。
+        列印或存成 PDF 會拿到完整的健檢報告圖——爬蟲累積讀到的內容、四道關卡、各家爬蟲存取權限、AI
+        認不認得你、優先處理順序全部在一張紙上，直接轉給合作對象。
       </p>
     </div>
   );

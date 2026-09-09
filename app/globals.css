@@ -507,37 +507,57 @@ mark.lime-highlight {
   }
 }
 
-/* 健檢報告圖是固定 1200px 的寬版圖，塞在 max-w-3xl（768px）的報告欄位裡只看得到
-   六成。畫面夠寬時讓它跳出欄位、以欄位中心對齊撐開；不夠寬就留在欄位裡橫向捲。
-   用 px 不用 100vw：100vw 含捲軸寬度，在傳統捲軸的系統上會讓整頁多出橫向捲軸。 */
+/* 螢幕上報告圖只剩一張總覽卡，跟著報告欄寬走就好，不用再跳出欄位撐開。
+   overflow-x 留著是給列印那張 1200px 的版型當保險。 */
 .report-board-scroll {
   overflow-x: auto;
 }
-@media (min-width: 1320px) {
-  .report-board-scroll {
-    width: 1272px;
-    margin-left: calc(50% - 636px);
+
+
+
+/* 健檢報告圖：螢幕跟列印看到的不是同一張東西。
+   螢幕上只留一張總覽卡（總分＋等第＋三個狀態計數＋五分類雷達）——其餘每一張圖在
+   報告下面都有對應的完整段落（爬蟲存取、AI 認不認得你、AI 眼中的你、結構化資料、
+   深度健檢），放在上面就是同一件事講兩次。列印出來的才是完整的戰情表，那是一張要
+   單獨帶走的紙，該有的都要在。
+
+   包一層 wrapper 而不是直接對每張卡下 display:none：卡片自己的 display 寫在
+   inline style 上，inline 贏過所有 class 規則，只能靠 !important 硬壓。包一層
+   就沒這問題——wrapper 沒有 inline display，內層維持原本的排版。 */
+.rb-print-only-block {
+  display: none;
+}
+.rb-print-stack {
+  flex-direction: column;
+  gap: 20px;
+}
+@media print {
+  .rb-print-only-block {
+    display: flex;
+  }
+  .rb-screen-only {
+    display: none;
   }
 }
-
-
-/* 健檢報告圖：螢幕跟列印看到的不是同一組卡片。
-   螢幕上「檢測結果分佈」「各家 AI 爬蟲的存取權限」「AI 認不認得你？」下面都有
-   完整版本（含 AI 原話、引用來源、每家爬蟲的判定依據），圖上再放一次是同一件事
-   講兩次；列印出來的是一張要單獨帶走的戰情表，那三張就必須在。
-   六張卡共用同一個 grid：藏掉其中一張只是少一格，不會像兩個獨立 grid 那樣
-   在某一欄留下一個空洞。 */
 .rb-grid {
   display: grid;
   gap: 16px;
   align-items: stretch;
   grid-template-columns: 1.4fr 1fr 1.05fr;
 }
-.rb-print-only {
-  display: none;
+
+/* 版型寫在 class 不寫 inline：螢幕上只有一張總覽卡，1200px 固定寬＋米白畫布＋
+   36px 內距全是多出來的框；列印時才需要那張 1200px 的整版戰情表。 */
+.report-board {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
 }
 @media print {
-  .rb-print-only {
-    display: flex;
+  .report-board {
+    width: 1200px;
+    background: var(--rb-bg);
+    padding: 32px 36px 40px;
   }
 }
