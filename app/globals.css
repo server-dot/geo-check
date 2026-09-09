@@ -1,27 +1,32 @@
 @import "tailwindcss";
 
-/* GEO Check 報告頁設計系統：墨綠 × 酸萊姆，取代 Tailwind 預設藍/灰。
-   token 值跟元件樣式沿用設計 handoff 的 lime-base.css，是刻意照抄的規格，
-   不是隨便配色——細節見 /Users/kc/.claude/plans/async-pondering-pizza.md */
+/* GEO Check 是積木（stack.com.tw）的工具，配色跟著官網走：主色金 #fcb418、
+   深藍灰 #303c54、底色米白 #f6f5ef。（2026-09-09 從原本的墨綠 × 酸萊姆換過來，
+   來源是設計專案的 brand-colors-patch.css。）
+
+   token 名稱刻意全部沿用，所以底下的規則、@theme inline 對應、元件 class 都不用動
+   ——但 --lime 現在是「品牌金」，語意變了：**只能當填色、色塊、螢光筆**。
+   金色當文字在白底只有 2.4:1，要當文字／底線一律用 --goldInk（5.9:1）。 */
 :root {
-  --paper: #f3f2ea;
-  --card: #fffefa;
-  --inset: #eeede3;
-  --ink: #101a14;
-  --ink2: #4e5a51;
-  --ink3: #8a938a;
-  --line: #dcded1;
-  --line2: #eaebe0;
-  --lime: #c9f24a;
-  --limeDark: #a8d128;
-  --ok: #2f6b45;
-  --warn: #8a6410;
-  --fail: #9e3529;
-  --gray: #8a938a;
-  --code: #141d17;
-  --codeInk: #dfe6da;
-  --codeDim: #7e8c81;
-  --limeTint: #f1f3e6;
+  --paper: #f6f5ef;      /* 官網米白 */
+  --card: #ffffff;
+  --inset: #eef0f4;
+  --ink: #303c54;        /* 官網深藍灰 */
+  --ink2: #4a5468;
+  --ink3: #5f6a80;       /* 5.4:1 於白底；原本的 #8a938a 換底色後只有 3.1:1 */
+  --line: #dcdfe6;
+  --line2: #eceef2;
+  --lime: #fcb418;       /* 品牌金：只當填色、色塊、螢光筆 */
+  --limeDark: #e09c0a;   /* 品牌金 hover 填色 */
+  --goldInk: #8a5a05;    /* 品牌金當文字／底線時用這個（5.9:1 於白底） */
+  --ok: #1f7a4d;
+  --warn: #96590a;
+  --fail: #b8342c;
+  --gray: #5f6a80;
+  --code: #303c54;       /* 深色程式碼區塊：改用官網藍灰，不再是墨綠近黑 */
+  --codeInk: #f6f5ef;
+  --codeDim: #a7b1c2;
+  --limeTint: #fdf4e0;   /* 金調暖白，取代原本的淺萊姆 */
 }
 
 @theme inline {
@@ -76,7 +81,7 @@ h1, h2, h3, h4 {
 a {
   color: var(--ink);
   text-decoration: underline;
-  text-decoration-color: var(--limeDark);
+  text-decoration-color: var(--goldInk);
   text-decoration-thickness: 2px;
   text-underline-offset: 3px;
 }
@@ -417,7 +422,7 @@ mark.lime-highlight {
    顏色／底線要蓋過全域 a{} 規則，不能靠 Tailwind text-ink2/text-paper
    這類 utility class（那些包在 @layer 裡，贏不過沒包 layer 的 a{}）。 */
 .marketing .nav-link { color: var(--ink2); text-decoration: none; }
-.marketing .nav-link:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--limeDark); }
+.marketing .nav-link:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--goldInk); }
 .marketing .nav-link.is-active { color: var(--ink); font-weight: 600; text-decoration: none; }
 
 .marketing .footer-link { color: var(--paper); text-decoration-color: var(--lime); }
@@ -427,7 +432,7 @@ mark.lime-highlight {
    （同一個坑，見上面 btn-lime 那則說明），標題+摘要+分類每一行都各自畫出一條
    螢光底線，一整排看起來很吵。這裡蓋掉底線，只在整列 hover 時標題變色當作提示。 */
 .marketing .article-row { text-decoration: none; color: inherit; }
-.marketing .article-row:hover h4 { color: var(--limeDark); }
+.marketing .article-row:hover h4 { color: var(--goldInk); }
 
 /* 聯絡我們表單欄位——跟 .input-mono 同一套規格，但用一般字體（非 mono），
    給稱呼／品牌／信箱／電話這類非網址欄位用。 */
@@ -471,4 +476,46 @@ mark.lime-highlight {
   margin: 20px 0;
   max-width: 52rem;
   white-space: pre-wrap;
+}
+
+/* 健檢報告圖：列印／存成 PDF 時只留那張圖，其餘整頁隱藏。
+   用 visibility 不用 display:none——display:none 會把 .report-board 的祖先鏈
+   一起收掉，圖本身就跟著消失了。 */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .report-board,
+  .report-board * {
+    visibility: visible;
+  }
+  .report-board {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+  .report-board-actions,
+  .report-board-scroll {
+    overflow: visible !important;
+  }
+  .report-board-actions {
+    display: none !important;
+  }
+  @page {
+    size: 1272px auto;
+    margin: 0;
+  }
+}
+
+/* 健檢報告圖是固定 1200px 的寬版圖，塞在 max-w-3xl（768px）的報告欄位裡只看得到
+   六成。畫面夠寬時讓它跳出欄位、以欄位中心對齊撐開；不夠寬就留在欄位裡橫向捲。
+   用 px 不用 100vw：100vw 含捲軸寬度，在傳統捲軸的系統上會讓整頁多出橫向捲軸。 */
+.report-board-scroll {
+  overflow-x: auto;
+}
+@media (min-width: 1320px) {
+  .report-board-scroll {
+    width: 1272px;
+    margin-left: calc(50% - 636px);
+  }
 }

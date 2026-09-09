@@ -9,7 +9,7 @@ export default function Footer() {
       <div className="mx-auto max-w-[1120px] px-10 py-[72px]">
         <div className="grid grid-cols-3 gap-10">
           <div>
-            <div className="k text-[#8b968d]">工具</div>
+            <div className="k text-[#a2acbd]">工具</div>
             <div className="mt-[14px] grid gap-2 text-sm">
               <Link href="/" className="footer-link">
                 免費健檢
@@ -26,7 +26,7 @@ export default function Footer() {
             </div>
           </div>
           <div>
-            <div className="k text-[#8b968d]">公司</div>
+            <div className="k text-[#a2acbd]">公司</div>
             <div className="mt-[14px] grid gap-2 text-sm">
               <Link href="/about" className="footer-link">
                 關於我們
@@ -40,8 +40,8 @@ export default function Footer() {
             </div>
           </div>
           <div>
-            <div className="k text-[#8b968d]">聯絡</div>
-            <div className="mono mt-[14px] grid gap-2 text-xs text-[#a9b5ac]">
+            <div className="k text-[#a2acbd]">聯絡</div>
+            <div className="mono mt-[14px] grid gap-2 text-xs text-[#a7b1c2]">
               <span>02-27457601</span>
               <a href="https://lin.ee/UhKq8H1" className="footer-link">
                 Line @683sivea

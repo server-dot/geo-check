@@ -3,7 +3,8 @@ import { getAuditJob } from '@/lib/geo-audit-jobs';
 
 // GEO 深度健檢：背景 job 狀態輪詢
 // GET ?id=geo_xxx → { status, message, progress, engine（AI 引擎層,一開始就有）,
-//                      audit（深度檢測,完成才有）, schemaCards（逐型別 Schema 卡片,完成才有）, error? }
+//                      audit（深度檢測,完成才有）, schemaCards（逐型別 Schema 卡片,完成才有）,
+//                      pageWords（逐頁可讀字數,完成才有）, error? }
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get('id');
   if (!id) return NextResponse.json({ error: '缺少 job id' }, { status: 400 });
@@ -20,6 +21,7 @@ export async function GET(req: NextRequest) {
     engine: job.engine,
     audit: job.status === 'completed' ? job.result : undefined,
     schemaCards: job.status === 'completed' ? job.schemaCards : undefined,
+    pageWords: job.status === 'completed' ? job.pageWords : undefined,
     error: job.error,
   });
 }

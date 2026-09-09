@@ -51,6 +51,7 @@ export interface PageFacts {
   externalCount: number;
   isHome: boolean;
   mainText: string;
+  mainTextLength: number;
   viaSitemap: boolean;
   nonHtml: boolean;
 }
@@ -183,7 +184,11 @@ function extractPageFacts(html: string, url: string, depth: number, status: numb
 
   const bodyClone = parse((root.querySelector('body') ?? root).outerHTML);
   bodyClone.querySelectorAll('script, style, noscript').forEach((el) => el.remove());
-  const mainText = bodyClone.textContent.replace(/\s+/g, ' ').trim().slice(0, 2000);
+  const fullText = bodyClone.textContent.replace(/\s+/g, ' ').trim();
+  // mainText 截 2000 字是給 AI 判讀用的（省 token）。字數要另外留完整值：健檢
+  // 報告圖的累積曲線是逐頁真實字數，拿截過的算會讓每頁都卡在 2000。
+  const mainTextLength = [...fullText].length;
+  const mainText = fullText.slice(0, 2000);
 
   let pathname = '/';
   try {
@@ -216,6 +221,7 @@ function extractPageFacts(html: string, url: string, depth: number, status: numb
     externalCount,
     isHome: pathname === '/',
     mainText,
+    mainTextLength,
     viaSitemap,
     nonHtml: false,
   };
@@ -371,6 +377,6 @@ function emptyFacts(url: string, depth: number, status: number, ok: boolean, ori
     title: '', description: '', h1: 0, h2: 0,
     imgTotal: 0, imgAltEmpty: 0, imgAltEmptyNames: [], imgLegacy: 0,
     jsonLdTypes: [], jsonLdNodes: [], hasBreadcrumb: false, canonical: '', noindex: false, hasViewport: false,
-    analytics: [], internalLinks: [], externalCount: 0, isHome, mainText: '', viaSitemap, nonHtml,
+    analytics: [], internalLinks: [], externalCount: 0, isHome, mainText: '', mainTextLength: 0, viaSitemap, nonHtml,
   };
 }

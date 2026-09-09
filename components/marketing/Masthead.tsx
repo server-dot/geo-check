@@ -13,7 +13,7 @@ const NAV_ITEMS = [
 
 export default function Masthead({ active }: { active?: "geo" | "scoring" | "pricing" | "about" | "contact" }) {
   return (
-    <div className="sticky top-0 z-20 border-b border-line bg-[rgba(243,242,234,.95)]">
+    <div className="sticky top-0 z-20 border-b border-line bg-[rgba(246,245,239,.95)]">
       <div className="mx-auto flex h-[68px] max-w-[1120px] items-center gap-6 px-10">
         <Link href="/" className="mark">
           {/* eslint-disable-next-line @next/next/no-img-element -- 固定素材、非使用者上傳圖片，不需要 next/image 的最佳化/尺寸協商 */}

@@ -39,6 +39,8 @@ export interface AuditJob {
   engine?: EngineResult;
   result?: CheckResult[];
   schemaCards?: SchemaTypeCard[];
+  // 逐頁可讀字數，依爬取順序。健檢報告圖的累積曲線用這個畫。
+  pageWords?: number[];
   error?: string;
   createdAt: number;
   updatedAt: number;

@@ -253,6 +253,7 @@ export async function POST(req: NextRequest) {
         status: 'completed',
         result: audit,
         schemaCards,
+        pageWords: crawl.pages.filter((p) => p.ok && !p.nonHtml).map((p) => p.mainTextLength),
         message: `完成，爬取 ${crawl.pages.length} 頁、產出 ${audit.length} 項深度檢測`,
       });
     } catch (e) {

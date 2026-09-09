@@ -225,12 +225,14 @@ interface StatusResponse {
   engine?: EngineResult;
   audit?: CheckItem[];
   schemaCards?: SchemaTypeCard[];
+  // 逐頁可讀字數（爬取順序），健檢報告圖的累積曲線用
+  pageWords?: number[];
   error?: string;
 }
 
 // 狀態色（dataviz 技能的固定 status palette，不跟著品牌色跑）——CategoryOverview
 // 用內嵌 style 畫長條，跟新 token 的十六進位值保持一致。
-const STATUS_COLOR = { ok: "#2f6b45", warn: "#8a6410", fail: "#9e3529" } as const;
+const STATUS_COLOR = { ok: "#1f7a4d", warn: "#96590a", fail: "#b8342c" } as const;
 const STATUS_LABEL = { ok: "正常", warn: "可優化", fail: "需處理" } as const;
 
 // 「不允許」刻意不用紅色：那是網站主動的表態（例如故意擋 AI 訓練），不是缺陷，
@@ -238,7 +240,7 @@ const STATUS_LABEL = { ok: "正常", warn: "可優化", fail: "需處理" } as c
 // AI 自行認定。glyph 一律跟著色走，不靠顏色單獨表意。
 const SIGNAL_BADGE: Record<SignalValue, { text: string; className: string; glyph: string; color: string }> = {
   yes: { text: "允許", className: "border-ok/30 bg-ok/10 text-ok", glyph: "✓", color: STATUS_COLOR.ok },
-  no: { text: "不允許", className: "border-ink/25 bg-ink/5 text-ink2", glyph: "✕", color: "#4e5a51" },
+  no: { text: "不允許", className: "border-ink/25 bg-ink/5 text-ink2", glyph: "✕", color: "#4a5468" },
   unset: { text: "未表態", className: "border-warn/30 bg-warn/10 text-warn", glyph: "?", color: STATUS_COLOR.warn },
 };
 
@@ -412,25 +414,25 @@ function CheckBody({ c, origin, withAdvice = true }: { c: CheckItem; origin?: st
 
 
 // 爬蟲狀態磚：8 家並排時要能一眼掃完，所以做成色塊＋符號，不是 8 列文字。
-// 一定要帶符號——warn 跟 fail 兩個色在正常視覺下 ΔE 只有 12.2，橘紅並排分不出來
-// （見 ReportSummarySvg 的說明）。unknown 用中性灰：那不是「壞」，是「我們讀不到」，
+// 一定要帶符號——warn 跟 fail 兩個色在正常視覺下 ΔE 只有 10.3，橘紅並排分不出來
+// （見下方狀態格陣的說明）。unknown 用中性灰：那不是「壞」，是「我們讀不到」，
 // 塗成紅色會變成假警報，跟 robots.txt 三態同一個紀律。
 const BOT_TILE: Record<BotStatus, { glyph: string; color: string }> = {
   allowed: { glyph: "✓", color: STATUS_COLOR.ok },
   blocked: { glyph: "✕", color: STATUS_COLOR.fail },
   mismatch: { glyph: "!", color: STATUS_COLOR.warn },
-  unknown: { glyph: "?", color: "#8a938a" },
+  unknown: { glyph: "?", color: "#5f6a80" },
 };
 
 // AI 讀到的內容是由什麼組成的：正文 vs 選單／標籤那些「網站家具」。
 // 原本是一行 mono 文字（「共 X 字：正文約 Y 字、選單／標籤約 Z 字（占 N%）」），
 // 三個數字擠在一句話裡要自己換算比例；改成一條兩段的比例條，比例本身就是圖。
 //
-// 兩個色跑過 dataviz 驗證：深萊姆 #6e8f1f 對中性灰 #b3b8ad，正常視覺 ΔE 21.1、
-// 綠色覺 19.3，都遠高於 15 的門檻。灰色對背景的對比只有 2.01（低於 3:1），
-// 規範要求這種情況必須有「可見標籤」當補償——所以兩段都直接標上名稱與字數，
-// 不是只靠顏色配圖例。
-const MIX_COLOR = { body: "#6e8f1f", furniture: "#b3b8ad" };
+// 兩個色跑過 dataviz 驗證（2026-09-09 換品牌色後重驗）：品牌金 #e09c0a 對中性藍灰
+// #b0b7c4，正常視覺 ΔE 17.7、綠色覺 17.4，都高於 15 的門檻。兩者對白底的對比都
+// 低於 3:1，規範要求這種情況必須有「可見標籤」當補償——所以兩段都直接標上名稱與
+// 字數，不是只靠顏色配圖例。
+const MIX_COLOR = { body: "#e09c0a", furniture: "#b0b7c4" };
 
 function ContentMixBar({
   total,
@@ -622,11 +624,12 @@ function computeOverallScore(categories: Category5[]): { score: number; grade: s
 // 全部檢測項目壓成一張狀態格陣：一格一項，看形狀就知道哪個分類在出血，
 // 不用逐條讀完二十幾段文字。
 //
-// 一定要「符號＋顏色」雙重編碼，不能只靠顏色：跑過 dataviz 的調色驗證，
-// 現有的 --warn(#8a6410) 跟 --fail(#9e3529) 在正常視覺下 ΔE 只有 12.2，
-// 低於 15 的可辨識門檻（色盲更慘，deutan ΔE 5.1）。橘色跟紅色的小方塊並排
-// 是分不出來的，所以每一格都畫上 ✓ / ! / ✕。
-const GRID_GLYPH: Record<CheckStatus, string> = { ok: "✓", warn: "!", fail: "✕" };
+// 一定要「符號＋顏色」雙重編碼，不能只靠顏色：跑過 dataviz 的 validate_palette.js，
+// 換成積木品牌色之後這件事變得**更嚴重**——--warn(#96590a) 跟 --fail(#b8342c) 在
+// 正常視覺下 ΔE 只有 10.3（舊的墨綠系是 12.2），紅綠色覺下更只有 1.6（舊的是 5.1），
+// 等於完全同一個顏色。兩者都遠低於 15 的可辨識門檻，而且把 warn 往橘推也救不回來
+// （試過 #b4600a，deutan 只到 5.7）。金＋紅這個色系本來就難分，所以報告圖上每一處
+// 狀態都是「燈號＋顏色＋文字」三重標示，任何地方都不准只靠顏色表意。
 
 interface GridGroup {
   name: string;
@@ -664,246 +667,891 @@ function buildStatusGrid(engine?: EngineResult, audit?: CheckItem[]): GridGroup[
   return CATEGORY5_ORDER.map((name) => ({ name, items: groups.get(name) ?? [] })).filter((g) => g.items.length > 0);
 }
 
-// 版面座標。SVG 用固定 viewBox、畫面上寬度 100%，同一份 DOM 節點既是頁面上
-// 看到的圖，也是按下載時序列化出去的檔案——不要維護兩份會漂移的版型。
-const SVG_W = 720;
-const SVG_PAD = 24;
-const CELL = 18;
-const CELL_GAP = 5;
-const GRID_LABEL_W = 92;
+// ── 健檢報告圖（戰情表）────────────────────────────────
+// 取代原本的「健檢總表」SVG：一張 1200px 寬的圖把整份報告壓成一頁，讓人先用
+// 「看」的知道哪裡在出血，再決定往下讀哪一段。版型照設計稿 健檢報告圖.dc.html。
+//
+// 色票值跟 globals.css 的品牌 token 一致（積木金 #fcb418＋深藍灰 #303c54＋米白），
+// 但獨立成一組 --rb-：這是一張要單獨列印／分享出去的圖，版面內的每個顏色都要能
+// 就地讀到，不靠外面的層疊。前綴是必要的——--card / --ink / --lime / --ok /
+// --warn / --fail 這些名字 globals.css 全都已經佔用了，不加前綴會外洩到整頁。
+//
+// 固定 1200px 寬 + 外層橫向捲動：五張 KPI 卡加三欄圖表擠進 375px 會全毀，
+// 這種密度的圖寧可讓人橫向捲，不要硬壓成手機版。
+const RB_VARS = {
+  "--rb-bg": "#f6f5ef",
+  "--rb-card": "#ffffff",
+  "--rb-card2": "#f2f4f8",
+  "--rb-hair": "rgba(48,60,84,0.16)",
+  "--rb-hair2": "rgba(48,60,84,0.09)",
+  "--rb-ink": "#303c54",
+  "--rb-ink2": "#4a5468",
+  "--rb-ink3": "#5f6a80",
+  "--rb-lime": "#fcb418",
+  "--rb-gold": "#8a5a05",
+  "--rb-ok": "#1f7a4d",
+  "--rb-warn": "#96590a",
+  "--rb-fail": "#b8342c",
+  "--rb-gray": "#5f6a80",
+} as React.CSSProperties;
 
-function summarySvgHeight(groups: GridGroup[]): number {
-  return 236 + groups.length * (CELL + 12) + 62;
+const RB_STATUS_VAR: Record<CheckStatus, string> = {
+  ok: "var(--rb-ok)",
+  warn: "var(--rb-warn)",
+  fail: "var(--rb-fail)",
+};
+const RB_STATUS_DOT: Record<CheckStatus, string> = { ok: "🟢", warn: "🟡", fail: "🔴" };
+
+// 累積曲線的座標系（照設計稿的 viewBox 與格線位置）
+const RB_X0 = 70;
+const RB_X1 = 1010;
+const RB_Y_TOP = 45.5;
+const RB_Y_BASE = 200;
+
+// 軸上限取「4 的整數倍的漂亮數字」，讓五條格線都落在整數刻度上
+function rbNiceMax(v: number): number {
+  const steps = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+  for (const s of steps) if (s * 4 >= v) return s * 4;
+  return Math.ceil(v / 4) * 4;
 }
 
-function ReportSummarySvg({
-  svgRef,
-  origin,
-  score,
-  grade,
-  gradeLabel,
-  categories,
-  groups,
+function rbShort(n: number): string {
+  return n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(n);
+}
+
+function RbCard({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <div
+      style={{
+        background: "var(--rb-card)",
+        border: "1px solid var(--rb-hair)",
+        borderRadius: 12,
+        padding: 20,
+        display: "flex",
+        flexDirection: "column",
+        // grid 的 fr 預設以 min-content 為下限：內容長的那張卡會把同列其他卡擠窄，
+        // 欄寬比例就跑掉了（標題被迫換行）。歸零才會照 1.4/1.05/1.1 分。
+        minWidth: 0,
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+const rbEmpty: React.CSSProperties = {
+  flex: 1,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 12.5,
+  color: "var(--rb-ink3)",
+};
+
+function RbCardTitle({ title, note }: { title: string; note?: string }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 16 }}>
+      <div style={{ fontSize: 15, fontWeight: 600 }}>{title}</div>
+      {note && <div className="mono" style={{ fontSize: 11.5, color: "var(--rb-ink3)" }}>{note}</div>}
+    </div>
+  );
+}
+
+// KPI 卡：大數字 + 一行說明。數字右上角那顆燈跟顏色是雙重編碼，不靠顏色單獨表意。
+function RbStat({
+  label,
+  value,
+  unit,
+  note,
+  color,
+  dot,
+  bar,
 }: {
-  svgRef?: React.Ref<SVGSVGElement>;
-  origin: string;
-  score: number;
-  grade: string;
-  gradeLabel: string;
-  categories: Category5[];
-  groups: GridGroup[];
+  label: string;
+  value: string | number;
+  unit?: string;
+  note?: React.ReactNode;
+  color?: string;
+  dot: string;
+  bar?: number;
 }) {
-  const H = summarySvgHeight(groups);
-  const barX = 300;
-  const barW = SVG_W - SVG_PAD - 46 - barX;
+  return (
+    <RbCard style={{ padding: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ fontSize: 12.5, color: "var(--rb-ink3)" }}>{label}</div>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 3 }}>
+            <span style={{ fontSize: 34, fontWeight: 700, letterSpacing: "-0.04em", lineHeight: 1, color }}>
+              {value}
+            </span>
+            {unit && (
+              <span className="mono" style={{ fontSize: 12, color: "var(--rb-ink3)", paddingTop: 4 }}>
+                {unit}
+              </span>
+            )}
+          </div>
+        </div>
+        <div
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 9,
+            background: "rgba(48,60,84,0.07)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 15,
+          }}
+        >
+          {dot}
+        </div>
+      </div>
+      {bar !== undefined ? (
+        <div style={{ marginTop: 12, height: 5, borderRadius: 999, background: "rgba(48,60,84,0.11)", overflow: "hidden" }}>
+          <div style={{ width: `${bar}%`, height: "100%", background: "var(--rb-lime)" }} />
+        </div>
+      ) : (
+        <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--rb-ink2)" }}>{note}</div>
+      )}
+    </RbCard>
+  );
+}
+
+// 甜甜圈：圓周 2π×52 ≈ 326.73，每段用 dasharray 切、dashoffset 接續往下排
+const RB_C = 2 * Math.PI * 52;
+
+function RbDonut({ segments, center, sub }: { segments: { value: number; color: string }[]; center: React.ReactNode; sub: string }) {
+  const total = segments.reduce((s, x) => s + x.value, 0) || 1;
+  // 每段的起始位移先一次算好：在 map 裡累加外部變數是 render 期間的副作用，
+  // React 重複呼叫 render 時算出來的圈會接不上。
+  const lens = segments.map((s) => (RB_C * s.value) / total);
+  const offsets = lens.map((_, i) => -lens.slice(0, i).reduce((a, b) => a + b, 0));
+  return (
+    <div style={{ position: "relative", width: 124, height: 124, flex: "none" }}>
+      <svg width="124" height="124" viewBox="0 0 124 124" style={{ transform: "rotate(-90deg)" }}>
+        <circle cx="62" cy="62" r="52" fill="none" stroke="rgba(48,60,84,0.10)" strokeWidth="13" />
+        {segments.map((s, i) => {
+          const len = lens[i];
+          const offset = offsets[i];
+          if (len <= 0) return null;
+          return (
+            <circle
+              key={i}
+              cx="62"
+              cy="62"
+              r="52"
+              fill="none"
+              stroke={s.color}
+              strokeWidth="13"
+              strokeDasharray={`${len} ${RB_C - len}`}
+              strokeDashoffset={offset}
+            />
+          );
+        })}
+      </svg>
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 1,
+        }}
+      >
+        {center}
+        <div className="mono" style={{ fontSize: 10.5, color: "var(--rb-ink3)" }}>
+          {sub}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 雷達圖：五個角固定對應 CATEGORY5_ORDER，頂點角度 -90° 起每 72° 一個，
+// 外環 R=120（=100 分），資料點 R = 120 × passRate/100。標籤位置照設計稿。
+const RB_RADAR_LABEL: { x: number; y: number; anchor: "start" | "middle" | "end" }[] = [
+  { x: 160, y: 22, anchor: "middle" },
+  { x: 262, y: 124, anchor: "start" },
+  { x: 212, y: 278, anchor: "middle" },
+  { x: 106, y: 278, anchor: "middle" },
+  { x: 32, y: 120, anchor: "end" },
+];
+
+function rbRadarPoint(i: number, r: number): [number, number] {
+  const a = ((-90 + i * 72) * Math.PI) / 180;
+  return [160 + r * Math.cos(a), 160 + r * Math.sin(a)];
+}
+
+function rbPoly(r: number | ((i: number) => number), n: number): string {
+  return Array.from({ length: n }, (_, i) => {
+    const [x, y] = rbRadarPoint(i, typeof r === "function" ? r(i) : r);
+    return `${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}`;
+  }).join(" ");
+}
+
+// 優先處理順序：fail 排在 warn 前面，同狀態時通過率低的分類先處理。
+// 描述用後端已經寫好的 impact（「這代表什麼」），沒有才退回 advice——不在
+// 前端自己編一段話。
+interface RbPriority {
+  title: string;
+  body: string;
+  status: CheckStatus;
+  group: string;
+}
+
+function buildPriorities(engine: EngineResult, audit: CheckItem[] | undefined, cats: Category5[]): RbPriority[] {
+  const list: RbPriority[] = [];
+
+  for (const b of engine.results) {
+    if (b.status === "blocked") {
+      list.push({
+        title: `${b.label} 進不來`,
+        body: engine.wafHint?.impact ?? `robots.txt 比對到的規則是「${b.matchedRule}」，這家爬蟲拿不到你的頁面。`,
+        status: "fail",
+        group: "AI 可達性",
+      });
+    } else if (b.status === "mismatch") {
+      list.push({
+        title: `放行 ${b.label}`,
+        body: engine.wafHint?.impact ?? `robots.txt 寫的是允許，但實際以這家爬蟲的身分請求時被擋下來。`,
+        status: "warn",
+        group: "AI 可達性",
+      });
+    }
+  }
+  if (engine.contentSignals && !engine.contentSignals.declared) {
+    list.push({
+      title: "補上內容使用授權表態",
+      body: "search、ai-input、ai-train 三項都沒有表態。沒有寫，各家 AI 廠商只能自己解讀你的立場。",
+      status: "warn",
+      group: "AI 可達性",
+    });
+  }
+  if (engine.llmsTxt.exists === false) {
+    list.push({
+      title: "補上 llms.txt",
+      body: "網站沒有 llms.txt。這是給 AI 看的網站導覽，沒有的話 AI 只能靠自己爬到的頁面拼湊你在做什麼。",
+      status: "warn",
+      group: "AI 可達性",
+    });
+  }
+
+  for (const c of audit ?? []) {
+    if (c.status === "ok") continue;
+    const group = CATEGORY5_KEY_MAP[c.key];
+    if (!group) continue;
+    list.push({ title: c.item, body: c.impact || c.advice, status: c.status, group });
+  }
+
+  const rate = (name: string) => cats.find((c) => c.name === name)?.passRate ?? 100;
+  return list
+    .sort((a, b) => {
+      if (a.status !== b.status) return a.status === "fail" ? -1 : 1;
+      return rate(a.group) - rate(b.group);
+    })
+    .slice(0, 4);
+}
+
+function ReportBoard({
+  origin,
+  engine,
+  audit,
+  pageWords,
+  crawledPages,
+}: {
+  origin: string;
+  engine: EngineResult;
+  audit?: CheckItem[];
+  pageWords?: number[];
+  crawledPages: number;
+}) {
+  const cats = buildCategories5(engine, audit);
+  const overall = computeOverallScore(cats);
+  const totals = cats.reduce(
+    (acc, c) => ({ ok: acc.ok + c.ok, warn: acc.warn + c.warn, fail: acc.fail + c.fail }),
+    { ok: 0, warn: 0, fail: 0 },
+  );
+  const checkTotal = totals.ok + totals.warn + totals.fail;
+
+  const flat = buildStatusGrid(engine, audit).flatMap((g) => g.items);
+  const nameList = (s: CheckStatus) =>
+    flat.filter((i) => i.status === s).slice(0, 3).map((i) => i.label).join("、");
+
+  const bots = engine.results;
+  const botOk = bots.filter((b) => b.status === "allowed").length;
+  const botBlocked = bots.filter((b) => b.status === "blocked").length;
+  const botMismatch = bots.filter((b) => b.status === "mismatch").length;
+  const botUnknown = bots.filter((b) => b.status === "unknown").length;
+  const botNote =
+    [
+      botBlocked > 0 ? `${botBlocked} 家被擋` : "",
+      botMismatch > 0 ? `${botMismatch} 家政策允許但實測被擋` : "",
+      botUnknown > 0 ? `${botUnknown} 家無法判定` : "",
+    ]
+      .filter(Boolean)
+      .join("、") || "全部都進得來";
+
+  const vis = engine.visibility;
+  const engines = engine.brandVisibility;
+  const citedSelf = engines.filter((e) => e.citedSelf).length;
+  const priorities = buildPriorities(engine, audit, cats);
   const today = new Date().toISOString().slice(0, 10);
+  const host = origin.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+  // 累積曲線。單線＝AI 爬蟲一頁一頁讀下去累積拿到的可讀字數。
+  // 沒有「使用者看到的字數」那條線：健檢只抓原始 HTML，不跑 headless 渲染，
+  // 那個數字從來沒有量過——畫上去就是編的。
+  const words = pageWords ?? [];
+  const cumulative = words.reduce<number[]>((acc, w) => [...acc, (acc[acc.length - 1] ?? 0) + w], []);
+  const totalWords = cumulative[cumulative.length - 1] ?? 0;
+  const axisMax = rbNiceMax(totalWords);
+  const chartOk = cumulative.length >= 2;
+  const px = (i: number) => RB_X0 + ((RB_X1 - RB_X0) * i) / (cumulative.length - 1);
+  const py = (v: number) => RB_Y_BASE - ((RB_Y_BASE - RB_Y_TOP) * v) / axisMax;
+  const linePath = cumulative.map((v, i) => `${i === 0 ? "M" : "L"}${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(" ");
+  const areaPath = chartOk ? `${linePath} L${RB_X1},${RB_Y_BASE} L${RB_X0},${RB_Y_BASE} Z` : "";
+  // 頁數多的時候軸標籤只留幾格，不然數字會疊在一起
+  const tickEvery = Math.max(1, Math.ceil(cumulative.length / 12));
+
+  // 四道關卡：AI 要引用你，得依序過這四關。每一關的數字都是實測值。
+  // GATE 2 的分母 500 字是 lib/geo-content-visibility.ts 的 THIN_TEXT 門檻
+  //（低於這個字數判定為「內容單薄」），不是隨手抓的。
+  const THIN = 500;
+  const jsonLdTypes = vis?.jsonLdTypes ?? [];
+  const schemaRate = cats.find((c) => c.name === "結構化資料")?.passRate ?? 0;
+  const gates = [
+    {
+      no: "GATE 1",
+      name: "進得來",
+      rate: bots.length > 0 ? Math.round((botOk / bots.length) * 100) : 0,
+      note: `${botOk} / ${bots.length} 家實測可存取`,
+      status: (botBlocked > 0 ? "fail" : botOk === bots.length ? "ok" : "warn") as CheckStatus,
+    },
+    {
+      no: "GATE 2",
+      name: "讀得到",
+      rate: vis ? Math.min(100, Math.round((vis.textLength / THIN) * 100)) : 0,
+      note: `首頁可讀 ${vis?.textLength ?? 0} 字（門檻 ${THIN}）`,
+      status: (vis?.status === "ok" ? "ok" : vis?.status === "thin" ? "warn" : "fail") as CheckStatus,
+    },
+    {
+      no: "GATE 3",
+      name: "抽得出、有表態",
+      rate: schemaRate,
+      note: `${jsonLdTypes.length} 種 JSON-LD 型別`,
+      status: (schemaRate >= 80 ? "ok" : schemaRate >= 50 ? "warn" : "fail") as CheckStatus,
+    },
+    {
+      no: "GATE 4",
+      name: "被引用",
+      rate: engines.length > 0 ? Math.round((citedSelf / engines.length) * 100) : 0,
+      note: engines.length > 0 ? `${citedSelf} / ${engines.length} 家引擎提到你` : "沒有實測資料",
+      status: (engines.length === 0 ? "warn" : citedSelf === engines.length ? "ok" : citedSelf > 0 ? "warn" : "fail") as CheckStatus,
+    },
+  ];
 
   return (
-    <svg
-      ref={svgRef}
-      viewBox={`0 0 ${SVG_W} ${H}`}
-      width="100%"
-      className="block h-auto w-full"
-      xmlns="http://www.w3.org/2000/svg"
-      fontFamily="'IBM Plex Mono', ui-monospace, 'Noto Sans TC', system-ui, sans-serif"
-      role="img"
-      aria-label={`健檢總表，總分 ${score} 分，${gradeLabel}`}
+    <div
+      className="report-board"
+      style={{
+        ...RB_VARS,
+        width: 1200,
+        background: "var(--rb-bg)",
+        color: "var(--rb-ink)",
+        fontFamily: "var(--font-archivo), 'Noto Sans TC', 'PingFang TC', system-ui, sans-serif",
+        padding: "32px 36px 40px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 20,
+      }}
     >
-      <rect x="0" y="0" width={SVG_W} height={H} fill="#fffefa" />
-      <rect x="0.5" y="0.5" width={SVG_W - 1} height={H - 1} fill="none" stroke="#dcded1" />
+      {/* 抬頭 */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- 這張圖要能跟著列印輸出，
+              next/image 的 lazy/placeholder 在列印時可能還沒換成真圖 */}
+          <img src="/geocheck-logo.png" alt="" style={{ height: 28, width: 41, objectFit: "contain" }} />
+          <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.02em" }}>GEOCHECK</span>
+          <div style={{ width: 1, height: 34, background: "var(--rb-hair)" }} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <div style={{ fontSize: 21, fontWeight: 700, letterSpacing: "-0.02em" }}>AI 能見度健檢總覽</div>
+            <div style={{ fontSize: 13, color: "var(--rb-ink3)" }}>
+              {checkTotal} 項檢測 · {bots.length} 家 AI 爬蟲 · {engines.length} 家 AI 引擎 · {crawledPages} 頁
+            </div>
+          </div>
+        </div>
+        <div className="mono" style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5 }}>
+          <div style={{ background: "var(--rb-card)", border: "1px solid var(--rb-hair)", borderRadius: 8, padding: "9px 14px" }}>
+            {host}
+          </div>
+          <div style={{ background: "var(--rb-card)", border: "1px solid var(--rb-hair)", borderRadius: 8, padding: "9px 14px", color: "var(--rb-ink2)" }}>
+            {today}
+          </div>
+          <div style={{ background: "var(--rb-lime)", border: "1px solid rgba(140,90,5,0.35)", borderRadius: 8, padding: "9px 14px", fontWeight: 600 }}>
+            {overall.grade} 級・{overall.gradeLabel}
+          </div>
+        </div>
+      </div>
 
-      <text x={SVG_PAD} y="34" fontSize="17" fontWeight="700" fill="#101a14">
-        AI 搜尋能見度健檢總表
-      </text>
-      <text x={SVG_PAD} y="54" fontSize="11.5" fill="#8a938a">
-        {origin} · {today}
-      </text>
+      {/* KPI 帶 */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 16 }}>
+        <RbStat label="總體能見度" value={overall.score} unit="/100" dot="🟡" bar={overall.score} />
+        <RbStat
+          label="需處理"
+          value={totals.fail}
+          color="var(--rb-fail)"
+          dot="🔴"
+          note={nameList("fail") || "沒有需處理的項目"}
+        />
+        <RbStat
+          label="可優化"
+          value={totals.warn}
+          color="var(--rb-warn)"
+          dot="🟡"
+          note={nameList("warn") || "沒有可優化的項目"}
+        />
+        <RbStat label="正常" value={totals.ok} color="var(--rb-ok)" dot="🟢" note={`共 ${checkTotal} 項檢測`} />
+        <RbStat label="爬蟲進得來" value={botOk} unit={`/${bots.length}`} dot="🟢" note={botNote} />
+      </div>
 
-      {/* 總分：整張圖唯一的大數字，先讓人知道「大概幾分」再往下看細節 */}
-      <text x={SVG_PAD} y="150" fontSize="58" fontWeight="700" fill="#101a14">
-        {score}
-      </text>
-      {/* 等寬字型下每個數字的前進寬度約 0.6em，58px 字級 ≈ 35px；再留 8px 間距，
-          不然 100 分那種三位數會直接壓到大數字上 */}
-      <text x={SVG_PAD + String(score).length * 35 + 8} y="150" fontSize="15" fill="#8a938a">
-        /100
-      </text>
-      <text x={SVG_PAD} y="176" fontSize="13" fontWeight="600" fill="#4e5a51">
-        {grade} · {gradeLabel}
-      </text>
-
-      {/* 五分類通過率：橫條，只在右端標數字，不是每格都寫 */}
-      {categories.map((c, i) => {
-        const y = 96 + i * 26;
-        const w = c.total > 0 ? (barW * c.passRate) / 100 : 0;
-        return (
-          <g key={c.name}>
-            <text x={barX - 12} y={y + 11} fontSize="11.5" fill="#4e5a51" textAnchor="end">
-              {c.name}
-            </text>
-            <rect x={barX} y={y} width={barW} height="14" rx="4" fill="#eeede3" />
-            {w > 0 && <rect x={barX} y={y} width={Math.max(w, 6)} height="14" rx="4" fill="#a8d128" />}
-            <text x={barX + barW + 10} y={y + 11} fontSize="11.5" fill="#101a14">
-              {c.total > 0 ? c.passRate : "—"}
-            </text>
-          </g>
-        );
-      })}
-
-      {/* 狀態格陣：一格一項檢測 */}
-      {groups.map((g, gi) => {
-        const y = 236 + gi * (CELL + 12);
-        return (
-          <g key={g.name}>
-            <text x={SVG_PAD} y={y + CELL - 5} fontSize="11" fill="#4e5a51">
-              {g.name}
-            </text>
-            {g.items.map((it, ii) => {
-              const x = SVG_PAD + GRID_LABEL_W + ii * (CELL + CELL_GAP);
+      {/* 累積曲線 */}
+      {chartOk && (
+        <RbCard style={{ padding: "20px 22px 18px", gap: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 24 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>AI 爬蟲累積讀到多少內容</div>
+              <div style={{ fontSize: 12.5, color: "var(--rb-ink3)" }}>
+                爬蟲一頁一頁讀下去，累積拿到的可讀字數。線越平，代表後面的頁面幾乎沒有東西可以讀。
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 22, textAlign: "right" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                <div style={{ fontSize: 12, color: "var(--rb-ink3)" }}>累積可讀字數</div>
+                <div className="mono" style={{ fontSize: 14 }}>{totalWords.toLocaleString()} 字</div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                <div style={{ fontSize: 12, color: "var(--rb-ink3)" }}>頁數</div>
+                <div className="mono" style={{ fontSize: 14 }}>{cumulative.length} 頁</div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                <div style={{ fontSize: 12, color: "var(--rb-ink3)" }}>平均每頁</div>
+                <div className="mono" style={{ fontSize: 14 }}>
+                  {Math.round(totalWords / cumulative.length).toLocaleString()} 字
+                </div>
+              </div>
+            </div>
+          </div>
+          <svg viewBox="0 0 1040 244" style={{ width: "100%", height: 212, display: "block" }}>
+            <defs>
+              <linearGradient id="rbAiFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#fcb418" stopOpacity="0.30" />
+                <stop offset="100%" stopColor="#fcb418" stopOpacity="0.06" />
+              </linearGradient>
+            </defs>
+            {[0, 1, 2, 3, 4].map((i) => {
+              const v = (axisMax * (4 - i)) / 4;
+              const y = py(v);
               return (
-                <g key={`${it.label}-${ii}`}>
-                  <title>{`${it.label}：${STATUS_LABEL[it.status]}`}</title>
-                  <rect x={x} y={y} width={CELL} height={CELL} rx="4" fill={STATUS_COLOR[it.status]} />
-                  <text
-                    x={x + CELL / 2}
-                    y={y + CELL - 5}
-                    fontSize="11"
-                    fontWeight="700"
-                    fill="#fffefa"
-                    textAnchor="middle"
-                  >
-                    {GRID_GLYPH[it.status]}
+                <g key={i}>
+                  <line x1={RB_X0} y1={y} x2={RB_X1} y2={y} stroke={i === 4 ? "rgba(48,60,84,0.22)" : "rgba(48,60,84,0.08)"} />
+                  <text x={RB_X0 - 8} y={y + 4} textAnchor="end" fontSize="11.5" fontFamily="var(--font-plex-mono), monospace" fill="#5f6a80">
+                    {rbShort(v)}
                   </text>
                 </g>
               );
             })}
-          </g>
-        );
-      })}
+            <path d={areaPath} fill="url(#rbAiFill)" />
+            <path d={linePath} fill="none" stroke="#fcb418" strokeWidth="2.5" strokeLinejoin="round" />
+            <circle cx={RB_X1} cy={py(totalWords)} r="5" fill="#fcb418" />
+            {cumulative.map((_, i) =>
+              i % tickEvery === 0 || i === cumulative.length - 1 ? (
+                <text key={i} x={px(i)} y="216" textAnchor="middle" fontSize="11" fontFamily="var(--font-plex-mono), monospace" fill="#5f6a80">
+                  {i + 1}
+                </text>
+              ) : null,
+            )}
+            <text x="540" y="238" textAnchor="middle" fontSize="11.5" fill="#5f6a80">
+              爬蟲讀到第幾頁
+            </text>
+          </svg>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 20, paddingTop: 12, borderTop: "1px solid var(--rb-hair2)" }}>
+            <div style={{ fontSize: 12.5, lineHeight: 1.7, color: "var(--rb-ink2)", maxWidth: "60em" }}>
+              {cumulative.length} 頁讀完，AI 爬蟲累積拿到 {totalWords.toLocaleString()} 個可讀的字，平均一頁{" "}
+              {Math.round(totalWords / cumulative.length).toLocaleString()} 字。這是關掉 JavaScript
+              後量到的——爬蟲看到的就是這些，不是你在瀏覽器裡看到的那些。
+            </div>
+            <div className="mono" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--rb-ink3)", flex: "none" }}>
+              <span style={{ width: 14, height: 2, background: "#fcb418", display: "inline-block" }} />
+              AI 爬蟲累積字數
+            </div>
+          </div>
+        </RbCard>
+      )}
 
-      {/* 圖例：狀態一律「符號＋色塊＋文字」三重標示 */}
-      {(["ok", "warn", "fail"] as const).map((st, i) => {
-        const x = SVG_PAD + i * 108;
-        const y = H - 46;
-        return (
-          <g key={st}>
-            <rect x={x} y={y} width="14" height="14" rx="3" fill={STATUS_COLOR[st]} />
-            <text x={x + 7} y={y + 11} fontSize="9.5" fontWeight="700" fill="#fffefa" textAnchor="middle">
-              {GRID_GLYPH[st]}
-            </text>
-            <text x={x + 21} y={y + 11} fontSize="11" fill="#4e5a51">
-              {STATUS_LABEL[st]}
-            </text>
-          </g>
-        );
-      })}
-      <text x={SVG_W - SVG_PAD} y={H - 35} fontSize="11" fill="#8a938a" textAnchor="end">
-        geo.stack.com.tw
-      </text>
-    </svg>
+      {/* 四道關卡 / 結果分佈 / AI 眼中的你 */}
+      <div style={{ display: "grid", gridTemplateColumns: "1.45fr 1fr 1fr", gap: 16, alignItems: "stretch" }}>
+        <RbCard style={{ gap: 18 }}>
+          <RbCardTitle title="AI 引用你的四道關卡" note="每一關的實測通過率" />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, alignItems: "end", height: 132 }}>
+            {gates.map((g) => (
+              <div key={g.no} style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 8, height: "100%" }}>
+                <div className="mono" style={{ fontSize: 12.5, color: RB_STATUS_VAR[g.status] }}>
+                  {g.rate}%
+                </div>
+                <div style={{ height: `${Math.max(g.rate, 2)}%`, borderRadius: "6px 6px 0 0", background: RB_STATUS_VAR[g.status] }} />
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, paddingTop: 12, borderTop: "1px solid var(--rb-hair2)" }}>
+            {gates.map((g) => (
+              <div key={g.no} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <div className="mono" style={{ fontSize: 10.5, letterSpacing: "0.12em", color: g.status === "fail" ? "var(--rb-fail)" : "var(--rb-ink3)" }}>
+                  {g.no}
+                </div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: g.status === "fail" ? "var(--rb-fail)" : undefined }}>{g.name}</div>
+                <div style={{ fontSize: 12, lineHeight: 1.5, color: "var(--rb-ink3)" }}>{g.note}</div>
+              </div>
+            ))}
+          </div>
+        </RbCard>
+
+        <RbCard style={{ gap: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 600 }}>{checkTotal} 項檢測結果分佈</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+            <RbDonut
+              segments={[
+                { value: totals.ok, color: "var(--rb-ok)" },
+                { value: totals.warn, color: "var(--rb-warn)" },
+                { value: totals.fail, color: "var(--rb-fail)" },
+              ]}
+              center={<div style={{ fontSize: 30, fontWeight: 700, letterSpacing: "-0.04em", lineHeight: 1 }}>{checkTotal}</div>}
+              sub="項"
+            />
+            <div style={{ display: "flex", flexDirection: "column", gap: 11, flex: 1 }}>
+              {([["正常", totals.ok, "ok"], ["可優化", totals.warn, "warn"], ["需處理", totals.fail, "fail"]] as const).map(
+                ([label, n, st]) => (
+                  <div key={label} style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                    <span style={{ width: 9, height: 9, borderRadius: 2, background: RB_STATUS_VAR[st], flex: "none" }} />
+                    <span style={{ fontSize: 13, color: "var(--rb-ink2)", flex: 1 }}>{label}</span>
+                    <span className="mono" style={{ fontSize: 13 }}>{n}</span>
+                    <span className="mono" style={{ fontSize: 11.5, color: "var(--rb-ink3)", width: 34, textAlign: "right" }}>
+                      {checkTotal > 0 ? Math.round((n / checkTotal) * 100) : 0}%
+                    </span>
+                  </div>
+                ),
+              )}
+            </div>
+          </div>
+          <div style={{ paddingTop: 14, borderTop: "1px solid var(--rb-hair2)", fontSize: 12.5, lineHeight: 1.65, color: "var(--rb-ink3)" }}>
+            總分 {overall.score} 是五分類通過率的平均：（{cats.map((c) => c.passRate).join("＋")}）÷ {cats.length}。
+          </div>
+        </RbCard>
+
+        <RbCard style={{ gap: 16 }}>
+          <RbCardTitle title="AI 眼中的你" note="僅首頁" />
+          {vis ? (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+                <RbDonut
+                  segments={[
+                    { value: vis.substantiveChars, color: "var(--rb-lime)" },
+                    { value: Math.max(vis.textLength - vis.substantiveChars, 0), color: "rgba(48,60,84,0.18)" },
+                  ]}
+                  center={
+                    <div style={{ fontSize: 30, fontWeight: 700, letterSpacing: "-0.04em", lineHeight: 1 }}>
+                      {vis.textLength > 0 ? Math.round((vis.substantiveChars / vis.textLength) * 100) : 0}%
+                    </div>
+                  }
+                  sub="是內容"
+                />
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, flex: 1 }}>
+                  {(
+                    [
+                      ["成段的內容", vis.substantiveChars, "var(--rb-lime)"],
+                      ["選單、標籤等版面文字", vis.furnitureChars, "rgba(48,60,84,0.35)"],
+                    ] as const
+                  ).map(([label, n, color]) => (
+                    <div key={label} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--rb-ink2)", gap: 8 }}>
+                        <span>{label}</span>
+                        <span className="mono">{n} 字</span>
+                      </div>
+                      <div style={{ height: 8, borderRadius: 999, background: "rgba(48,60,84,0.11)", overflow: "hidden" }}>
+                        <div style={{ width: `${vis.textLength > 0 ? (n / vis.textLength) * 100 : 0}%`, height: "100%", background: color }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ paddingTop: 14, borderTop: "1px solid var(--rb-hair2)", fontSize: 12.5, lineHeight: 1.65, color: "var(--rb-ink3)" }}>
+                首頁 {vis.scriptCount} 個腳本、HTML 共 {vis.htmlLength.toLocaleString()} 字元，關掉 JavaScript 後剩下{" "}
+                {vis.textLength.toLocaleString()} 個可讀的字。
+              </div>
+            </>
+          ) : (
+            <div style={rbEmpty}>沒有量到首頁內容。</div>
+          )}
+        </RbCard>
+      </div>
+
+      {/* 雷達 / 爬蟲權限 / AI 認不認得你 */}
+      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1.05fr 1.1fr", gap: 16, alignItems: "stretch" }}>
+        <RbCard style={{ gap: 16 }}>
+          <RbCardTitle title="五分類通過率" note={`平均 ${overall.score}`} />
+          <svg viewBox="-58 0 438 300" style={{ width: "100%", height: 238, display: "block" }}>
+            <polygon points={rbPoly(60, cats.length)} fill="none" stroke="rgba(48,60,84,0.16)" />
+            <polygon points={rbPoly(120, cats.length)} fill="none" stroke="rgba(48,60,84,0.26)" />
+            {cats.map((_, i) => {
+              const [x, y] = rbRadarPoint(i, 120);
+              return <line key={i} x1="160" y1="160" x2={x} y2={y} stroke="rgba(48,60,84,0.16)" />;
+            })}
+            <polygon
+              points={rbPoly((i) => (120 * cats[i].passRate) / 100, cats.length)}
+              fill="rgba(252,180,24,0.22)"
+              stroke="#fcb418"
+              strokeWidth="2.5"
+            />
+            {cats.map((c, i) => {
+              const [x, y] = rbRadarPoint(i, (120 * c.passRate) / 100);
+              const weak = c.fail > 0;
+              return <circle key={c.name} cx={x} cy={y} r={weak ? 5 : 4} fill={weak ? "var(--rb-fail)" : "#fcb418"} />;
+            })}
+            {cats.map((c, i) => (
+              <text
+                key={c.name}
+                x={RB_RADAR_LABEL[i].x}
+                y={RB_RADAR_LABEL[i].y}
+                textAnchor={RB_RADAR_LABEL[i].anchor}
+                fontSize="15"
+                fill={c.fail > 0 ? "#b8342c" : "#4a5468"}
+              >
+                {c.name}
+              </text>
+            ))}
+          </svg>
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${cats.length},1fr)`, gap: 6, paddingTop: 14, borderTop: "1px solid var(--rb-hair2)" }}>
+            {cats.map((c) => (
+              <div key={c.name} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontSize: 11.5, color: "var(--rb-ink3)" }}>{c.name}</span>
+                <span className="mono" style={{ fontSize: 14, color: c.fail > 0 ? "var(--rb-fail)" : undefined }}>
+                  {c.total > 0 ? c.passRate : "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="mono" style={{ marginTop: "auto", paddingTop: 14, borderTop: "1px solid var(--rb-hair2)", fontSize: 11.5, lineHeight: 1.6, color: "var(--rb-ink3)" }}>
+            （正常 ×1 ＋ 可優化 ×0.5）÷ 項目數
+          </div>
+        </RbCard>
+
+        <RbCard style={{ gap: 14 }}>
+          <RbCardTitle title="各家 AI 爬蟲的存取權限" note="政策 × 實測" />
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {bots.map((b, i) => {
+              const flag = b.status === "allowed" ? "🟢" : b.status === "blocked" ? "🔴" : b.status === "mismatch" ? "🟡" : "⚪";
+              const color =
+                b.status === "allowed"
+                  ? "var(--rb-ok)"
+                  : b.status === "blocked"
+                    ? "var(--rb-fail)"
+                    : b.status === "mismatch"
+                      ? "var(--rb-warn)"
+                      : "var(--rb-gray)";
+              const highlight = b.status === "blocked" || b.status === "mismatch";
+              return (
+                <div
+                  key={b.ua}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr auto",
+                    alignItems: "baseline",
+                    gap: 10,
+                    padding: highlight ? "9px 20px" : "9px 0",
+                    margin: highlight ? "0 -20px" : undefined,
+                    background: highlight ? "rgba(184,52,44,0.09)" : undefined,
+                    borderBottom: i < bots.length - 1 ? "1px solid var(--rb-hair2)" : undefined,
+                  }}
+                >
+                  <span className="mono" style={{ fontSize: 12.5 }}>{b.label}</span>
+                  <span style={{ fontSize: 12, color }}>
+                    {flag} {BADGE[b.status].text}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          {(engine.wafHint || engine.robotsNote) && (
+            <div
+              className="mono"
+              style={{
+                marginTop: "auto",
+                fontSize: 11.5,
+                lineHeight: 1.7,
+                color: "#f6f5ef",
+                background: "#303c54",
+                borderRadius: 8,
+                padding: "11px 13px",
+                whiteSpace: "pre-wrap",
+              }}
+            >
+              {engine.wafHint ? (
+                <>
+                  {engine.wafHint.technical}
+                  {"\n"}
+                  <span style={{ color: "var(--rb-lime)" }}>→ {engine.wafHint.impact}</span>
+                </>
+              ) : (
+                engine.robotsNote
+              )}
+            </div>
+          )}
+        </RbCard>
+
+        <RbCard style={{ gap: 14 }}>
+          <RbCardTitle title="AI 認不認得你？" note={`${engines.length} 家引擎實測`} />
+          {engines.length > 0 ? (
+            <>
+              <div
+                className="mono"
+                style={{
+                  fontSize: 12.5,
+                  lineHeight: 1.6,
+                  color: "var(--rb-ink2)",
+                  background: "var(--rb-card2)",
+                  border: "1px solid var(--rb-hair2)",
+                  borderRadius: 8,
+                  padding: "11px 13px",
+                }}
+              >
+                {engines[0].query}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {engines.map((r) => {
+                  const cite = r.citations.find((c) => c.isSelf) ?? r.citations[0];
+                  return (
+                    <div key={r.engine} style={{ border: "1px solid var(--rb-hair)", borderRadius: 9, padding: 14, display: "flex", flexDirection: "column", gap: 9 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                        <span
+                          className="mono"
+                          style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        >
+                          {r.engine}
+                        </span>
+                        <span style={{ fontSize: 12, whiteSpace: "nowrap", flex: "none", color: r.citedSelf ? "var(--rb-ok)" : "var(--rb-fail)" }}>
+                          {r.citedSelf ? "🟢 有提到你" : "🔴 沒有引用你"}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 12.5, lineHeight: 1.65, color: "var(--rb-ink2)" }}>{r.advice}</div>
+                      {cite && (
+                        <div
+                          className="mono"
+                          style={{
+                            fontSize: 11.5,
+                            color: cite.isSelf ? "var(--rb-gold)" : "var(--rb-ink3)",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {cite.isSelf ? "★ " : ""}
+                          {cite.url.replace(/^https?:\/\//, "")}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ marginTop: "auto", paddingTop: 12, borderTop: "1px solid var(--rb-hair2)", fontSize: 11.5, lineHeight: 1.6, color: "var(--rb-ink3)" }}>
+                ★ 代表引用指向你自己的網域。
+              </div>
+            </>
+          ) : (
+            <div style={rbEmpty}>沒有實測資料。</div>
+          )}
+        </RbCard>
+      </div>
+
+      {/* 優先處理順序 */}
+      {priorities.length > 0 && (
+        <RbCard style={{ padding: "20px 20px 22px", gap: 18 }}>
+          <RbCardTitle title="優先處理順序" note="依影響的分類與嚴重度排序" />
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${priorities.length},1fr)`, gap: 0 }}>
+            {priorities.map((p, i) => {
+              const color = RB_STATUS_VAR[p.status];
+              const tint = p.status === "fail" ? "rgba(184,52,44," : "rgba(200,121,26,";
+              const rate = cats.find((c) => c.name === p.group)?.passRate;
+              return (
+                <div
+                  key={`${p.title}-${i}`}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                    padding: i === 0 ? "0 22px 0 0" : "0 22px",
+                    borderLeft: i > 0 ? "1px solid var(--rb-hair2)" : undefined,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span
+                      className="mono"
+                      style={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: 999,
+                        background: `${tint}0.16)`,
+                        border: `1px solid ${tint}0.5)`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 11.5,
+                        color,
+                        flex: "none",
+                      }}
+                    >
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    {i < priorities.length - 1 && (
+                      <span style={{ flex: 1, height: 1, background: `linear-gradient(90deg,${tint}0.5),var(--rb-hair2))` }} />
+                    )}
+                  </div>
+                  <div style={{ fontSize: 14.5, fontWeight: 600 }}>{p.title}</div>
+                  <div style={{ fontSize: 12.5, lineHeight: 1.7, color: "var(--rb-ink2)", paddingRight: 8 }}>{p.body}</div>
+                  <div className="mono" style={{ marginTop: "auto", fontSize: 11.5, color }}>
+                    {RB_STATUS_DOT[p.status]} {STATUS_LABEL[p.status]} · {p.group} {rate ?? "—"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </RbCard>
+      )}
+
+      <div className="mono" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 6, fontSize: 11.5, color: "var(--rb-ink3)" }}>
+        <div>AI 搜尋能見度健檢 · {host} · {today}</div>
+        <div>⚪ 無法判定不等於通過 — 每一項都是實測結果，不是預估值</div>
+      </div>
+    </div>
   );
 }
 
-// 下載：序列化畫面上那個 SVG 節點本身，所見即所得。PNG 走 canvas 轉檔給
-// 要貼進簡報／通訊軟體的人用（多數通訊軟體不吃 SVG）。
-function ReportSummary({
-  origin,
-  score,
-  grade,
-  gradeLabel,
-  categories,
-  groups,
-}: {
-  origin: string;
-  score: number;
-  grade: string;
-  gradeLabel: string;
-  categories: Category5[];
-  groups: GridGroup[];
-}) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [busy, setBusy] = useState(false);
-
-  function serialize(): { text: string; width: number; height: number } | null {
-    const node = svgRef.current;
-    if (!node) return null;
-    const clone = node.cloneNode(true) as SVGSVGElement;
-    const height = summarySvgHeight(groups);
-    // 畫面上是 width="100%"，檔案要有實際尺寸才不會在其他程式裡被拉成滿版
-    clone.setAttribute("width", String(SVG_W));
-    clone.setAttribute("height", String(height));
-    clone.removeAttribute("class");
-    return { text: new XMLSerializer().serializeToString(clone), width: SVG_W, height };
-  }
-
-  function save(blob: Blob, filename: string) {
-    const href = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = href;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(href);
-  }
-
-  const stem = `geo-check-${origin.replace(/^https?:\/\//, "").replace(/[^\w.-]/g, "-")}`;
-
-  function downloadSvg() {
-    const out = serialize();
-    if (!out) return;
-    save(new Blob([out.text], { type: "image/svg+xml;charset=utf-8" }), `${stem}.svg`);
-  }
-
-  function downloadPng() {
-    const out = serialize();
-    if (!out) return;
-    setBusy(true);
-    const scale = 2;
-    const img = new Image();
-    const url = URL.createObjectURL(new Blob([out.text], { type: "image/svg+xml;charset=utf-8" }));
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = out.width * scale;
-      canvas.height = out.height * scale;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.scale(scale, scale);
-        ctx.drawImage(img, 0, 0);
-        canvas.toBlob((b) => b && save(b, `${stem}.png`), "image/png");
-      }
-      URL.revokeObjectURL(url);
-      setBusy(false);
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      setBusy(false);
-    };
-    img.src = url;
-  }
-
+// 外框：標題列＋列印按鈕，以及讓 1200px 的圖在窄螢幕橫向捲動的容器。
+function ReportBoardSection(props: React.ComponentProps<typeof ReportBoard>) {
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="eyebrow">健檢總表</h2>
-        <div className="flex gap-2">
-          <button type="button" onClick={downloadSvg} className="btn-line text-xs">
-            下載 SVG
-          </button>
-          <button type="button" onClick={downloadPng} disabled={busy} className="btn-line text-xs">
-            {busy ? "產生中…" : "下載 PNG"}
-          </button>
-        </div>
+      <div className="report-board-actions mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="eyebrow">健檢報告圖</h2>
+        <button type="button" onClick={() => window.print()} className="btn-line text-xs">
+          列印 / 存成 PDF
+        </button>
       </div>
-      <ReportSummarySvg
-        svgRef={svgRef}
-        origin={origin}
-        score={score}
-        grade={grade}
-        gradeLabel={gradeLabel}
-        categories={categories}
-        groups={groups}
-      />
-      <p className="mt-2 text-xs text-ink3">
-        一格是一項檢測，滑過去看是哪一項。整張圖可以下載，直接貼進報告或傳給合作對象。
+      <div className="report-board-scroll">
+        <ReportBoard {...props} />
+      </div>
+      <p className="report-board-actions mt-2 text-xs text-ink3">
+        整份報告壓成一張圖。可以列印或存成 PDF，直接轉給合作對象。
       </p>
     </div>
   );
@@ -948,13 +1596,13 @@ function ScoreRing({ score }: { score: number }) {
   const offset = c * (1 - Math.min(100, Math.max(0, score)) / 100);
   return (
     <svg width="132" height="132" viewBox="0 0 132 132" className="-rotate-90">
-      <circle cx="66" cy="66" r={r} fill="none" stroke="#eaebe0" strokeWidth="10" />
+      <circle cx="66" cy="66" r={r} fill="none" stroke="#eceef2" strokeWidth="10" />
       <circle
         cx="66"
         cy="66"
         r={r}
         fill="none"
-        stroke="#a8d128"
+        stroke="#e09c0a"
         strokeWidth="10"
         strokeLinecap="round"
         strokeDasharray={c}
@@ -990,16 +1638,16 @@ function RadarChart({ categories }: { categories: Category5[] }) {
           key={level}
           points={categories.map((_, i) => { const p = pointAt(i, level); return `${fmt(p.x)},${fmt(p.y)}`; }).join(" ")}
           fill="none"
-          stroke="#eaebe0"
+          stroke="#eceef2"
         />
       ))}
       {categories.map((_, i) => {
         const p = pointAt(i, 100);
-        return <line key={i} x1={cx} y1={cy} x2={fmt(p.x)} y2={fmt(p.y)} stroke="#dcded1" />;
+        return <line key={i} x1={cx} y1={cy} x2={fmt(p.x)} y2={fmt(p.y)} stroke="#dcdfe6" />;
       })}
-      <polygon points={dataPolygon} fill="rgba(201,242,74,.55)" stroke="#101a14" strokeWidth={2} />
+      <polygon points={dataPolygon} fill="rgba(252,180,24,.35)" stroke="#303c54" strokeWidth={2} />
       {dataPoints.map((p, i) => (
-        <circle key={i} cx={fmt(p.x)} cy={fmt(p.y)} r={3.5} fill="#101a14" />
+        <circle key={i} cx={fmt(p.x)} cy={fmt(p.y)} r={3.5} fill="#303c54" />
       ))}
       {categories.map((c, i) => {
         const a = angleOf(i);
@@ -1008,10 +1656,10 @@ function RadarChart({ categories }: { categories: Category5[] }) {
         const anchor = Math.abs(cosA) < 0.25 ? "middle" : cosA > 0 ? "start" : "end";
         return (
           <g key={i}>
-            <text x={fmt(lp.x)} y={fmt(lp.y)} textAnchor={anchor} fontSize={11.5} className="mono" fill="#4e5a51">
+            <text x={fmt(lp.x)} y={fmt(lp.y)} textAnchor={anchor} fontSize={11.5} className="mono" fill="#4a5468">
               {c.name}
             </text>
-            <text x={fmt(lp.x)} y={fmt(lp.y + 15)} textAnchor={anchor} fontSize={11.5} className="mono" fill="#101a14">
+            <text x={fmt(lp.x)} y={fmt(lp.y + 15)} textAnchor={anchor} fontSize={11.5} className="mono" fill="#303c54">
               {c.total > 0 ? c.passRate : "—"}
             </text>
           </g>
@@ -1576,7 +2224,7 @@ function AuditTable({ checks, origin }: { checks: CheckItem[]; origin?: string }
       <div className="hidden space-y-5 sm:block">
         {[...groups.entries()].map(([category, rows]) => (
           <div key={category}>
-            <p className="mono mb-2 text-lg font-semibold tracking-wide text-lime-dark uppercase">{category}</p>
+            <p className="mono mb-2 text-lg font-semibold tracking-wide text-[var(--goldInk)] uppercase">{category}</p>
             {/* --line 這個邊框色是設計系統裡刻意收斂的淡色，套在其他卡片上沒問題，
                 但這裡小積木明確反饋看起來像沒有框——深度健檢表格改用對比更明顯的
                 border-ink/15，跟設計稿那種清楚有框的視覺對齊，不動全站其他卡片。 */}
@@ -1640,7 +2288,7 @@ function AuditTable({ checks, origin }: { checks: CheckItem[]; origin?: string }
       <div className="space-y-5 sm:hidden">
         {[...groups.entries()].map(([category, rows]) => (
           <div key={category}>
-            <p className="mono mb-2 text-lg font-semibold tracking-wide text-lime-dark uppercase">{category}</p>
+            <p className="mono mb-2 text-lg font-semibold tracking-wide text-[var(--goldInk)] uppercase">{category}</p>
             <div className="divide-y divide-line2 rounded-[10px] border border-ink/15 bg-card">
               {rows.map((c) => (
                 <CheckRow key={c.key} c={c} origin={origin} />
@@ -2168,7 +2816,7 @@ export default function HomeClient({
             className="pointer-events-none absolute inset-0"
             style={{
               background:
-                "radial-gradient(900px circle at 68% 28%, rgba(163,230,53,.16), transparent 60%), radial-gradient(700px circle at 20% 85%, rgba(163,230,53,.10), transparent 65%)",
+                "radial-gradient(900px circle at 68% 28%, rgba(252,180,24,.16), transparent 60%), radial-gradient(700px circle at 20% 85%, rgba(252,180,24,.10), transparent 65%)",
             }}
           />
           <video
@@ -2186,17 +2834,17 @@ export default function HomeClient({
             className="pointer-events-none absolute inset-0"
             style={{
               background:
-                "linear-gradient(100deg, rgba(16,26,20,.92) 0%, rgba(16,26,20,.72) 46%, rgba(16,26,20,.28) 100%)",
+                "linear-gradient(100deg, rgba(48,60,84,.92) 0%, rgba(48,60,84,.72) 46%, rgba(48,60,84,.28) 100%)",
             }}
           />
           <div className="relative pointer-events-none pb-24 pt-[104px]">
             <div className="mx-auto max-w-[1120px] px-10">
-              <div className="eyebrow text-[#a9b5ac]">AI SEARCH VISIBILITY</div>
+              <div className="eyebrow text-[#a7b1c2]">AI SEARCH VISIBILITY</div>
               <h1 className="mt-5 max-w-[16em] text-[60px] leading-[1.1] tracking-[-0.045em]">
                 客戶問 AI 的時候，你在
                 <mark className="bg-transparent whitespace-nowrap text-lime">答案裡</mark>嗎？
               </h1>
-              <p className="mt-[22px] max-w-[32em] text-[17.5px] text-[#c3ccc5]">
+              <p className="mt-[22px] max-w-[32em] text-[17.5px] text-[#c6cdda]">
                 我們用各家 AI 爬蟲的身分實際去讀你的網站，再實際去問 AI 認不認得你的品牌，最後跑一次多頁深度健檢。
               </p>
               <form onSubmit={handleCheck} className="pointer-events-auto mt-9 flex max-w-[560px] gap-2.5">
@@ -2206,13 +2854,13 @@ export default function HomeClient({
                   onChange={(e) => setUrl(e.target.value)}
                   placeholder="輸入網址，例如 example.com"
                   aria-label="網址"
-                  className="mono flex-1 rounded-lg border-0 bg-white/[.06] px-3.5 py-2.5 text-sm text-paper shadow-[inset_0_0_0_1px_rgba(255,255,255,.22)] placeholder:text-[#8b968d] focus:shadow-[inset_0_0_0_2px_var(--lime)] focus:outline-none"
+                  className="mono flex-1 rounded-lg border-0 bg-white/[.06] px-3.5 py-2.5 text-sm text-paper shadow-[inset_0_0_0_1px_rgba(255,255,255,.22)] placeholder:text-[#a2acbd] focus:shadow-[inset_0_0_0_2px_var(--lime)] focus:outline-none"
                 />
                 <button type="submit" disabled={loading} className="btn-lime shrink-0 px-[22px] py-[11px] text-[14.5px]">
                   {loading ? "檢測中…" : "開始檢測"}
                 </button>
               </form>
-              <p className="mono mt-3.5 text-[11.5px] text-[#8b968d]">
+              <p className="mono mt-3.5 text-[11.5px] text-[#a2acbd]">
                 約 40 秒 · 不需要註冊 · 只讀取公開可存取的內容 · 已檢測 {checkedCount} 個網站
               </p>
             </div>
@@ -2230,7 +2878,7 @@ export default function HomeClient({
                     <span className="ml-2 text-base font-semibold tracking-normal">{s.unit}</span>
                   </p>
                   <p className="mt-4 text-[14.5px] font-semibold">{s.label}</p>
-                  <p className="mt-2 max-w-[26em] text-[13.5px] leading-relaxed text-[#a9b5ac]">{s.note}</p>
+                  <p className="mt-2 max-w-[26em] text-[13.5px] leading-relaxed text-[#a7b1c2]">{s.note}</p>
                 </div>
               ))}
             </div>
@@ -2447,26 +3095,17 @@ export default function HomeClient({
               <CategoryOverview rows={buildCategoryRows(engine, status?.audit)} />
             </div>
 
-            {/* 健檢總表：報告下半部是一大片文字，這張圖讓人先用「看」的知道
-                哪個分類在出血，再決定要往下讀哪一段。也可以下載出去單獨用。 */}
-            {(() => {
-              const groups = buildStatusGrid(engine, status?.audit);
-              if (groups.length === 0) return null;
-              const cats = buildCategories5(engine, status?.audit);
-              const overall = computeOverallScore(cats);
-              return (
-                <div className="mt-6">
-                  <ReportSummary
-                    origin={engine.origin}
-                    score={overall.score}
-                    grade={overall.grade}
-                    gradeLabel={overall.gradeLabel}
-                    categories={cats}
-                    groups={groups}
-                  />
-                </div>
-              );
-            })()}
+            {/* 健檢報告圖：報告下半部是一大片文字，這張圖讓人先用「看」的知道
+                哪裡在出血，再決定要往下讀哪一段。也可以列印出去單獨用。 */}
+            <div className="mt-6">
+              <ReportBoardSection
+                origin={engine.origin}
+                engine={engine}
+                audit={status?.audit}
+                pageWords={status?.pageWords}
+                crawledPages={status?.progress.crawled ?? 0}
+              />
+            </div>
 
             {engine.brandVisibility.length > 0 && (
               <div className="mt-6">
