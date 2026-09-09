@@ -230,8 +230,8 @@ interface StatusResponse {
   error?: string;
 }
 
-// 狀態色（dataviz 技能的固定 status palette，不跟著品牌色跑）——CategoryOverview
-// 用內嵌 style 畫長條，跟新 token 的十六進位值保持一致。
+// 狀態色（dataviz 技能的固定 status palette，不跟著品牌色跑）。內嵌 style 用得到
+// 十六進位值的地方（狀態磚、報告圖）都從這裡拿，跟 token 保持一致。
 const STATUS_COLOR = { ok: "#1f7a4d", warn: "#96590a", fail: "#b8342c" } as const;
 const STATUS_LABEL = { ok: "正常", warn: "可優化", fail: "需處理" } as const;
 
@@ -493,47 +493,6 @@ function StatusChip({ glyph, color, size = 18 }: { glyph: string; color: string;
       {glyph}
     </span>
   );
-}
-
-interface CategoryRow {
-  name: string;
-  ok: number;
-  warn: number;
-  fail: number;
-}
-
-// 把「AI 引擎」層（bot 存取、內容可視性、Content Signals、llms.txt）跟深度健檢
-// 的分類收斂成同一組列，每列一個分類的 ok/warn/fail 計數——用來畫總覽長條圖。
-function buildCategoryRows(engine?: EngineResult, audit?: CheckItem[]): CategoryRow[] {
-  const rows = new Map<string, CategoryRow>();
-  const bump = (name: string, status: CheckStatus) => {
-    const r = rows.get(name) ?? { name, ok: 0, warn: 0, fail: 0 };
-    r[status] += 1;
-    rows.set(name, r);
-  };
-
-  if (engine) {
-    const AI = "AI 引擎可達性";
-    for (const b of engine.results) {
-      bump(AI, b.status === "allowed" ? "ok" : b.status === "blocked" ? "fail" : "warn");
-    }
-    if (engine.visibility) {
-      bump(AI, engine.visibility.status === "ok" ? "ok" : engine.visibility.status === "thin" ? "warn" : "fail");
-    }
-    if (engine.contentSignals) {
-      bump(AI, engine.contentSignals.declared ? "ok" : "warn");
-    }
-    if (engine.llmsTxt.exists !== null) {
-      bump(AI, engine.llmsTxt.exists ? (engine.llmsTxt.quality?.status === "ok" ? "ok" : "warn") : "warn");
-    }
-  }
-
-  if (audit) {
-    for (const c of audit) bump(c.category, c.status);
-  }
-
-  // 問題最多的分類排最上面：一眼看出哪裡弱，不用逐條找
-  return [...rows.values()].sort((a, b) => b.fail - a.fail || b.warn - a.warn);
 }
 
 interface Category5 {
@@ -1586,137 +1545,6 @@ function RadarSweep() {
         </linearGradient>
       </defs>
     </svg>
-  );
-}
-
-// 總分環形進度：純 SVG stroke-dasharray，不用圖表函式庫，跟雷達圖同一套做法。
-function ScoreRing({ score }: { score: number }) {
-  const r = 54;
-  const c = 2 * Math.PI * r;
-  const offset = c * (1 - Math.min(100, Math.max(0, score)) / 100);
-  return (
-    <svg width="132" height="132" viewBox="0 0 132 132" className="-rotate-90">
-      <circle cx="66" cy="66" r={r} fill="none" stroke="#eceef2" strokeWidth="10" />
-      <circle
-        cx="66"
-        cy="66"
-        r={r}
-        fill="none"
-        stroke="#e09c0a"
-        strokeWidth="10"
-        strokeLinecap="round"
-        strokeDasharray={c}
-        strokeDashoffset={offset}
-      />
-    </svg>
-  );
-}
-
-// 五分類雷達圖：純 SVG，座標公式跟設計稿一致，不用圖表函式庫。跟下面的
-// CategoryOverview（狀態色堆疊長條）並存——雷達圖抓「五個面向的整體形狀」，
-// 長條圖抓「哪個分類扣最多分」，兩種閱讀方式互補，不是互相取代。
-function RadarChart({ categories }: { categories: Category5[] }) {
-  const cx = 150;
-  const cy = 150;
-  const radius = 110;
-  const n = categories.length;
-  const angleOf = (i: number) => -Math.PI / 2 + i * ((2 * Math.PI) / n);
-  const pointAt = (i: number, value: number) => {
-    const a = angleOf(i);
-    const r = (radius * value) / 100;
-    return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
-  };
-  const fmt = (n: number) => n.toFixed(1);
-
-  const dataPoints = categories.map((c, i) => pointAt(i, c.passRate));
-  const dataPolygon = dataPoints.map((p) => `${fmt(p.x)},${fmt(p.y)}`).join(" ");
-
-  return (
-    <svg viewBox="-70 0 440 300" width="440" height="300" className="mx-auto max-w-full">
-      {[25, 50, 75, 100].map((level) => (
-        <polygon
-          key={level}
-          points={categories.map((_, i) => { const p = pointAt(i, level); return `${fmt(p.x)},${fmt(p.y)}`; }).join(" ")}
-          fill="none"
-          stroke="#eceef2"
-        />
-      ))}
-      {categories.map((_, i) => {
-        const p = pointAt(i, 100);
-        return <line key={i} x1={cx} y1={cy} x2={fmt(p.x)} y2={fmt(p.y)} stroke="#dcdfe6" />;
-      })}
-      <polygon points={dataPolygon} fill="rgba(252,180,24,.35)" stroke="#303c54" strokeWidth={2} />
-      {dataPoints.map((p, i) => (
-        <circle key={i} cx={fmt(p.x)} cy={fmt(p.y)} r={3.5} fill="#303c54" />
-      ))}
-      {categories.map((c, i) => {
-        const a = angleOf(i);
-        const cosA = Math.cos(a);
-        const lp = pointAt(i, (132 / radius) * 100);
-        const anchor = Math.abs(cosA) < 0.25 ? "middle" : cosA > 0 ? "start" : "end";
-        return (
-          <g key={i}>
-            <text x={fmt(lp.x)} y={fmt(lp.y)} textAnchor={anchor} fontSize={11.5} className="mono" fill="#4a5468">
-              {c.name}
-            </text>
-            <text x={fmt(lp.x)} y={fmt(lp.y + 15)} textAnchor={anchor} fontSize={11.5} className="mono" fill="#303c54">
-              {c.total > 0 ? c.passRate : "—"}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-// 分類總覽：橫向堆疊長條，狀態色（不是分類色）。跟上面的五分類雷達圖並存——
-// 長條是原本 7 分類的細節版，雷達是五分類的整體形狀，兩種互補不是互相取代。
-function CategoryOverview({ rows }: { rows: CategoryRow[] }) {
-  const visible = rows.filter((r) => r.ok + r.warn + r.fail > 0);
-  if (visible.length === 0) return null;
-
-  return (
-    <div className="rounded-[10px] border border-line bg-card p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="eyebrow">檢測總覽</h2>
-        <div className="flex items-center gap-3 text-xs text-ink3">
-          {(["ok", "warn", "fail"] as const).map((s) => (
-            <span key={s} className="flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: STATUS_COLOR[s] }} />
-              {STATUS_LABEL[s]}
-            </span>
-          ))}
-        </div>
-      </div>
-      <div className="space-y-2.5">
-        {visible.map((row) => {
-          const total = row.ok + row.warn + row.fail;
-          const segs = (["fail", "warn", "ok"] as const).map((s) => ({ status: s, count: row[s] }));
-          return (
-            <div key={row.name} className="flex items-center gap-3">
-              <p className="w-28 shrink-0 truncate text-xs text-ink2" title={row.name}>
-                {row.name}
-              </p>
-              <div className="flex h-4 flex-1 gap-[2px] overflow-hidden rounded-r bg-card">
-                {segs.map(
-                  (s) =>
-                    s.count > 0 && (
-                      <div
-                        key={s.status}
-                        tabIndex={0}
-                        title={`${row.name} · ${STATUS_LABEL[s.status]} ${s.count} 項`}
-                        className="h-full outline-none focus-visible:ring-2 focus-visible:ring-ink/40"
-                        style={{ width: `${(s.count / total) * 100}%`, backgroundColor: STATUS_COLOR[s.status] }}
-                      />
-                    ),
-                )}
-              </div>
-              <p className="w-10 shrink-0 text-right text-xs tabular-nums text-ink3">{total} 項</p>
-            </div>
-          );
-        })}
-      </div>
-    </div>
   );
 }
 
@@ -3053,56 +2881,10 @@ export default function HomeClient({
               )}
             </div>
 
-            {status?.audit &&
-              (() => {
-                const categories5 = buildCategories5(engine, status.audit);
-                const overall = computeOverallScore(categories5);
-                const totals = categories5.reduce(
-                  (acc, c) => ({ ok: acc.ok + c.ok, warn: acc.warn + c.warn, fail: acc.fail + c.fail }),
-                  { ok: 0, warn: 0, fail: 0 }
-                );
-                return (
-                  <div className="mt-6 rounded-[10px] border border-line bg-card p-5">
-                    <h2 className="eyebrow mb-4">五分類總覽</h2>
-                    <div className="grid gap-6 sm:grid-cols-[132px_1fr] sm:items-center">
-                      <div className="flex flex-col items-center gap-3">
-                        <div className="relative h-[132px] w-[132px]">
-                          <ScoreRing score={overall.score} />
-                          <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <b className="text-3xl font-bold text-ink">{overall.score}</b>
-                            <span className="mono text-[10px] tracking-widest text-ink3">總分</span>
-                          </div>
-                        </div>
-                        <span className="mono rounded-full border border-line bg-inset px-3 py-1 text-xs font-medium text-ink2">
-                          {overall.grade} 級・{overall.gradeLabel}
-                        </span>
-                        <dl className="mono flex gap-4 text-center text-xs">
-                          <div>
-                            <b className="block text-base text-ok">{totals.ok}</b>
-                            <span className="text-ink3">正常</span>
-                          </div>
-                          <div>
-                            <b className="block text-base text-warn">{totals.warn}</b>
-                            <span className="text-ink3">可優化</span>
-                          </div>
-                          <div>
-                            <b className="block text-base text-fail">{totals.fail}</b>
-                            <span className="text-ink3">需處理</span>
-                          </div>
-                        </dl>
-                      </div>
-                      <RadarChart categories={categories5} />
-                    </div>
-                  </div>
-                );
-              })()}
-
-            <div className="mt-6">
-              <CategoryOverview rows={buildCategoryRows(engine, status?.audit)} />
-            </div>
-
-            {/* 健檢報告圖：報告下半部是一大片文字，這張圖讓人先用「看」的知道
-                哪裡在出血，再決定要往下讀哪一段。也可以列印出去單獨用。 */}
+            {/* 健檢報告圖：整份報告的入口。原本這上面還有「五分類總覽」（總分環＋
+                雷達圖）跟「檢測總覽」（狀態色堆疊長條）兩塊，內容跟報告圖裡的雷達、
+                甜甜圈完全重複，同一組數字在同一頁講三次——報告圖本來就是設計來取代
+                它們的，所以整個拿掉，不是搬到別的地方。 */}
             <div className="mt-6">
               <ReportBoardSection
                 origin={engine.origin}
