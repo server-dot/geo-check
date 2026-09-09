@@ -51,6 +51,8 @@ export const ITEM_ORDER: string[] = [
   'imgAlt',
   'imgFormat',
   'externalLinks',
+  'aboutPage',
+  'contactPage',
   'eeat',
 ];
 
@@ -63,7 +65,7 @@ export const DEEP_AUDIT_KEYS = [
   'analytics', 'sitemap', 'robots', 'indexing', 'localbiz', 'breadcrumb',
   'internalLinks', 'brokenLinks', 'duplicate', 'tkd', 'headings', 'schema',
   'page', 'viewport', 'categoryDepth', 'homepage', 'imgAlt', 'imgFormat',
-  'externalLinks', 'llmsSeo', 'eeat',
+  'externalLinks', 'llmsSeo', 'aboutPage', 'contactPage', 'eeat',
 ] as const;
 
 // 三段式文案，對應報告上三種讀者需求：

@@ -529,6 +529,8 @@ const CATEGORY5_KEY_MAP: Record<string, string> = {
   imgAlt: "技術與索引",
   imgFormat: "技術與索引",
   eeat: "品牌與權威",
+  aboutPage: "品牌與權威",
+  contactPage: "品牌與權威",
   // categoryDepth 量的是「網址最深幾層 + 幾頁有麵包屑」，那是網站結構，不是品牌
   // 權威。它原本掛在品牌與權威底下，讓一個只有 2 項的分類憑一個技術指標拿到 75 分
   // ——一個連 GSC 都沒裝的網站不可能有 75 分的品牌權威。移到技術與索引。

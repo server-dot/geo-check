@@ -310,6 +310,71 @@ export async function aggregateAuditChecks(
       : { key: 'categoryDepth', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '網站分類層級清不清楚', status: 'warn', advice: '看不出網站有分類——所有網址都擠在同一層，頁面上也沒有標示所在位置。', impact: 'AI 判斷你「主要在做什麼」，一部分是看你把內容怎麼分類、哪一類的頁面最多。全部擠在同一層，它就看不出你的主力業務是哪一塊。', technical: `網址路徑最深 ${maxDepth} 層。可在網址加上分類路徑，並補上麵包屑導覽。`, evidence: `最深 ${maxDepth} 層` });
   }
 
+  // 16b/16c. 品牌與權威：這個分類原本只有 eeat 一項（AI 判斷），一項檢測卻在總分裡
+  // 佔 20% 權重，分數只會是 0/50/100 三種值。補兩項純規則的實測項——都是從已經爬到的
+  // 頁面判斷，不叫 AI、不猜。
+  //
+  // 門檻不能只看「有沒有那一頁」：幾乎每個網站都有 about 跟 contact，那樣加進來只會
+  // 把分數整體墊高，不會讓分數變準（第一版就是這樣，實測分數反而從 75 升到 83）。
+  // 所以 about 要求那頁真的有內容，contact 要求真的找得到電話或 Email，不是有連結就算。
+  //
+  // 只補這兩項是有意識的取捨：sameAs 社群連結、Organization 聯絡欄位、Article 作者
+  // 署名這些「看起來也像品牌權威」的訊號，都已經在「結構化資料」的欄位完整度裡算過
+  // 一次，再拉來這裡等於同一件事扣兩次分。
+  //
+  // 中文網址要先 decodeURIComponent 再比對——沒解碼的話 /關於我們 會是一串 %E9%97...，
+  // 中文規則永遠比不中，等於死碼。
+  {
+    const decodedPath = (u: string): string => {
+      try {
+        return decodeURIComponent(new URL(u).pathname);
+      } catch {
+        return u;
+      }
+    };
+    const ABOUT_RE = /(^|[/\-_])about([/\-_]|$)|about-?us|our-?story|who-?we-?are|company-?profile|[/\-_]team([/\-_]|$)|關於|关于|團隊|团队|公司簡介|公司简介|品牌故事|品牌介紹|品牌介绍/i;
+    const hit = (re: RegExp) => htmlPages.filter((p) => re.test(decodedPath(p.url)) || re.test(p.title));
+
+    // 「爬到的 N 頁裡沒有」不等於「網站上沒有」——爬蟲有上限，措辭要把取樣範圍講出來，
+    // 不要講成斷言（跟 WAF 三態同一個紀律）。所以找不到是 warn 不是 fail。
+    // 一頁都讀不到的時候（整站是 JS 空殼）措辭要換掉——「爬到的 0 頁裡找不到」讀起來
+    // 像我們找過了，實際上是根本沒東西可找，那是無法判定不是不合格。
+    const noReadablePage = htmlPages.length === 0;
+    const scope = noReadablePage
+      ? '整站沒有一頁讀得到內容（關掉 JavaScript 後是空的），這一項無法判定'
+      : reachedCap
+        ? `爬到的 ${htmlPages.length} 頁裡（已達上限，可能沒涵蓋整站）`
+        : `爬到的 ${htmlPages.length} 頁裡`;
+
+    // 一頁只有標題跟一句標語的「關於我們」不構成品牌介紹。300 字是參考
+    // geo-content-visibility.ts 的 EMPTY_TEXT(200)／THIN_TEXT(500) 抓的中間值。
+    const ABOUT_MIN_CHARS = 300;
+    const aboutAll = hit(ABOUT_RE);
+    const aboutSolid = aboutAll.filter((p) => p.mainTextLength >= ABOUT_MIN_CHARS);
+    const aboutItem = { key: 'aboutPage', level: LEVEL.QUALITY, category: CATEGORY.EXTERNAL, item: '有沒有交代自己是誰' } as const;
+    if (aboutSolid.length > 0) {
+      out.push({ ...aboutItem, status: 'ok', advice: `${toPath(origin, aboutSolid[0].url)} 有 ${aboutSolid[0].mainTextLength} 個字在介紹你是誰`, evidence: aboutSolid.slice(0, 3).map((p) => `${toPath(origin, p.url)}（${p.mainTextLength} 字）`).join('、') });
+    } else if (aboutAll.length > 0) {
+      out.push({ ...aboutItem, status: 'warn', advice: `有「關於我們」這類頁面，但內容只有 ${Math.max(...aboutAll.map((p) => p.mainTextLength))} 個字。`, impact: 'AI 要推薦一個品牌，得講得出這個品牌是誰、做多久、誰在做。一頁只有標題跟一句標語，它讀完還是不知道你是誰。', technical: `頁面存在但可讀字數低於 ${ABOUT_MIN_CHARS} 字。補上成立時間、團隊背景、專業資歷與服務範圍。`, evidence: aboutAll.slice(0, 3).map((p) => `${toPath(origin, p.url)}（${p.mainTextLength} 字）`).join('、') });
+    } else {
+      out.push({ ...aboutItem, status: 'warn', advice: noReadablePage ? `${scope}。` : `${scope}找不到「關於我們／團隊／品牌故事」這類介紹你自己的頁面。`, impact: 'AI 要在回答裡推薦一個品牌，得先講得出這個品牌是誰、做多久、誰在做。整站都在講服務跟商品、沒有一頁在講自己，它就只能從別人寫你的內容去拼湊——那些內容你控制不了。', technical: '新增一頁「關於我們」，寫清楚成立時間、團隊、專業背景與服務範圍，並從主選單連過去。', evidence: scope });
+    }
+
+    // 聯絡管道看的是「找不找得到真的聯絡方式」，不是「有沒有一頁叫聯絡我們」——
+    // 一頁只有表單、沒有電話也沒有 Email，對想查證這家公司存不存在的人沒有用。
+    const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.-]{2,}/;
+    const TEL_RE = /(\+886[-\s]?\d[\d-\s]{7,}|0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{3,4})/;
+    const withEmail = htmlPages.filter((p) => EMAIL_RE.test(p.mainText));
+    const withTel = htmlPages.filter((p) => TEL_RE.test(p.mainText));
+    const contactItem = { key: 'contactPage', level: LEVEL.QUALITY, category: CATEGORY.EXTERNAL, item: '找不找得到可查證的聯絡方式' } as const;
+    if (withEmail.length > 0 || withTel.length > 0) {
+      const kinds = [withTel.length > 0 ? '電話' : '', withEmail.length > 0 ? 'Email' : ''].filter(Boolean).join('與');
+      out.push({ ...contactItem, status: 'ok', advice: `頁面上找得到${kinds}（${withTel.length + withEmail.length > 0 ? toPath(origin, (withTel[0] ?? withEmail[0]).url) : ''} 等）`, evidence: `含電話 ${withTel.length} 頁｜含 Email ${withEmail.length} 頁` });
+    } else {
+      out.push({ ...contactItem, status: 'warn', advice: noReadablePage ? `${scope}。` : `${scope}的內文裡找不到電話或 Email。`, impact: '找得到人負責，是判斷一個網站可不可信最基本的一條。只有一個表單、查不到電話或 Email，AI 跟使用者都無從確認這個品牌背後有沒有真的公司。', technical: '把電話與 Email 以純文字寫在聯絡頁與頁尾（不要只放在圖片或表單裡，爬蟲讀不到）。', evidence: scope });
+    }
+  }
+
   // 17. 首頁內容優化
   {
     const home = pages.find((p) => p.isHome);
