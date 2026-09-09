@@ -5,6 +5,7 @@ import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
 import Section from "@/components/marketing/Section";
 import Footer from "@/components/marketing/Footer";
+import GeoCheckMark from "@/components/marketing/GeoCheckMark";
 import { tallyCitedDomains } from "@/lib/geo-cited-domains";
 
 // 首頁 hero 下面的三格數字帶，掛載時跑一次 1100ms 的 ease-out-cubic count-up
@@ -1071,9 +1072,7 @@ function ReportBoard({
       {/* 抬頭 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 24 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element -- 這張圖要能跟著列印輸出，
-              next/image 的 lazy/placeholder 在列印時可能還沒換成真圖 */}
-          <img src="/geocheck-logo.png" alt="" style={{ height: 28, width: 41, objectFit: "contain" }} />
+          <GeoCheckMark className="h-[28px] w-[41px] shrink-0" />
           <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.02em" }}>GEOCHECK</span>
           <div style={{ width: 1, height: 34, background: "var(--rb-hair)" }} />
           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -2810,7 +2809,14 @@ export default function HomeClient({
 
         {/* Hero：深色、全幅背景，AI 生成的循環動畫（Kling AI，5s loop）。
             影片本身線條偏稀疏，裁緊＋疊一層固定漸層墊底，避免空幀時看起來太空。
-            額度刷新後可以用更強調「滿版無大片留白」的 prompt 重新生成換掉。 */}
+            額度刷新後可以用更強調「滿版無大片留白」的 prompt 重新生成換掉。
+
+            2026-09-09 換品牌色後，影片裡的酸萊姆光軌跟金＋藍灰整個打架。影片沒辦法
+            改色，改用濾鏡把它壓成品牌金：sepia 先把所有光軌收斂成同一個暖色相，再
+            推到金色區——只用 hue-rotate 的話會保留原本的色相差，出來是偏土黃的雜色。
+            重新生成影片時記得直接用金色 prompt，然後把這行濾鏡拿掉。
+            （素材右下角有 KlingAI 浮水印，目前被 scale-125 的裁切吃掉，換影片或改
+            裁切比例時要重新確認一次。） */}
         <div className="relative overflow-hidden bg-ink text-paper">
           <div
             className="pointer-events-none absolute inset-0"
@@ -2820,7 +2826,7 @@ export default function HomeClient({
             }}
           />
           <video
-            className="absolute inset-0 h-full w-full scale-125 object-cover object-[65%_35%] opacity-[.55]"
+            className="absolute inset-0 h-full w-full scale-125 object-cover object-[65%_35%] opacity-[.55] [filter:sepia(.75)_saturate(2.6)_hue-rotate(-8deg)_brightness(1.05)]"
             poster="/hero-bg-poster.jpg"
             autoPlay
             muted
