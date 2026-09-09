@@ -2808,25 +2808,29 @@ export default function HomeClient({
       <div className="marketing">
         <Masthead />
 
-        {/* Hero：深色、全幅背景。原本是 Kling AI 生成的 5 秒循環影片，但那支是酸萊姆
-            光軌，換品牌色之後整個打架，只能靠 CSS 濾鏡硬壓成金色（順帶一提素材右下角
-            還有 KlingAI 浮水印，靠裁切遮掉）。2026-09-09 換成小積木重生的靜態圖：本來
-            就是金＋深藍，濾鏡跟浮水印問題一起消失。
+        {/* Hero：深色、全幅背景。這支影片是拿小積木那張金色底圖去 Kling 的
+            image-to-video 生的（Video 3.0、1080p、5s）。
 
-            改成靜態圖等於少了動態，所以疊一層很慢的漂移（22s，位移只有 2%），讓它不會
-            像一張貼死的桌布；prefers-reduced-motion 時整個停掉。
-            舊的 hero-bg.mp4／.webm／hero-bg-poster.jpg 沒有地方引用了，留著沒刪。 */}
+            關鍵是**起始幀跟結束幀放同一張圖**：只給起始幀的話它會單向生成一段，
+            末幀跟首幀差很多（實測平均像素差 15.4/255，鏡頭明顯推近了一截），
+            循環播放時接點會跳一下。首末幀都給同一張之後差距降到 0.9/255，
+            是真的無縫。prompt 也要跟著拿掉「緩慢推進」這種單調鏡頭運動——
+            那本質上就不可能首尾呼應。
+
+            編碼時砍掉最後一幀（-frames:v 120）：首末幀幾乎一樣，兩張都留著
+            循環時會有 1/24 秒的重複幀，看起來像卡了一下。 */}
         <div className="relative overflow-hidden bg-ink text-paper">
-          <div className="hero-drift pointer-events-none absolute inset-0">
-            <picture>
-              <source srcSet="/hero-bg.webp" type="image/webp" />
-              <img
-                src="/hero-bg.jpg"
-                alt=""
-                className="h-full w-full scale-110 object-cover object-[62%_52%] opacity-[.72]"
-              />
-            </picture>
-          </div>
+          <video
+            className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover object-[62%_52%] opacity-[.72]"
+            poster="/hero-bg.webp"
+            autoPlay
+            muted
+            loop
+            playsInline
+          >
+            <source src="/hero-bg.webm" type="video/webm" />
+            <source src="/hero-bg.mp4" type="video/mp4" />
+          </video>
           {/* 左濃右淡：文字全部靠左，這層把左半邊壓暗保住可讀性，右半邊留給圖本身的光軌。
               原本圖上還疊了兩顆金色 radial glow 墊底（舊影片線條太稀疏會顯得空），新圖
               本身就夠滿，再加就變成一團糊掉的黃霧，拿掉了。 */}
