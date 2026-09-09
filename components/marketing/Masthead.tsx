@@ -1,5 +1,4 @@
 import Link from "next/link";
-import GeoCheckMark from "@/components/marketing/GeoCheckMark";
 
 // 五個行銷頁共用的 sticky 導覽列。首頁（active 不給）不顯示「開始檢測」按鈕、
 // 也不 bold 任何導覽項——因為首頁本身就是那個動作的入口，不需要再引導一次。
@@ -17,7 +16,8 @@ export default function Masthead({ active }: { active?: "geo" | "scoring" | "pri
     <div className="sticky top-0 z-20 border-b border-line bg-[rgba(246,245,239,.95)]">
       <div className="mx-auto flex h-[68px] max-w-[1120px] items-center gap-6 px-10">
         <Link href="/" className="mark">
-          <GeoCheckMark className="h-[28px] w-[41px] shrink-0" />
+          {/* eslint-disable-next-line @next/next/no-img-element -- 固定素材、非使用者上傳圖片，不需要 next/image 的最佳化/尺寸協商 */}
+          <img src="/geocheck-logo.png" alt="GEOCHECK" className="h-[28px] w-[41px] shrink-0 object-contain" />
           <b>GEOCHECK</b>
           <em>AI 搜尋能見度健檢</em>
         </Link>

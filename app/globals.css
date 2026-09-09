@@ -519,3 +519,19 @@ mark.lime-highlight {
     margin-left: calc(50% - 636px);
   }
 }
+
+/* Hero 背景圖的慢速漂移。靜態圖貼在 hero 上會像桌布，給它一個 22 秒、位移只有 2%
+   的循環，餘光看得出來在動但不會分散注意力。動的是外層容器不是 <img>，才不會跟
+   圖自己的 scale/object-position 打架。 */
+@keyframes hero-drift {
+  0%   { transform: translate3d(0, 0, 0); }
+  50%  { transform: translate3d(-2%, -1%, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+.hero-drift {
+  animation: hero-drift 22s ease-in-out infinite;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-drift { animation: none; }
+}

@@ -5,7 +5,6 @@ import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
 import Section from "@/components/marketing/Section";
 import Footer from "@/components/marketing/Footer";
-import GeoCheckMark from "@/components/marketing/GeoCheckMark";
 import { tallyCitedDomains } from "@/lib/geo-cited-domains";
 
 // 首頁 hero 下面的三格數字帶，掛載時跑一次 1100ms 的 ease-out-cubic count-up
@@ -1072,7 +1071,9 @@ function ReportBoard({
       {/* 抬頭 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 24 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <GeoCheckMark className="h-[28px] w-[41px] shrink-0" />
+          {/* eslint-disable-next-line @next/next/no-img-element -- 這張圖要能跟著列印輸出，
+              next/image 的 lazy/placeholder 在列印時可能還沒換成真圖 */}
+          <img src="/geocheck-logo.png" alt="" style={{ height: 28, width: 41, objectFit: "contain" }} />
           <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.02em" }}>GEOCHECK</span>
           <div style={{ width: 1, height: 34, background: "var(--rb-hair)" }} />
           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -2807,40 +2808,33 @@ export default function HomeClient({
       <div className="marketing">
         <Masthead />
 
-        {/* Hero：深色、全幅背景，AI 生成的循環動畫（Kling AI，5s loop）。
-            影片本身線條偏稀疏，裁緊＋疊一層固定漸層墊底，避免空幀時看起來太空。
-            額度刷新後可以用更強調「滿版無大片留白」的 prompt 重新生成換掉。
+        {/* Hero：深色、全幅背景。原本是 Kling AI 生成的 5 秒循環影片，但那支是酸萊姆
+            光軌，換品牌色之後整個打架，只能靠 CSS 濾鏡硬壓成金色（順帶一提素材右下角
+            還有 KlingAI 浮水印，靠裁切遮掉）。2026-09-09 換成小積木重生的靜態圖：本來
+            就是金＋深藍，濾鏡跟浮水印問題一起消失。
 
-            2026-09-09 換品牌色後，影片裡的酸萊姆光軌跟金＋藍灰整個打架。影片沒辦法
-            改色，改用濾鏡把它壓成品牌金：sepia 先把所有光軌收斂成同一個暖色相，再
-            推到金色區——只用 hue-rotate 的話會保留原本的色相差，出來是偏土黃的雜色。
-            重新生成影片時記得直接用金色 prompt，然後把這行濾鏡拿掉。
-            （素材右下角有 KlingAI 浮水印，目前被 scale-125 的裁切吃掉，換影片或改
-            裁切比例時要重新確認一次。） */}
+            改成靜態圖等於少了動態，所以疊一層很慢的漂移（22s，位移只有 2%），讓它不會
+            像一張貼死的桌布；prefers-reduced-motion 時整個停掉。
+            舊的 hero-bg.mp4／.webm／hero-bg-poster.jpg 沒有地方引用了，留著沒刪。 */}
         <div className="relative overflow-hidden bg-ink text-paper">
+          <div className="hero-drift pointer-events-none absolute inset-0">
+            <picture>
+              <source srcSet="/hero-bg.webp" type="image/webp" />
+              <img
+                src="/hero-bg.jpg"
+                alt=""
+                className="h-full w-full scale-110 object-cover object-[62%_52%] opacity-[.72]"
+              />
+            </picture>
+          </div>
+          {/* 左濃右淡：文字全部靠左，這層把左半邊壓暗保住可讀性，右半邊留給圖本身的光軌。
+              原本圖上還疊了兩顆金色 radial glow 墊底（舊影片線條太稀疏會顯得空），新圖
+              本身就夠滿，再加就變成一團糊掉的黃霧，拿掉了。 */}
           <div
             className="pointer-events-none absolute inset-0"
             style={{
               background:
-                "radial-gradient(900px circle at 68% 28%, rgba(252,180,24,.16), transparent 60%), radial-gradient(700px circle at 20% 85%, rgba(252,180,24,.10), transparent 65%)",
-            }}
-          />
-          <video
-            className="absolute inset-0 h-full w-full scale-125 object-cover object-[65%_35%] opacity-[.55] [filter:sepia(.75)_saturate(2.6)_hue-rotate(-8deg)_brightness(1.05)]"
-            poster="/hero-bg-poster.jpg"
-            autoPlay
-            muted
-            loop
-            playsInline
-          >
-            <source src="/hero-bg.webm" type="video/webm" />
-            <source src="/hero-bg.mp4" type="video/mp4" />
-          </video>
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background:
-                "linear-gradient(100deg, rgba(48,60,84,.92) 0%, rgba(48,60,84,.72) 46%, rgba(48,60,84,.28) 100%)",
+                "linear-gradient(100deg, rgba(48,60,84,.95) 0%, rgba(48,60,84,.90) 38%, rgba(48,60,84,.74) 62%, rgba(48,60,84,.26) 100%)",
             }}
           />
           <div className="relative pointer-events-none pb-24 pt-[104px]">
@@ -2866,7 +2860,9 @@ export default function HomeClient({
                   {loading ? "檢測中…" : "開始檢測"}
                 </button>
               </form>
-              <p className="mono mt-3.5 text-[11.5px] text-[#a2acbd]">
+              {/* 11.5px 的細字疊在光軌上，用 #a2acbd 實測只有 4.22:1（量法：把文字層
+                  visibility:hidden 後截圖，取這一帶最亮的背景像素）。提亮到 #c6cdda 才過 4.5。 */}
+              <p className="mono mt-3.5 text-[11.5px] text-[#c6cdda]">
                 約 40 秒 · 不需要註冊 · 只讀取公開可存取的內容 · 已檢測 {checkedCount} 個網站
               </p>
             </div>
