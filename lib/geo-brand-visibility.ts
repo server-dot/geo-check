@@ -76,6 +76,14 @@ export function hostnameOf(url: string): string {
   }
 }
 
+// 引用的網址算不算「自己的」：同一個主機名，或者其中一邊是另一邊的子網域。
+// 受檢的是 geo.stack.com.tw、AI 引用 stack.com.tw/關於我們，那明明就是同一家——
+// 2026-09-11 拿範例站自測時兩家引擎都被判成「沒有引用你」，就是只比對完整主機名害的。
+export function isSameSite(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  return a === b || a.endsWith('.' + b) || b.endsWith('.' + a);
+}
+
 async function runOne(engine: string, model: string, query: string, domain: string, apiKey: string): Promise<VisibilityAnswer | null> {
   let content: string;
   let rawCitations: UrlCitation[];
@@ -93,7 +101,7 @@ async function runOne(engine: string, model: string, query: string, domain: stri
     .map((c) => ({
       url: c.url_citation.url!,
       title: c.url_citation.title || c.url_citation.url!,
-      isSelf: hostnameOf(c.url_citation.url!) === domain,
+      isSelf: isSameSite(hostnameOf(c.url_citation.url!), domain),
     }));
 
   return { engine, query, answer: content, citedSelf: citations.some((c) => c.isSelf), citations };
