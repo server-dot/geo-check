@@ -44,7 +44,7 @@ export default function Footer() {
             <div className="mono mt-[14px] grid gap-2 text-xs text-[#a7b1c2]">
               <span>02-27457601</span>
               <a href="https://lin.ee/UhKq8H1" className="footer-link">
-                Line @683sivea
+                Line 官方帳號
               </a>
               <span>週一至週五 10:00–19:00</span>
             </div>

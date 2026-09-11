@@ -90,7 +90,7 @@ export default function PricingPage() {
             預約諮詢
           </a>
           <a className="btn-line no-underline" href="https://lin.ee/UhKq8H1">
-            Line 詢問 @683sivea
+            用 Line 問
           </a>
         </div>
       </Section>
