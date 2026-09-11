@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { assertPublicUrl, guardedFetch, UnsafeUrlError } from '@/lib/geo-url-guard';
+import { LIMITS, clientIp, hoursLeft, releaseAuditSlot, takeDaily, tryAcquireAuditSlot } from '@/lib/rate-limit';
 import {
   checkAiCrawlerAccess,
   parseContentSignals,
@@ -10,7 +12,7 @@ import { probeBotAccess, type ProbeResult } from '@/lib/geo-bot-probe';
 import { checkBrandVisibility } from '@/lib/geo-brand-visibility';
 import { analyzeLlmsTxt } from '@/lib/geo-llms-txt';
 import { createAuditJob, updateAuditJob, type EngineResult } from '@/lib/geo-audit-jobs';
-import { crawlSite } from '@/lib/geo-audit-crawler';
+import { readTextCapped, crawlSite } from '@/lib/geo-audit-crawler';
 import { aggregateAuditChecks } from '@/lib/geo-audit-aggregate';
 import { buildSchemaTypeCards } from '@/lib/geo-schema-check';
 import { enrichSchemaCards } from '@/lib/geo-schema-complete';
@@ -29,10 +31,9 @@ const TIMEOUT_MS = 10000;
 function fetchWithTimeout(url: string, accept: string): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  return fetch(url, {
+  return guardedFetch(url, {
     headers: { 'User-Agent': UA, Accept: accept },
     signal: controller.signal,
-    redirect: 'follow',
   }).finally(() => clearTimeout(timer));
 }
 
@@ -70,7 +71,7 @@ async function fetchRobots(origin: string): Promise<RobotsOutcome> {
   const url = res.url || requested;
 
   if (res.ok) {
-    const text = await res.text();
+    const text = await readTextCapped(res);
     const contentType = res.headers.get('content-type') ?? '';
     // 有些站對不存在的路徑回 200 + HTML 錯誤頁（soft 404）。
     // 把 HTML 當 robots.txt 解析只會產生垃圾結論，一律視為讀不到。
@@ -113,7 +114,7 @@ async function fetchHomepage(origin: string): Promise<{ html: string | null; not
   try {
     const res = await fetchWithTimeout(origin, 'text/html,application/xhtml+xml,*/*');
     if (!res.ok) return { html: null, note: `首頁回傳 HTTP ${res.status}，無法分析內容` };
-    return { html: await res.text(), note: '' };
+    return { html: await readTextCapped(res), note: '' };
   } catch {
     return { html: null, note: '抓不到首頁，無法分析 AI 讀得到的內容' };
   }
@@ -130,7 +131,7 @@ async function checkLlmsTxt(origin: string): Promise<{ exists: boolean | null; t
     if (!res.ok) return { exists: null, text: '' }; // 403 / 5xx：讀不到，不代表沒有
     const contentType = res.headers.get('content-type') ?? '';
     if (/text\/html/i.test(contentType)) return { exists: false, text: '' }; // soft-404：回首頁 HTML 當作沒有
-    const text = await res.text();
+    const text = await readTextCapped(res);
     if (/^\s*<(!doctype|html)/i.test(text)) return { exists: false, text: '' };
     return { exists: true, text };
   } catch {
@@ -210,12 +211,26 @@ export async function POST(req: NextRequest) {
   let origin: string;
   let host: string;
   try {
-    const u = new URL(/^https?:\/\//i.test(input) ? input : `https://${input}`);
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('unsupported protocol');
+    const u = await assertPublicUrl(/^https?:\/\//i.test(input) ? input : `https://${input}`);
     origin = u.origin;
     host = u.host;
-  } catch {
-    return NextResponse.json({ error: '網址格式不正確' }, { status: 400 });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof UnsafeUrlError ? err.message : '網址格式不正確' }, { status: 400 });
+  }
+
+  // 次數限制：同一個 IP 一天最多跑幾次、全站同時最多幾個在跑。
+  // 先看同時數再扣每日額度——被同時數擋下來的那次不該吃掉他今天的額度。
+  if (!tryAcquireAuditSlot()) {
+    return NextResponse.json({ error: '現在同時有太多網站在檢測，請等一兩分鐘再試。' }, { status: 503 });
+  }
+  const ip = clientIp(req);
+  const limited = takeDaily('audit', ip, LIMITS.auditPerDay);
+  if (limited) {
+    releaseAuditSlot();
+    return NextResponse.json(
+      { error: `這個網路位置今天已經跑過 ${LIMITS.auditPerDay} 次健檢，${hoursLeft(limited.retryAfterMs)}後可以再跑。要一次看很多網站的話，直接聯絡我們。` },
+      { status: 429 },
+    );
   }
 
   // 先跑一次快速的連線檢查：robots.txt 連線層都失敗代表整個網站連不上，
@@ -224,6 +239,7 @@ export async function POST(req: NextRequest) {
   try {
     engine = await runEngineChecks(origin);
   } catch (err) {
+    releaseAuditSlot();
     return NextResponse.json({ error: describeFetchError(err, host) }, { status: 502 });
   }
 
@@ -258,6 +274,8 @@ export async function POST(req: NextRequest) {
       });
     } catch (e) {
       updateAuditJob(job.id, { status: 'failed', error: e instanceof Error ? e.message : String(e), message: '深度健檢失敗' });
+    } finally {
+      releaseAuditSlot();
     }
   })();
 

@@ -1,4 +1,5 @@
 import { parse, HTMLElement as NHTMLElement } from 'node-html-parser';
+import { guardedFetch } from './geo-url-guard';
 
 // ── GEO 深度健檢：全站爬蟲層 ────────────────────────────
 // 從首頁 BFS 爬第一～二層＋補爬 sitemap，逐頁擷取分析要用的原始事實。
@@ -13,14 +14,32 @@ const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
+// 一頁最多讀 2MB。健檢只需要 head 跟正文骨架，超過的部分對判斷沒幫助，
+// 但對方一頁丟 200MB 的 HTML 就能把記憶體吃爆。
+const MAX_BODY_BYTES = 2 * 1024 * 1024;
+
+export async function readTextCapped(res: Response, limit = MAX_BODY_BYTES): Promise<string> {
+  const reader = res.body?.getReader();
+  if (!reader) return '';
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (total < limit) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    total += value.byteLength;
+  }
+  if (total >= limit) await reader.cancel().catch(() => {});
+  return new TextDecoder('utf-8', { fatal: false }).decode(Buffer.concat(chunks.map((c) => Buffer.from(c))));
+}
+
 async function fetchWithTimeout(url: string, timeoutMs = 12000): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, {
+    return await guardedFetch(url, {
       headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,application/xml,*/*' },
       signal: controller.signal,
-      redirect: 'follow',
     });
   } finally {
     clearTimeout(timer);
@@ -240,7 +259,7 @@ async function fetchSitemapUrls(origin: string): Promise<string[]> {
     try {
       const res = await fetchWithTimeout(sm, 10000);
       if (!res.ok) continue;
-      const xml = await res.text();
+      const xml = await readTextCapped(res);
       const locs = [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((m) => m[1]);
       const isIndex = /<sitemapindex/i.test(xml);
       for (const loc of locs) {
@@ -298,7 +317,7 @@ export async function crawlSite(
             const res = await fetchWithTimeout(url);
             const ct = res.headers.get('content-type') ?? '';
             if (!ct.includes('html')) return emptyFacts(url, depth, res.status, res.ok, origin, false, true);
-            return extractPageFacts(await res.text(), url, depth, res.status, res.ok, origin);
+            return extractPageFacts(await readTextCapped(res), url, depth, res.status, res.ok, origin);
           } catch {
             return emptyFacts(url, depth, 0, false, origin);
           }
@@ -348,7 +367,7 @@ export async function crawlSite(
             const res = await fetchWithTimeout(url);
             const ct = res.headers.get('content-type') ?? '';
             if (!ct.includes('html')) return emptyFacts(url, 1, res.status, res.ok, origin, true, true);
-            return extractPageFacts(await res.text(), url, 1, res.status, res.ok, origin, true);
+            return extractPageFacts(await readTextCapped(res), url, 1, res.status, res.ok, origin, true);
           } catch {
             return emptyFacts(url, 1, 0, false, origin, true);
           }

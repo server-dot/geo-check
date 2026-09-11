@@ -1,4 +1,5 @@
 import { detectWaf } from './geo-waf-fingerprint';
+import { guardedFetch } from './geo-url-guard';
 
 // ── GEO：AI 爬蟲實測驗證 ──────────────────────────────
 // robots.txt 只是網站「說」它允許誰，是榮譽制——遵守規範的爬蟲才會看它。
@@ -23,10 +24,9 @@ async function probeOne(origin: string, ua: string): Promise<ProbeResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(origin, {
+    const res = await guardedFetch(origin, {
       headers: { 'User-Agent': ua, Accept: 'text/html,application/xhtml+xml,*/*' },
       signal: controller.signal,
-      redirect: 'follow',
     });
     if (res.ok) return { reachable: true, httpStatus: res.status, note: `實測回應 HTTP ${res.status}，請求真的進得去` };
 
