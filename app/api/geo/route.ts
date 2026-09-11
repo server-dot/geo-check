@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assertPublicUrl, guardedFetch, UnsafeUrlError } from '@/lib/geo-url-guard';
 import { LIMITS, clientIp, hoursLeft, releaseAuditSlot, takeDaily, tryAcquireAuditSlot } from '@/lib/rate-limit';
-import { appendAuditLog } from '@/lib/audit-log';
 import {
   checkAiCrawlerAccess,
   parseContentSignals,
@@ -246,9 +245,6 @@ export async function POST(req: NextRequest) {
 
   const job = createAuditJob(origin);
   updateAuditJob(job.id, { status: 'crawling', message: '開始爬取網站…', engine });
-  const startedAt = Date.now();
-  const botsTotal = engine.results.length;
-  const botsAllowed = engine.results.filter((r) => r.status === 'allowed').length;
 
   // ── 背景執行（不 await，讓請求先回 jobId）──
   void (async () => {
@@ -276,19 +272,8 @@ export async function POST(req: NextRequest) {
         pageWords: crawl.pages.filter((p) => p.ok && !p.nonHtml).map((p) => p.mainTextLength),
         message: `完成，爬取 ${crawl.pages.length} 頁、產出 ${audit.length} 項深度檢測`,
       });
-      const count = (st: string) => audit.filter((c) => c.status === st).length;
-      void appendAuditLog({
-        at: new Date().toISOString(), host, status: 'completed', pages: crawl.pages.length,
-        ok: count('ok'), warn: count('warn'), fail: count('fail'), botsAllowed, botsTotal,
-        seconds: Math.round((Date.now() - startedAt) / 1000),
-      });
     } catch (e) {
-      const error = e instanceof Error ? e.message : String(e);
-      updateAuditJob(job.id, { status: 'failed', error, message: '深度健檢失敗' });
-      void appendAuditLog({
-        at: new Date().toISOString(), host, status: 'failed', pages: 0, ok: 0, warn: 0, fail: 0,
-        botsAllowed, botsTotal, seconds: Math.round((Date.now() - startedAt) / 1000), error,
-      });
+      updateAuditJob(job.id, { status: 'failed', error: e instanceof Error ? e.message : String(e), message: '深度健檢失敗' });
     } finally {
       releaseAuditSlot();
     }
