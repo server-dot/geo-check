@@ -34,11 +34,11 @@ export default function JsRenderingArticlePage() {
       <ArticleJsonLd post={post} description={metadata.description ?? post.excerpt} />
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr] gap-x-6 px-10 pb-[52px] pt-[60px]">
-          <div className="k">POST</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr] gap-x-6 px-5 md:px-10 pb-10 md:pb-[52px] pt-8 md:pt-[60px]">
+          <div className="k hidden md:block">POST</div>
           <div>
             <Breadcrumb items={[{ name: "首頁", href: "/" }, { name: "GEO 知識", href: "/geo" }, { name: post.cat }]} />
-            <h1 className="mt-4 max-w-[22em] text-[44px] leading-[1.18] tracking-[-0.035em]">
+            <h1 className="mt-4 max-w-[22em] text-[30px] md:text-[44px] leading-[1.18] tracking-[-0.035em]">
               網站用 JavaScript 渲染，AI 讀得到內容嗎？
             </h1>
             <p className="mt-[18px] max-w-[34em] text-[16.5px] text-ink2">
@@ -55,8 +55,8 @@ export default function JsRenderingArticlePage() {
       </div>
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr_220px] gap-x-6 px-10 py-[72px]">
-          <div className="k">01</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr_220px] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
+          <div className="k hidden md:block">01</div>
 
           <div className="max-w-[34em]">
             <p className="text-[15.5px] leading-[1.75] text-ink2">
@@ -65,7 +65,7 @@ export default function JsRenderingArticlePage() {
               robots.txt 只回答第一個問題。
             </p>
 
-            <h2 className="mt-11 text-[30px]">問題長什麼樣</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">問題長什麼樣</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               健檢會關掉 JavaScript，用跟 AI 爬蟲一樣的方式讀你的首頁，量出能讀到的純文字字數。少於 200
               字判定為「沒有內容可讀」，200～500 字之間是「內容單薄」，超過 500 字才算正常。同時會對照 HTML
@@ -81,7 +81,7 @@ export default function JsRenderingArticlePage() {
               它只讀伺服器第一時間回的那份 HTML。
             </p>
 
-            <h2 className="mt-11 text-[30px]">怎麼修</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">怎麼修</h2>
             <div className="mt-[18px]">
               {STEPS.map((s) => (
                 <div key={s.name} className="list-row list-row--step">
@@ -96,7 +96,7 @@ export default function JsRenderingArticlePage() {
               裡再回給瀏覽器，JavaScript 之後照樣可以接手互動，AI 爬蟲那邊已經先讀到完整內容了。
             </p>
 
-            <h2 className="mt-11 text-[30px]">改完怎麼複驗</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               回到 <Link href="/">健檢</Link> 重跑一次，「AI 讀到的內容」這一項應該從{" "}
               <span className="t-fail">內容單薄</span> 或 <span className="t-warn">可優化</span> 變成{" "}

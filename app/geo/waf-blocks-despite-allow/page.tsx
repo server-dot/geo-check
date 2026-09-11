@@ -35,11 +35,11 @@ export default function WafBlocksDespiteAllowArticlePage() {
       <ArticleJsonLd post={post} description={metadata.description ?? post.excerpt} />
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr] gap-x-6 px-10 pb-[52px] pt-[60px]">
-          <div className="k">POST</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr] gap-x-6 px-5 md:px-10 pb-10 md:pb-[52px] pt-8 md:pt-[60px]">
+          <div className="k hidden md:block">POST</div>
           <div>
             <Breadcrumb items={[{ name: "首頁", href: "/" }, { name: "GEO 知識", href: "/geo" }, { name: post.cat }]} />
-            <h1 className="mt-4 max-w-[22em] text-[44px] leading-[1.18] tracking-[-0.035em]">
+            <h1 className="mt-4 max-w-[22em] text-[30px] md:text-[44px] leading-[1.18] tracking-[-0.035em]">
               robots.txt 明明允許，AI 爬蟲卻連不進來？
             </h1>
             <p className="mt-[18px] max-w-[34em] text-[16.5px] text-ink2">
@@ -56,8 +56,8 @@ export default function WafBlocksDespiteAllowArticlePage() {
       </div>
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr_220px] gap-x-6 px-10 py-[72px]">
-          <div className="k">01</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr_220px] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
+          <div className="k hidden md:block">01</div>
 
           <div className="max-w-[34em]">
             <p className="text-[15.5px] leading-[1.75] text-ink2">
@@ -66,7 +66,7 @@ export default function WafBlocksDespiteAllowArticlePage() {
               兩者對不上，最常見的原因就是 WAF 或 CDN——robots.txt 允許，不代表請求真的能穿過站方前面那層防護。
             </p>
 
-            <h2 className="mt-11 text-[30px]">WAF／CDN 是什麼</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">WAF／CDN 是什麼</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               <strong>CDN（Content Delivery Network，內容傳遞網路）</strong>是把你的網站內容快取到全球多個節點的服務，
               主要目的是加速與分流，例如 Cloudflare、Akamai、Fastly。
@@ -78,7 +78,7 @@ export default function WafBlocksDespiteAllowArticlePage() {
               所以這兩個名詞常常一起出現、指的也常是同一家廠商（例如 Cloudflare 本身就同時是 CDN 也是 WAF）。
             </p>
 
-            <h2 className="mt-11 text-[30px]">為什麼會蓋過 robots.txt 的允許</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">為什麼會蓋過 robots.txt 的允許</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               robots.txt 是一份寫給爬蟲看的「君子協定」——內容是純文字規則，願不願意遵守，全靠對方自律。
               正派的 AI 爬蟲會先讀這份文件，讀到 Allow 才會繼續請求頁面。但 WAF／CDN 不是協定，是強制的網路層關卡：
@@ -90,7 +90,7 @@ export default function WafBlocksDespiteAllowArticlePage() {
               {"政策允許但實測被擋：robots.txt 允許（Allow: /），實測連線被擋下\n（HTTP 403，疑似 Cloudflare）\nrobots.txt 只是規則，實際能不能連進來要看前面的 WAF／CDN 放不放行。\n\n到 Cloudflare 後台「Security → Bots」，確認 Bot Fight Mode／Super Bot\nFight Mode 有沒有把這家爬蟲也擋掉，並在「Verified Bots」或自訂規則\n中放行對應的 User-Agent。"}
             </div>
 
-            <h2 className="mt-11 text-[30px]">怎麼修</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">怎麼修</h2>
             <div className="mt-[18px]">
               {STEPS.map((s) => (
                 <div key={s.name} className="list-row list-row--step">
@@ -106,7 +106,7 @@ export default function WafBlocksDespiteAllowArticlePage() {
               放行的時候優先用官方清單，不要只靠字串比對，避免有心人士假冒 User-Agent 繞過其他防護。
             </p>
 
-            <h2 className="mt-11 text-[30px]">改完怎麼複驗</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               回到 <Link href="/">健檢</Link> 重跑一次，這一項應該從{" "}
               <span className="t-warn">政策允許但實測被擋</span> 變成 <span className="t-ok">可存取</span>。

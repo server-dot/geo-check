@@ -34,11 +34,11 @@ export default function WafFalseUnknownArticlePage() {
       <ArticleJsonLd post={post} description={metadata.description ?? post.excerpt} />
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr] gap-x-6 px-10 pb-[52px] pt-[60px]">
-          <div className="k">POST</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr] gap-x-6 px-5 md:px-10 pb-10 md:pb-[52px] pt-8 md:pt-[60px]">
+          <div className="k hidden md:block">POST</div>
           <div>
             <Breadcrumb items={[{ name: "首頁", href: "/" }, { name: "GEO 知識", href: "/geo" }, { name: post.cat }]} />
-            <h1 className="mt-4 max-w-[22em] text-[44px] leading-[1.18] tracking-[-0.035em]">
+            <h1 className="mt-4 max-w-[22em] text-[30px] md:text-[44px] leading-[1.18] tracking-[-0.035em]">
               健檢顯示「無法判定」，是防火牆擋住了嗎？
             </h1>
             <p className="mt-[18px] max-w-[34em] text-[16.5px] text-ink2">
@@ -55,8 +55,8 @@ export default function WafFalseUnknownArticlePage() {
       </div>
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr_220px] gap-x-6 px-10 py-[72px]">
-          <div className="k">01</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr_220px] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
+          <div className="k hidden md:block">01</div>
 
           <div className="max-w-[34em]">
             <p className="text-[15.5px] leading-[1.75] text-ink2">
@@ -67,7 +67,7 @@ export default function WafFalseUnknownArticlePage() {
               不會混在同一個燈號裡。
             </p>
 
-            <h2 className="mt-11 text-[30px]">問題長什麼樣</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">問題長什麼樣</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               健檢會讀回應標頭（headers），比對幾家常見 WAF／CDN 廠商的特徵訊號，辨識出可能是誰擋的——
               命中率不是 100%，廠商會變更 headers、也可能被代理層剝掉，辨識不出來就不硬猜，
@@ -78,7 +78,7 @@ export default function WafFalseUnknownArticlePage() {
               {"⚪ 無法判定：robots.txt 回應 403\n這不代表你的網站對 AI 開放——很可能有 robots.txt 但我們讀不到。\n\n偵測到可能的原因：Cloudflare（Bot 攔截／挑戰頁）\n到 Cloudflare 後台「Security → Bots」，確認 Bot Fight Mode／\nSuper Bot Fight Mode 有沒有連好爬蟲一起擋掉，並在「Verified Bots」\n或自訂規則中放行 GPTBot、ClaudeBot、PerplexityBot 等 AI 爬蟲的 User-Agent。"}
             </div>
 
-            <h2 className="mt-11 text-[30px]">怎麼修</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">怎麼修</h2>
             <div className="mt-[18px]">
               {STEPS.map((s) => (
                 <div key={s.name} className="list-row list-row--step">
@@ -93,7 +93,7 @@ export default function WafFalseUnknownArticlePage() {
               直接告訴你去哪個後台開哪個設定，不是「請聯絡你的網站管理員」這種空話。
             </p>
 
-            <h2 className="mt-11 text-[30px]">改完怎麼複驗</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               回到 <Link href="/">健檢</Link> 重跑一次，這一項應該從 ⚪ 無法判定 變成{" "}
               <span className="t-ok">可存取</span>。你也可以先自己在瀏覽器打開{" "}

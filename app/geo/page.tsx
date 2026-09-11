@@ -28,11 +28,11 @@ export default function GeoGuidePage() {
       <Masthead active="geo" />
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_minmax(0,800px)] gap-x-6 px-10 pb-[52px] pt-[60px]">
-          <div className="k">GEO</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_minmax(0,800px)] gap-x-6 px-5 md:px-10 pb-10 md:pb-[52px] pt-8 md:pt-[60px]">
+          <div className="k hidden md:block">GEO</div>
           <div>
             <Breadcrumb items={[{ name: "首頁", href: "/" }, { name: "GEO 知識" }]} className="mono mb-4 text-[11.5px] text-ink3" />
-            <h1 className="max-w-[15em] text-[44px] leading-[1.18] tracking-[-0.035em]">
+            <h1 className="max-w-[15em] text-[30px] md:text-[44px] leading-[1.18] tracking-[-0.035em]">
               AI 直接給答案的時候，<mark className="lime-highlight">你在不在那段答案裡。</mark>
             </h1>
             <p className="mt-[18px] text-[16.5px] text-ink2">
@@ -43,10 +43,10 @@ export default function GeoGuidePage() {
       </div>
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_minmax(0,800px)] gap-x-6 px-10 py-[72px]">
-          <div className="k">01</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_minmax(0,800px)] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
+          <div className="k hidden md:block">01</div>
           <div>
-            <h2 className="text-[30px]">什麼是 GEO？</h2>
+            <h2 className="text-[24px] md:text-[30px]">什麼是 GEO？</h2>
             <p className="mt-4 text-ink2">
               GEO 是 Generative Engine Optimization——針對 ChatGPT、Perplexity、Google AI Overviews
               這類會直接給答案的引擎做的優化。使用者不再看十筆搜尋結果，而是看一段回答；你在不在那段回答裡，
@@ -61,10 +61,10 @@ export default function GeoGuidePage() {
       </div>
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_minmax(0,800px)] gap-x-6 px-10 py-[72px]">
-          <div className="k">02</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_minmax(0,800px)] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
+          <div className="k hidden md:block">02</div>
           <div>
-            <h2 className="text-[30px]">和 SEO 差在哪</h2>
+            <h2 className="text-[24px] md:text-[30px]">和 SEO 差在哪</h2>
             <p className="mt-4 text-ink2">兩者不是二選一，地基是同一套。差別在最後一哩：SEO 爭的是版位，GEO 爭的是被引用。</p>
             <table className="mt-[30px]">
               <thead>
@@ -91,10 +91,10 @@ export default function GeoGuidePage() {
       </div>
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_minmax(0,800px)] gap-x-6 px-10 py-[72px]">
-          <div className="k">03</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_minmax(0,800px)] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
+          <div className="k hidden md:block">03</div>
           <div>
-            <h2 className="text-[30px]">GEO 知識分享</h2>
+            <h2 className="text-[24px] md:text-[30px]">GEO 知識分享</h2>
             <p className="mt-4 text-ink2">健檢報告上標成需處理的項目，這裡一項一篇：為什麼會被判成需處理、怎麼改、改完怎麼複驗。</p>
             <ArticleIndex />
           </div>
@@ -102,7 +102,7 @@ export default function GeoGuidePage() {
       </div>
 
       <div className="bg-ink text-paper">
-        <div className="mx-auto max-w-[1120px] px-10 py-[72px]">
+        <div className="mx-auto max-w-[1120px] px-5 md:px-10 py-12 md:py-[72px]">
           <h2 className="max-w-[20em] text-[34px] tracking-[-0.035em]">看看這些情況在你的網站上是什麼結果。</h2>
           <div className="mt-7 flex gap-3">
             <Link href="/" className="btn-lime no-underline">

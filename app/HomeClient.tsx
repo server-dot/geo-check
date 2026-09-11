@@ -3057,10 +3057,10 @@ export default function HomeClient({
                 "linear-gradient(100deg, rgba(48,60,84,.95) 0%, rgba(48,60,84,.90) 38%, rgba(48,60,84,.74) 62%, rgba(48,60,84,.26) 100%)",
             }}
           />
-          <div className="relative pointer-events-none pb-24 pt-[104px]">
-            <div className="mx-auto max-w-[1120px] px-10">
+          <div className="relative pointer-events-none pb-24 pt-14 md:pt-[104px]">
+            <div className="mx-auto max-w-[1120px] px-5 md:px-10">
               <div className="eyebrow text-[#a7b1c2]">AI SEARCH VISIBILITY</div>
-              <h1 className="mt-5 max-w-[16em] text-[60px] leading-[1.1] tracking-[-0.045em]">
+              <h1 className="mt-5 max-w-[16em] text-[36px] md:text-[60px] leading-[1.1] tracking-[-0.045em]">
                 客戶問 AI 的時候，你在
                 <mark className="bg-transparent whitespace-nowrap text-lime">答案裡</mark>嗎？
               </h1>
@@ -3091,8 +3091,8 @@ export default function HomeClient({
 
         {/* 三格數字帶：count-up 動畫見 useCountUpProgress()。 */}
         <div className="border-b border-line bg-ink text-paper">
-          <div className="mx-auto max-w-[1120px] px-10">
-            <div className="grid grid-cols-3 gap-px border-t border-white/[.14] bg-white/[.14]">
+          <div className="mx-auto max-w-[1120px] px-5 md:px-10">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-px border-t border-white/[.14] bg-white/[.14]">
               {stats.map((s) => (
                 <div key={s.label} className="bg-ink px-8 pb-11 pt-10">
                   <p className="whitespace-nowrap text-[46px] font-bold leading-none tracking-[-0.045em] text-lime">
@@ -3126,7 +3126,7 @@ export default function HomeClient({
 
             <Section k="02" eyebrow="HOW IT WORKS" title="三個步驟，約 40 秒">
               {/* 小積木 2026-09-11 給的設計稿：長文字改成「圖示＋一句話」；間距數值是他用 tweaks 面板調出來的（靠左、圖示→編號 18px、左右 28px）。 */}
-              <dl className="figs figs--steps mt-[30px] grid-cols-3">
+              <dl className="figs figs--steps mt-[30px] grid-cols-1 sm:grid-cols-3">
                 {HOME_STEPS.map((s) => (
                   <div key={s.no}>
                     <s.Icon />

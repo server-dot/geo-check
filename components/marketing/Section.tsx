@@ -16,11 +16,11 @@ export default function Section({
 }) {
   return (
     <div className={noBorder ? undefined : "border-b border-line"}>
-      <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr] gap-x-6 px-10 py-[72px]">
-        <div className="k">{k}</div>
+      <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
+        <div className="k hidden md:block">{k}</div>
         <div>
           {eyebrow && <div className="eyebrow">{eyebrow}</div>}
-          {title && <h2 className="mt-[14px] text-[30px]">{title}</h2>}
+          {title && <h2 className="mt-[14px] text-[24px] md:text-[30px]">{title}</h2>}
           {children}
         </div>
       </div>

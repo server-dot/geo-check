@@ -591,3 +591,30 @@ mark.lime-highlight {
     padding: 32px 36px 40px;
   }
 }
+/* ── 行銷頁手機版 ────────────────────────────────────────
+   桌機版型不動，767px 以下把多欄的列排成一欄、字級縮一階。
+   放在最後面、不包 @layer：這些選擇器跟上面 .list-row/.figs 同權重，靠順序蓋過。 */
+@media (max-width: 767px) {
+  .list-row,
+  .list-row--2col,
+  .list-row--step {
+    grid-template-columns: 1fr;
+    row-gap: 4px;
+  }
+  .list-row .st { text-align: left; }
+  .figs--steps > div { padding: 28px 20px 26px; }
+  .marketing .article-row,
+  .marketing .article-row + div {
+    grid-template-columns: 1fr;
+    row-gap: 8px;
+  }
+  .marketing .article-row .text-right { text-align: left; }
+  .marketing table { font-size: 14px; display: block; overflow-x: auto; }
+  .marketing .prose,
+  .marketing p.note { max-width: none; }
+  .marketing .quote { font-size: 17px; }
+  .report-board-scroll { margin-inline: -16px; padding-inline: 16px; }
+  /* 導覽列在手機可以橫向捲，但不要露出捲軸 */
+  .marketing .nav-scroll { scrollbar-width: none; }
+  .marketing .nav-scroll::-webkit-scrollbar { display: none; }
+}

@@ -55,10 +55,10 @@ export default async function ContactPage({
       />
 
       <div className="border-b border-line bg-card">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-1 gap-x-16 gap-y-12 px-10 py-[72px] lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 gap-x-16 gap-y-12 px-5 md:px-10 py-12 md:py-[72px] lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
           <div>
             <div className="eyebrow">FORM</div>
-            <h2 className="mt-[14px] text-[30px]">填表單與我們取得聯繫</h2>
+            <h2 className="mt-[14px] text-[24px] md:text-[30px]">填表單與我們取得聯繫</h2>
             <p className="prose mt-3 text-[15.5px]">
               附上要檢查的網址，並說明想解決的問題；合作洽詢請說明形式、時程與預算範圍，我們處理會快很多。
             </p>

@@ -160,7 +160,7 @@ export default function ScoringPage() {
         <div className="report-preview">
           {"起始 100 分\n每個需處理（fail）的深度健檢項目   −4 分\n每個可優化（warn）的深度健檢項目   −0.5 分\nAI 引擎層全部通過時不扣分\n四捨五入到整數"}
         </div>
-        <dl className="figs mt-[26px] max-w-[52em] grid-cols-3">
+        <dl className="figs mt-[26px] max-w-[52em] grid-cols-1 sm:grid-cols-3">
           <div>
             <b>100</b>
             <span>起始分數</span>

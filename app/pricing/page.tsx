@@ -66,7 +66,7 @@ export default function PricingPage() {
       />
 
       <Section k="01" eyebrow="TWO THINGS" title="你只需要這兩件事：健檢與預約諮詢">
-        <div className="mt-[30px] grid grid-cols-2 gap-px border-y border-line bg-line">
+        <div className="mt-[30px] grid grid-cols-1 gap-px border-y border-line bg-line sm:grid-cols-2">
           {PLANS.map((plan) => (
             <div key={plan.label} className="bg-paper px-[22px] pb-[26px] pt-6">
               <div className="k">{plan.label}</div>

@@ -34,11 +34,11 @@ export default function AiCitesCompetitorArticlePage() {
       <ArticleJsonLd post={post} description={metadata.description ?? post.excerpt} />
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr] gap-x-6 px-10 pb-[52px] pt-[60px]">
-          <div className="k">POST</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr] gap-x-6 px-5 md:px-10 pb-10 md:pb-[52px] pt-8 md:pt-[60px]">
+          <div className="k hidden md:block">POST</div>
           <div>
             <Breadcrumb items={[{ name: "首頁", href: "/" }, { name: "GEO 知識", href: "/geo" }, { name: post.cat }]} />
-            <h1 className="mt-4 max-w-[22em] text-[44px] leading-[1.18] tracking-[-0.035em]">
+            <h1 className="mt-4 max-w-[22em] text-[30px] md:text-[44px] leading-[1.18] tracking-[-0.035em]">
               AI 為什麼引用競爭對手，不是你？
             </h1>
             <p className="mt-[18px] max-w-[34em] text-[16.5px] text-ink2">
@@ -55,8 +55,8 @@ export default function AiCitesCompetitorArticlePage() {
       </div>
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr_220px] gap-x-6 px-10 py-[72px]">
-          <div className="k">01</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr_220px] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
+          <div className="k hidden md:block">01</div>
 
           <div className="max-w-[34em]">
             <p className="text-[15.5px] leading-[1.75] text-ink2">
@@ -66,7 +66,7 @@ export default function AiCitesCompetitorArticlePage() {
               但引用連結全部指向別人，就是這篇要處理的情況。
             </p>
 
-            <h2 className="mt-11 text-[30px]">問題長什麼樣</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">問題長什麼樣</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               判定字彙只有兩種：★ 引用自己，或者沒有引用你。後者不代表 AI 不知道這個產業，
               也不代表你做錯了什麼技術設定——健檢前面幾項（爬蟲存取、內容可讀、結構化資料）全綠燈，
@@ -76,7 +76,7 @@ export default function AiCitesCompetitorArticlePage() {
               {"提問：台北推薦的 SEO 行銷公司有哪些？\n引用來源：3 筆\n  - competitor-a.com/seo-service（非本站）\n  - competitor-b.com/blog/seo-guide（非本站）\n  - reviews.example.com/seo-agencies（非本站）\n判定：沒有引用你"}
             </div>
 
-            <h2 className="mt-11 text-[30px]">怎麼修</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">怎麼修</h2>
             <div className="mt-[18px]">
               {STEPS.map((s) => (
                 <div key={s.name} className="list-row list-row--step">
@@ -93,7 +93,7 @@ export default function AiCitesCompetitorArticlePage() {
               AI 抓不準要對應到哪個名字。
             </p>
 
-            <h2 className="mt-11 text-[30px]">改完怎麼複驗</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               回到 <Link href="/">健檢</Link>，用同一組關鍵字重新查一次「關鍵字 AI 能見度」——這一項可以自己輸入想搶的主題，
               不用等重跑整份健檢。AI 的回答會依當下搜尋結果變動，同一個問題隔幾天問結果可能不一樣，

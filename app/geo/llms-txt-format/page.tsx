@@ -34,11 +34,11 @@ export default function LlmsTxtArticlePage() {
       <ArticleJsonLd post={post} description={metadata.description ?? post.excerpt} />
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr] gap-x-6 px-10 pb-[52px] pt-[60px]">
-          <div className="k">POST</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr] gap-x-6 px-5 md:px-10 pb-10 md:pb-[52px] pt-8 md:pt-[60px]">
+          <div className="k hidden md:block">POST</div>
           <div>
             <Breadcrumb items={[{ name: "首頁", href: "/" }, { name: "GEO 知識", href: "/geo" }, { name: post.cat }]} />
-            <h1 className="mt-4 max-w-[22em] text-[44px] leading-[1.18] tracking-[-0.035em]">
+            <h1 className="mt-4 max-w-[22em] text-[30px] md:text-[44px] leading-[1.18] tracking-[-0.035em]">
               llms.txt 要怎麼寫，AI 才看得懂你的網站？
             </h1>
             <p className="mt-[18px] max-w-[34em] text-[16.5px] text-ink2">
@@ -55,8 +55,8 @@ export default function LlmsTxtArticlePage() {
       </div>
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr_220px] gap-x-6 px-10 py-[72px]">
-          <div className="k">01</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr_220px] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
+          <div className="k hidden md:block">01</div>
 
           <div className="max-w-[34em]">
             <p className="text-[15.5px] leading-[1.75] text-ink2">
@@ -65,7 +65,7 @@ export default function LlmsTxtArticlePage() {
               把標題、摘要、連結清單都抓出來給你看，不是只信一個分數。
             </p>
 
-            <h2 className="mt-11 text-[30px]">問題長什麼樣</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">問題長什麼樣</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               llmstxt.org 建議的格式是：一個 # 開頭的標題、一個 &gt; 開頭的摘要引言，接著用 markdown
               連結列出重要頁面，每個連結最好還附一句說明。健檢會照這個格式檢查：內容少於 100
@@ -80,7 +80,7 @@ export default function LlmsTxtArticlePage() {
               還是得自己猜這個連結底下是什麼內容；附一句話講清楚，才是真的幫上忙，這是健檢判定「格式完整」的最後一道門檻。
             </p>
 
-            <h2 className="mt-11 text-[30px]">怎麼修</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">怎麼修</h2>
             <div className="mt-[18px]">
               {STEPS.map((s) => (
                 <div key={s.name} className="list-row list-row--step">
@@ -95,7 +95,7 @@ export default function LlmsTxtArticlePage() {
               內容與外部連結的完整服務清單」來得有用。
             </p>
 
-            <h2 className="mt-11 text-[30px]">改完怎麼複驗</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               回到 <Link href="/">健檢</Link> 重跑一次，這一項應該從 <span className="t-fail">沒有</span> 或{" "}
               <span className="t-warn">內容單薄</span> 變成 <span className="t-ok">格式完整</span>

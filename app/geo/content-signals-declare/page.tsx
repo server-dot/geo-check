@@ -34,11 +34,11 @@ export default function ContentSignalsArticlePage() {
       <ArticleJsonLd post={post} description={metadata.description ?? post.excerpt} />
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr] gap-x-6 px-10 pb-[52px] pt-[60px]">
-          <div className="k">POST</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr] gap-x-6 px-5 md:px-10 pb-10 md:pb-[52px] pt-8 md:pt-[60px]">
+          <div className="k hidden md:block">POST</div>
           <div>
             <Breadcrumb items={[{ name: "首頁", href: "/" }, { name: "GEO 知識", href: "/geo" }, { name: post.cat }]} />
-            <h1 className="mt-4 max-w-[22em] text-[44px] leading-[1.18] tracking-[-0.035em]">
+            <h1 className="mt-4 max-w-[22em] text-[30px] md:text-[44px] leading-[1.18] tracking-[-0.035em]">
               要讓 AI 引用你的內容，該怎麼表態？
             </h1>
             <p className="mt-[18px] max-w-[34em] text-[16.5px] text-ink2">
@@ -55,8 +55,8 @@ export default function ContentSignalsArticlePage() {
       </div>
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr_220px] gap-x-6 px-10 py-[72px]">
-          <div className="k">01</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr_220px] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
+          <div className="k hidden md:block">01</div>
 
           <div className="max-w-[34em]">
             <p className="text-[15.5px] leading-[1.75] text-ink2">
@@ -73,14 +73,14 @@ export default function ContentSignalsArticlePage() {
               只能靠對方自己解讀。
             </p>
 
-            <h2 className="mt-11 text-[30px]">問題長什麼樣</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">問題長什麼樣</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               健檢會解析 robots.txt 裡萬用（*）群組底下的 Content-Signal 字串，原文照貼給你看，並把三個欄位的值分別列出來——
               yes、no，或者沒寫（未表態）。判定字彙是「允許 / 不允許 / 未表態」，這三種都不是扣分項，
               健檢只是誠實反映你有沒有表態，要不要表態、表態成什麼是你自己的決定。
             </p>
 
-            <h2 className="mt-11 text-[30px]">怎麼修</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">怎麼修</h2>
             <div className="mt-[18px]">
               {STEPS.map((s) => (
                 <div key={s.name} className="list-row list-row--step">
@@ -95,7 +95,7 @@ export default function ContentSignalsArticlePage() {
               robots.txt 的 Allow/Disallow 語法完全表達不出來。
             </p>
 
-            <h2 className="mt-11 text-[30px]">改完怎麼複驗</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               回到 <Link href="/">健檢</Link> 重跑一次，「內容使用授權（Content Signals）」這一項的三個欄位
               應該從 <span className="t-gray">未表態</span> 變成你設定的值，健檢也會把解析出來的原文照貼出來，

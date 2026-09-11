@@ -34,11 +34,11 @@ export default function RobotsTxtArticlePage() {
       <ArticleJsonLd post={post} description={metadata.description ?? post.excerpt} />
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr] gap-x-6 px-10 pb-[52px] pt-[60px]">
-          <div className="k">POST</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr] gap-x-6 px-5 md:px-10 pb-10 md:pb-[52px] pt-8 md:pt-[60px]">
+          <div className="k hidden md:block">POST</div>
           <div>
             <Breadcrumb items={[{ name: "首頁", href: "/" }, { name: "GEO 知識", href: "/geo" }, { name: post.cat }]} />
-            <h1 className="mt-4 max-w-[22em] text-[44px] leading-[1.18] tracking-[-0.035em]">
+            <h1 className="mt-4 max-w-[22em] text-[30px] md:text-[44px] leading-[1.18] tracking-[-0.035em]">
               robots.txt 要怎麼寫，AI 爬蟲才進得來？
             </h1>
             <p className="mt-[18px] max-w-[34em] text-[16.5px] text-ink2">
@@ -55,8 +55,8 @@ export default function RobotsTxtArticlePage() {
       </div>
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr_220px] gap-x-6 px-10 py-[72px]">
-          <div className="k">01</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr_220px] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
+          <div className="k hidden md:block">01</div>
 
           <div className="max-w-[34em]">
             <p className="text-[15.5px] leading-[1.75] text-ink2">
@@ -65,7 +65,7 @@ export default function RobotsTxtArticlePage() {
               這類 AI 爬蟲也一起擋在外面，而且完全不影響 Google 排名，很容易被忽略。
             </p>
 
-            <h2 className="mt-11 text-[30px]">問題長什麼樣</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">問題長什麼樣</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               健檢會用 8 家 AI 爬蟲各自真實的 User-Agent 實際發送請求，對照 robots.txt 的規則，
               只要有任何一家被 Disallow 擋下，這一項就會標成 <span className="t-fail">需處理</span>。
@@ -77,7 +77,7 @@ export default function RobotsTxtArticlePage() {
               或用了一次擋掉所有非瀏覽器 User-Agent 的資安設定——原意是擋垃圾爬蟲，結果把 AI 爬蟲也算了進去。
             </p>
 
-            <h2 className="mt-11 text-[30px]">怎麼修</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">怎麼修</h2>
             <div className="mt-[18px]">
               {STEPS.map((s) => (
                 <div key={s.name} className="list-row list-row--step">
@@ -91,7 +91,7 @@ export default function RobotsTxtArticlePage() {
               要請工程師直接改內容並重新部署。改完記得留著原本允許 Google 等既有搜尋引擎的規則，不要整份清空重寫。
             </p>
 
-            <h2 className="mt-11 text-[30px]">改完怎麼複驗</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               回到 <Link href="/">健檢</Link> 重跑一次，這一項應該從 <span className="t-fail">需處理</span> 變成{" "}
               <span className="t-ok">正常</span>，爬蟲清單會收合成一行「8 個 AI 爬蟲的結果一致：可存取」。

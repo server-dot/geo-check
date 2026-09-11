@@ -6,8 +6,8 @@ import Link from "next/link";
 export default function Footer() {
   return (
     <div className="bg-ink text-paper">
-      <div className="mx-auto max-w-[1120px] px-10 py-[72px]">
-        <div className="grid grid-cols-3 gap-10">
+      <div className="mx-auto max-w-[1120px] px-5 md:px-10 py-12 md:py-[72px]">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-10">
           <div>
             <div className="k text-[#a2acbd]">工具</div>
             <div className="mt-[14px] grid gap-2 text-sm">

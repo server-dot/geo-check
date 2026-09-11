@@ -34,11 +34,11 @@ export default function SchemaArticlePage() {
       <ArticleJsonLd post={post} description={metadata.description ?? post.excerpt} />
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr] gap-x-6 px-10 pb-[52px] pt-[60px]">
-          <div className="k">POST</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr] gap-x-6 px-5 md:px-10 pb-10 md:pb-[52px] pt-8 md:pt-[60px]">
+          <div className="k hidden md:block">POST</div>
           <div>
             <Breadcrumb items={[{ name: "首頁", href: "/" }, { name: "GEO 知識", href: "/geo" }, { name: post.cat }]} />
-            <h1 className="mt-4 max-w-[22em] text-[44px] leading-[1.18] tracking-[-0.035em]">
+            <h1 className="mt-4 max-w-[22em] text-[30px] md:text-[44px] leading-[1.18] tracking-[-0.035em]">
               結構化資料要補哪些欄位，AI 才認得出你是誰？
             </h1>
             <p className="mt-[18px] max-w-[34em] text-[16.5px] text-ink2">
@@ -55,8 +55,8 @@ export default function SchemaArticlePage() {
       </div>
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr_220px] gap-x-6 px-10 py-[72px]">
-          <div className="k">01</div>
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr_220px] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
+          <div className="k hidden md:block">01</div>
 
           <div className="max-w-[34em]">
             <p className="text-[15.5px] leading-[1.75] text-ink2">
@@ -64,7 +64,7 @@ export default function SchemaArticlePage() {
               這類技術性容器節點沒有「必填欄位」可查，不虛構規則。這四種型別各自對到不同的業務性質：
             </p>
 
-            <h2 className="mt-11 text-[30px]">四種型別，各自要補的欄位</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">四種型別，各自要補的欄位</h2>
             <div className="report-preview">
               {"Organization（幾乎每個網站都該有）\n  名稱、網址、Logo 圖片網址、電話、Email、簡介、社群/外部連結\n\nLocalBusiness 家族（有實體門市或可到訪地點）\n  地址、電話、營業時間、圖片網址\n\nProduct（商品頁）\n  售價/庫存 (offers)、圖片\n\nArticle（文章頁）\n  作者、發布日期"}
             </div>
@@ -75,7 +75,7 @@ export default function SchemaArticlePage() {
               判斷「這是不是一間可以實際去的店」的關鍵訊號。
             </p>
 
-            <h2 className="mt-11 text-[30px]">怎麼修</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">怎麼修</h2>
             <div className="mt-[18px]">
               {STEPS.map((s) => (
                 <div key={s.name} className="list-row list-row--step">
@@ -90,7 +90,7 @@ export default function SchemaArticlePage() {
               不會當成扣分的硬性缺失。
             </p>
 
-            <h2 className="mt-11 text-[30px]">改完怎麼複驗</h2>
+            <h2 className="mt-11 text-[24px] md:text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               回到 <Link href="/">健檢</Link> 重跑一次，「結構化資料」這一項會列出每個型別欄位完整度，
               健檢報告的結構化資料區塊會依你的業務型別各給一張卡片，逐欄位標示哪些已經填、哪些還缺，
