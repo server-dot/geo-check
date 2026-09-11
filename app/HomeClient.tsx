@@ -6,7 +6,7 @@ import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
 import Section from "@/components/marketing/Section";
 import Footer from "@/components/marketing/Footer";
-import { tallyCitedDomains } from "@/lib/geo-cited-domains";
+import { tallyCitedDomains, type CitedDomain } from "@/lib/geo-cited-domains";
 
 // 首頁 hero 下面的三格數字帶，掛載時跑一次 1100ms 的 ease-out-cubic count-up
 // （跟設計稿 dc-runtime 的 componentDidMount 那段動畫邏輯一致）。
@@ -767,16 +767,18 @@ function RbStat({
             )}
           </div>
         </div>
+        {/* 用 line-height 置中而不是 flex：html2canvas 畫「flex 容器裡直接放文字」會把字
+            往下偏出框外（下載 PDF 時燈號跑到方框外面），line-height 置中兩邊都正常。 */}
         <div
           style={{
             width: 34,
             height: 34,
+            lineHeight: "34px",
+            textAlign: "center",
             borderRadius: 9,
             background: "rgba(48,60,84,0.07)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
             fontSize: 15,
+            flex: "none",
           }}
         >
           {dot}
@@ -1118,6 +1120,12 @@ function RbScoreSummary({ cats }: { cats: Category5[] }) {
       </div>
     </div>
   );
+}
+
+// 引用網址拿掉協定、把中文路徑解回來顯示（%E8%81%AF… → 聯絡我們），PDF 上才不會一長串百分號。
+function readableUrl(url: string): string {
+  const bare = url.replace(/^https?:\/\//, "");
+  try { return decodeURIComponent(bare); } catch { return bare; }
 }
 
 function ReportBoard({
@@ -1530,7 +1538,7 @@ function ReportBoard({
                     <div key={r.engine} style={{ border: "1px solid var(--rb-hair)", borderRadius: 9, padding: 14, display: "flex", flexDirection: "column", gap: 9 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                         <span
-                          className="mono"
+                          className="mono rb-clip"
                           style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                         >
                           {r.engine}
@@ -1542,7 +1550,7 @@ function ReportBoard({
                       <div style={{ fontSize: 12.5, lineHeight: 1.65, color: "var(--rb-ink2)" }}>{r.advice}</div>
                       {cite && (
                         <div
-                          className="mono"
+                          className="mono rb-clip"
                           style={{
                             fontSize: 11.5,
                             color: cite.isSelf ? "var(--rb-gold)" : "var(--rb-ink3)",
@@ -1552,7 +1560,7 @@ function ReportBoard({
                           }}
                         >
                           {cite.isSelf ? "★ " : ""}
-                          {cite.url.replace(/^https?:\/\//, "")}
+                          {readableUrl(cite.url)}
                         </div>
                       )}
                     </div>
@@ -1595,12 +1603,12 @@ function ReportBoard({
                       style={{
                         width: 26,
                         height: 26,
+                        lineHeight: "22px",
+                        textAlign: "center",
+                        boxSizing: "border-box",
                         borderRadius: 999,
                         background: `${tint}0.16)`,
                         border: `1px solid ${tint}0.5)`,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
                         fontSize: 11.5,
                         color,
                         flex: "none",
@@ -1633,23 +1641,245 @@ function ReportBoard({
   );
 }
 
-// 外框：標題列＋列印按鈕，以及讓 1200px 的圖在窄螢幕橫向捲動的容器。
-function ReportBoardSection(props: React.ComponentProps<typeof ReportBoard>) {
+// PDF 第二頁：關鍵字 AI 能見度。只有使用者按過「查詢」、有結果時才會有這一頁。
+// 跟第一頁同一套 --rb- token 跟版型（1200px、抬頭列、KPI 帶、卡片、頁尾）。
+// 每個關鍵字一張卡，列每家引擎「有沒有提到你」跟一句判讀；最後是「AI 在推誰」
+// 的彙總名單（前十名＋自己的真實名次）。不放引擎回答全文——那是螢幕上展開看的東西，
+// 塞進一頁紙只會把重點淹掉。
+export type KeywordPageData = {
+  keywords: string[];
+  results: Record<string, KeywordVisibilityResult[]>;
+  citedDomains: CitedDomain[];
+};
+
+function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const host = origin.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const keywords = data.keywords.filter((k) => data.results[k]);
+  const allResults = keywords.flatMap((k) => data.results[k]);
+  const hit = allResults.filter((r) => r.citedSelf).length;
+  const engineCount = new Set(allResults.map((r) => r.engine)).size;
+  const selfRank = data.citedDomains.findIndex((d) => d.isSelf);
+  const top = data.citedDomains.slice(0, 10);
+  const maxCount = top[0]?.count ?? 1;
+  const rest = data.citedDomains.length - top.length;
+  const selfBelow = selfRank >= 10 ? data.citedDomains[selfRank] : null;
+  const hitStatus: CheckStatus = allResults.length === 0 ? "warn" : hit === allResults.length ? "ok" : hit > 0 ? "warn" : "fail";
+
+  return (
+    <div
+      className="report-board"
+      style={{
+        ...RB_VARS,
+        color: "var(--rb-ink)",
+        fontFamily: "var(--font-archivo), 'Noto Sans TC', 'PingFang TC', system-ui, sans-serif",
+      }}
+    >
+      <div className="rb-print-only-block rb-print-stack">
+      {/* 抬頭 */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- 同第一頁，要跟著輸出成圖 */}
+          <img src="/geocheck-logo.webp" alt="" style={{ height: 28, width: 41, objectFit: "contain" }} />
+          <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.02em" }}>GEOCHECK</span>
+          <div style={{ width: 1, height: 34, background: "var(--rb-hair)" }} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <div style={{ fontSize: 21, fontWeight: 700, letterSpacing: "-0.02em" }}>關鍵字 AI 能見度</div>
+            <div style={{ fontSize: 13, color: "var(--rb-ink3)" }}>
+              {keywords.length} 個關鍵字 × {engineCount} 家 AI 引擎 · 實際送出提問，原話與引用來源照貼
+            </div>
+          </div>
+        </div>
+        <div className="mono" style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5 }}>
+          <div style={{ background: "var(--rb-card)", border: "1px solid var(--rb-hair)", borderRadius: 8, padding: "9px 14px" }}>{host}</div>
+          <div style={{ background: "var(--rb-card)", border: "1px solid var(--rb-hair)", borderRadius: 8, padding: "9px 14px", color: "var(--rb-ink2)" }}>{today}</div>
+          <div style={{ background: "var(--rb-card)", border: "1px solid var(--rb-hair)", borderRadius: 8, padding: "9px 14px", color: "var(--rb-ink2)" }}>第 2 頁</div>
+        </div>
+      </div>
+
+      {/* KPI 帶 */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16 }}>
+        <RbStat label="查詢的關鍵字" value={keywords.length} unit="個" dot="🔍" note={keywords.map((k) => `「${k}」`).join("")} />
+        <RbStat
+          label="有提到你的回答"
+          value={hit}
+          unit={`/${allResults.length}`}
+          color={RB_STATUS_VAR[hitStatus]}
+          dot={RB_STATUS_DOT[hitStatus]}
+          note={hit === 0 ? "AI 回答這些關鍵字時沒有引用你" : `${allResults.length} 次提問裡有 ${hit} 次引用了你的網站`}
+        />
+        <RbStat label="被引用的網域" value={data.citedDomains.length} unit="個" dot="🌐" note="所有回答的引用來源，依網域彙總" />
+        <RbStat
+          label="你在名單裡排第"
+          value={selfRank >= 0 ? selfRank + 1 : "—"}
+          unit={selfRank >= 0 ? `/${data.citedDomains.length}` : undefined}
+          color={selfRank < 0 ? "var(--rb-fail)" : selfRank < 3 ? "var(--rb-ok)" : undefined}
+          dot={selfRank < 0 ? "🔴" : selfRank < 3 ? "🟢" : "🟡"}
+          note={selfRank < 0 ? "沒進名單，AI 拿別人的網站當答案" : `被引用 ${data.citedDomains[selfRank].count} 次`}
+        />
+      </div>
+
+      {/* 每個關鍵字一張卡 */}
+      <div style={{ display: "grid", gridTemplateColumns: keywords.length === 1 ? "1fr" : "repeat(2,1fr)", gap: 16 }}>
+        {keywords.map((k) => (
+          <RbCard key={k} style={{ gap: 12 }}>
+            <RbCardTitle title={`「${k}」`} note={`${data.results[k].filter((r) => r.citedSelf).length}/${data.results[k].length} 家提到你`} />
+            {data.results[k].length === 0 ? (
+              <div style={rbEmpty}>這個關鍵字沒有查到結果。</div>
+            ) : (
+              data.results[k].map((r) => {
+                const cite = r.citations.find((c) => c.isSelf) ?? r.citations[0];
+                return (
+                  <div key={r.engine} style={{ border: "1px solid var(--rb-hair)", borderRadius: 9, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 7 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                      <span className="mono rb-clip" style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.engine}</span>
+                      <span style={{ fontSize: 12, whiteSpace: "nowrap", flex: "none", color: r.citedSelf ? "var(--rb-ok)" : "var(--rb-fail)" }}>
+                        {r.citedSelf ? "🟢 有提到你" : "🔴 沒有引用你"}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12.5, lineHeight: 1.65, color: "var(--rb-ink2)" }}>{r.advice}</div>
+                    {cite && (
+                      <div className="mono rb-clip" style={{ fontSize: 11.5, color: cite.isSelf ? "var(--rb-gold)" : "var(--rb-ink3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {cite.isSelf ? "★ " : ""}
+                        {readableUrl(cite.url)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </RbCard>
+        ))}
+      </div>
+
+      {/* AI 在推誰 */}
+      {data.citedDomains.length > 0 && (
+        <RbCard style={{ gap: 14 }}>
+          <RbCardTitle title="這些關鍵字底下，AI 在推誰" note="依被引用次數排序 · 前 10 名" />
+          <div style={{ fontSize: 12.5, lineHeight: 1.65, color: "var(--rb-ink2)" }}>
+            把每個回答的引用來源依網域彙總，就是 AI 目前的推薦名單。名單裡通常會混進百科、社群、論壇——那是 AI 找資料的地方，不是你的同業；要看的是跟你做同一件事、卻被引用到的那幾個網域。
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", columnGap: 28, rowGap: 8 }}>
+            {top.map((d, i) => (
+              <div key={d.domain} style={{ display: "grid", gridTemplateColumns: "22px 1fr 44px", alignItems: "center", gap: 10 }}>
+                <span className="mono" style={{ fontSize: 11.5, color: "var(--rb-ink3)", textAlign: "right" }}>{i + 1}</span>
+                <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    <span className="mono rb-clip" style={{ fontSize: 12.5, fontWeight: d.isSelf ? 600 : 400, color: d.isSelf ? "var(--rb-gold)" : "var(--rb-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {d.isSelf ? "★ " : ""}{d.domain}
+                    </span>
+                    <span style={{ fontSize: 11, color: "var(--rb-ink3)", whiteSpace: "nowrap", flex: "none" }}>{d.keywords.map((k) => `「${k}」`).join("")}</span>
+                  </div>
+                  <div style={{ height: 5, borderRadius: 999, background: "rgba(48,60,84,0.11)", overflow: "hidden" }}>
+                    <div style={{ width: `${Math.max(6, (d.count / maxCount) * 100)}%`, height: "100%", background: d.isSelf ? "var(--rb-lime)" : "rgba(48,60,84,0.45)" }} />
+                  </div>
+                </div>
+                <span className="mono" style={{ fontSize: 11.5, color: "var(--rb-ink3)", textAlign: "right" }}>{d.count} 次</span>
+              </div>
+            ))}
+          </div>
+          {(selfBelow || rest > 0 || selfRank < 0) && (
+            <div style={{ borderTop: "1px solid var(--rb-hair2)", paddingTop: 12, display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, lineHeight: 1.6, color: "var(--rb-ink2)" }}>
+              {selfBelow && (
+                <div>
+                  <span className="mono" style={{ color: "var(--rb-gold)", fontWeight: 600 }}>★ {selfBelow.domain}</span> 排第 {selfRank + 1}，被引用 {selfBelow.count} 次。
+                </div>
+              )}
+              {selfRank < 0 && <div>你的網站沒有出現在這份名單裡。AI 現在拿來當答案的是上面那些網域。</div>}
+              {rest > 0 && <div style={{ color: "var(--rb-ink3)" }}>另外還有 {rest} 個網域被引用過，多半只出現一次，屬於長尾，這裡不列。</div>}
+            </div>
+          )}
+        </RbCard>
+      )}
+
+      <div className="mono" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 6, fontSize: 11.5, color: "var(--rb-ink3)" }}>
+        <div>AI 搜尋能見度健檢 · {host} · {today}</div>
+        <div>AI 推誰主要看內容深度與品牌權威，這份名單是現況快照，不是技術診斷</div>
+      </div>
+      </div>
+    </div>
+  );
+}
+
+// 外框：標題列＋存 PDF 按鈕，以及讓圖在窄螢幕橫向捲動的容器。
+// 存 PDF 不走 window.print()——小積木要的是直接拿到檔案，不要跳列印對話框。
+// 做法：按下去時在畫面外多掛一份完整版戰情表（.rb-export 讓列印才出現的區塊全部顯示、
+// 版型鎖 1200px），用 modern-screenshot 畫成點陣圖，再塞進 jsPDF 存成一頁 PDF。兩個套件都是
+// 按了才動態載入，不進首頁的 bundle。
+function ReportBoardSection({
+  keywordPage,
+  ...props
+}: React.ComponentProps<typeof ReportBoard> & { keywordPage: KeywordPageData | null }) {
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!exporting) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const boards = [...(exportRef.current?.querySelectorAll<HTMLElement>(".report-board") ?? [])];
+        if (boards.length === 0) throw new Error("找不到報告圖");
+        // 等字型載完再畫，不然 canvas 上會是備用字型
+        await document.fonts?.ready;
+        // modern-screenshot 走 SVG foreignObject：由瀏覽器自己的排版引擎畫，字的位置跟
+        // 螢幕上一模一樣。之前用 html2canvas 是自己重新排字，中英夾雜就會位移、
+        // 全形括號疊到數字上、徽章裡的字掉到框外。
+        const [{ domToCanvas }, { jsPDF }] = await Promise.all([import("modern-screenshot"), import("jspdf")]);
+        // 一張圖一頁：第一頁健檢總覽，第二頁（有查關鍵字才有）關鍵字能見度。
+        // 每頁的紙張大小照該頁內容高度開，不硬塞進 A4。
+        let pdf: InstanceType<typeof jsPDF> | null = null;
+        for (const el of boards) {
+          const canvas = await domToCanvas(el, { scale: 2, backgroundColor: "#f6f5ef" });
+          if (cancelled) return;
+          const w = canvas.width / 2;
+          const h = canvas.height / 2;
+          const orientation = w >= h ? "landscape" : "portrait";
+          if (!pdf) pdf = new jsPDF({ orientation, unit: "px", format: [w, h], hotfixes: ["px_scaling"], compress: true });
+          else pdf.addPage([w, h], orientation);
+          pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, w, h);
+        }
+        if (!pdf) return;
+        const host = (() => { try { return new URL(props.origin).hostname; } catch { return "site"; } })();
+        pdf.save(`geocheck-${host}-${new Date().toISOString().slice(0, 10)}.pdf`);
+      } catch (e) {
+        if (!cancelled) setExportError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setExporting(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [exporting, props.origin]);
+
   return (
     <div>
       <div className="report-board-actions mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="eyebrow">五分類總覽</h2>
-        <button type="button" onClick={() => window.print()} className="btn-line text-xs">
-          列印完整戰情表 / 存成 PDF
+        <button
+          type="button"
+          onClick={() => { setExportError(null); setExporting(true); }}
+          disabled={exporting}
+          className="btn-line text-xs disabled:opacity-60"
+        >
+          {exporting ? "產生中…" : "下載 PDF"}
         </button>
       </div>
       <div className="report-board-scroll">
         <ReportBoard {...props} />
       </div>
       <p className="report-board-actions mt-2 text-xs text-ink3">
-        列印或存成 PDF 會拿到完整的健檢報告圖——爬蟲累積讀到的內容、四道關卡、各家爬蟲存取權限、AI
+        下載的 PDF 是完整的健檢報告圖——爬蟲累積讀到的內容、四道關卡、各家爬蟲存取權限、AI
         認不認得你、優先處理順序全部在一張紙上，直接轉給合作對象。
+        {keywordPage ? "關鍵字 AI 能見度的結果會放在第 2 頁。" : "下面查過關鍵字的話，結果會多一頁放進去。"}
       </p>
+      {exportError && <p className="mt-2 text-xs text-fail">PDF 沒產出來：{exportError}</p>}
+      {exporting && (
+        <div ref={exportRef} className="rb-export" aria-hidden="true">
+          <ReportBoard {...props} />
+          {keywordPage && <KeywordBoard origin={props.origin} data={keywordPage} />}
+        </div>
+      )}
     </div>
   );
 }
@@ -3052,6 +3282,11 @@ export default function HomeClient({
                 audit={status?.audit}
                 pageWords={status?.pageWords}
                 crawledPages={status?.progress.crawled ?? 0}
+                keywordPage={
+                  Object.keys(keywordResults).length > 0
+                    ? { keywords: activeKeywords, results: keywordResults, citedDomains }
+                    : null
+                }
               />
             </div>
 
