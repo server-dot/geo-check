@@ -3,10 +3,12 @@ import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
 import Footer from "@/components/marketing/Footer";
 import ArticleIndex from "@/components/marketing/ArticleIndex";
+import Breadcrumb from "@/components/seo/Breadcrumb";
 
 export const metadata: Metadata = {
-  title: "GEO 知識｜AI 搜尋能見度健檢",
+  title: "GEO 知識",
   description: "GEO 是什麼、跟 SEO 差在哪，以及依健檢項目分類的知識文章。",
+  alternates: { canonical: "/geo" },
 };
 
 const COMPARISON = [
@@ -29,6 +31,7 @@ export default function GeoGuidePage() {
         <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_minmax(0,800px)] gap-x-6 px-10 pb-[52px] pt-[60px]">
           <div className="k">GEO</div>
           <div>
+            <Breadcrumb items={[{ name: "首頁", href: "/" }, { name: "GEO 知識" }]} className="mono mb-4 text-[11.5px] text-ink3" />
             <h1 className="max-w-[15em] text-[44px] leading-[1.18] tracking-[-0.035em]">
               AI 直接給答案的時候，<mark className="lime-highlight">你在不在那段答案裡。</mark>
             </h1>

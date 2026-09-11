@@ -2,11 +2,18 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
 import Footer from "@/components/marketing/Footer";
+import Breadcrumb from "@/components/seo/Breadcrumb";
+import ArticleJsonLd from "@/components/seo/ArticleJsonLd";
+import { findPost } from "@/lib/geo-posts";
+import { ORG } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "網站用 JavaScript 渲染，AI 讀得到內容嗎？｜AI 搜尋能見度健檢",
+  title: "網站用 JavaScript 渲染，AI 讀得到內容嗎？",
   description: "主流 AI 爬蟲不執行 JavaScript，純前端渲染的網站在 AI 眼中可能只是一個空的 <div>。判定門檻、怎麼修、改完怎麼複驗。",
+  alternates: { canonical: "/geo/js-rendering-empty-shell" },
 };
+
+const post = findPost("/geo/js-rendering-empty-shell");
 
 const STEPS = [
   { name: "打開瀏覽器開發者工具，停用 JavaScript 後重新整理頁面", tag: "5 分鐘" },
@@ -24,14 +31,13 @@ export default function JsRenderingArticlePage() {
   return (
     <div className="marketing">
       <Masthead active="geo" />
+      <ArticleJsonLd post={post} description={metadata.description ?? post.excerpt} />
 
       <div className="border-b border-line">
         <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr] gap-x-6 px-10 pb-[52px] pt-[60px]">
           <div className="k">POST</div>
           <div>
-            <div className="mono text-[11.5px] text-ink3">
-              <Link href="/geo">GEO 知識</Link> / 內容品質
-            </div>
+            <Breadcrumb items={[{ name: "首頁", href: "/" }, { name: "GEO 知識", href: "/geo" }, { name: post.cat }]} />
             <h1 className="mt-4 max-w-[22em] text-[44px] leading-[1.18] tracking-[-0.035em]">
               網站用 JavaScript 渲染，AI 讀得到內容嗎？
             </h1>
@@ -40,9 +46,9 @@ export default function JsRenderingArticlePage() {
               JavaScript——純前端渲染的網站，AI 看到的可能只是一個空的 &lt;div id=&quot;root&quot;&gt;&lt;/div&gt;。
             </p>
             <div className="mono mt-5 flex flex-wrap gap-5 text-[11.5px] text-ink3">
-              <span>2026-06-02</span>
-              <span>（作者待填）</span>
-              <span>（閱讀時間待填）</span>
+              <span>{post.date}</span>
+              <span>{ORG.name}</span>
+              <span>約 {post.readMinutes} 分鐘</span>
             </div>
           </div>
         </div>

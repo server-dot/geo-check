@@ -4,10 +4,12 @@ import Section from "@/components/marketing/Section";
 import SubpageHero from "@/components/marketing/SubpageHero";
 import Footer from "@/components/marketing/Footer";
 import FaqAccordion from "@/components/marketing/FaqAccordion";
+import FaqJsonLd from "@/components/seo/FaqJsonLd";
 
 export const metadata: Metadata = {
-  title: "判斷標準｜AI 搜尋能見度健檢",
+  title: "判斷標準",
   description: "六個檢測層、三種判定加一種不判定、總分怎麼算、深度健檢的五個分類。",
+  alternates: { canonical: "/scoring" },
 };
 
 const LAYERS = [
@@ -102,6 +104,7 @@ export default function ScoringPage() {
 
       <SubpageHero
         k="STD"
+        crumb="判斷標準"
         eyebrow="判斷標準 · HOW WE JUDGE"
         heading={
           <>
@@ -188,6 +191,7 @@ export default function ScoringPage() {
       </Section>
 
       <Section k="FAQ" eyebrow="FAQ" title="常見問題" noBorder>
+        <FaqJsonLd items={FAQS} />
         <FaqAccordion items={FAQS} defaultOpen={0} />
       </Section>
 

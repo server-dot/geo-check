@@ -1235,7 +1235,7 @@ function ReportBoard({
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           {/* eslint-disable-next-line @next/next/no-img-element -- 這張圖要能跟著列印輸出，
               next/image 的 lazy/placeholder 在列印時可能還沒換成真圖 */}
-          <img src="/geocheck-logo.png" alt="" style={{ height: 28, width: 41, objectFit: "contain" }} />
+          <img src="/geocheck-logo.webp" alt="" style={{ height: 28, width: 41, objectFit: "contain" }} />
           <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.02em" }}>GEOCHECK</span>
           <div style={{ width: 1, height: 34, background: "var(--rb-hair)" }} />
           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -2916,8 +2916,8 @@ export default function HomeClient({
                   兩張比三張各自能分到更多寬度，文字自然變大、更好讀。 */}
               <div className="mt-[30px] grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {[
-                  { src: "/report-screenshot-1.png", alt: "健檢報告截圖：五分類總覽，總分 78 分（B 級・良好）與檢測總覽長條圖" },
-                  { src: "/report-screenshot-3.png", alt: "健檢報告截圖：21 項深度健檢表格，逐項列出狀態、建議與問題頁面" },
+                  { src: "/report-screenshot-1.webp", alt: "健檢報告截圖：五分類總覽，總分 78 分（B 級・良好）與檢測總覽長條圖" },
+                  { src: "/report-screenshot-3.webp", alt: "健檢報告截圖：21 項深度健檢表格，逐項列出狀態、建議與問題頁面" },
                 ].map((img) => (
                   // eslint-disable-next-line @next/next/no-img-element -- 固定素材、非使用者上傳圖片，不需要 next/image 的最佳化/尺寸協商
                   <img

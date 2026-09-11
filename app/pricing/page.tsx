@@ -4,10 +4,12 @@ import Section from "@/components/marketing/Section";
 import SubpageHero from "@/components/marketing/SubpageHero";
 import Footer from "@/components/marketing/Footer";
 import FaqAccordion from "@/components/marketing/FaqAccordion";
+import FaqJsonLd from "@/components/seo/FaqJsonLd";
 
 export const metadata: Metadata = {
-  title: "費用｜AI 搜尋能見度健檢",
+  title: "費用",
   description: "健檢免費，諮詢也不收費。",
+  alternates: { canonical: "/pricing" },
 };
 
 const PLANS = [
@@ -53,6 +55,7 @@ export default function PricingPage() {
 
       <SubpageHero
         k="FEE"
+        crumb="費用"
         eyebrow="費用 · PRICING"
         heading={
           <>
@@ -108,6 +111,7 @@ export default function PricingPage() {
       </Section>
 
       <Section k="FAQ" eyebrow="FAQ" title="關於費用的常見問題" noBorder>
+        <FaqJsonLd items={FAQS} />
         <FaqAccordion items={FAQS} />
       </Section>
 

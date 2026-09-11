@@ -2,11 +2,18 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
 import Footer from "@/components/marketing/Footer";
+import Breadcrumb from "@/components/seo/Breadcrumb";
+import ArticleJsonLd from "@/components/seo/ArticleJsonLd";
+import { findPost } from "@/lib/geo-posts";
+import { ORG } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "llms.txt 要怎麼寫，AI 才看得懂你的網站？｜AI 搜尋能見度健檢",
+  title: "llms.txt 要怎麼寫，AI 才看得懂你的網站？",
   description: "llms.txt 是給 AI 看的網站導覽，llmstxt.org 訂了標準格式。格式要有什麼、健檢怎麼判定「內容單薄」、怎麼寫才算完整。",
+  alternates: { canonical: "/geo/llms-txt-format" },
 };
+
+const post = findPost("/geo/llms-txt-format");
 
 const STEPS = [
   { name: "在網站根目錄建立 /llms.txt，第一行用 # 開頭寫網站名稱", tag: "10 分鐘" },
@@ -24,14 +31,13 @@ export default function LlmsTxtArticlePage() {
   return (
     <div className="marketing">
       <Masthead active="geo" />
+      <ArticleJsonLd post={post} description={metadata.description ?? post.excerpt} />
 
       <div className="border-b border-line">
         <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr] gap-x-6 px-10 pb-[52px] pt-[60px]">
           <div className="k">POST</div>
           <div>
-            <div className="mono text-[11.5px] text-ink3">
-              <Link href="/geo">GEO 知識</Link> / AI 可達性
-            </div>
+            <Breadcrumb items={[{ name: "首頁", href: "/" }, { name: "GEO 知識", href: "/geo" }, { name: post.cat }]} />
             <h1 className="mt-4 max-w-[22em] text-[44px] leading-[1.18] tracking-[-0.035em]">
               llms.txt 要怎麼寫，AI 才看得懂你的網站？
             </h1>
@@ -40,9 +46,9 @@ export default function LlmsTxtArticlePage() {
               訂了一套標準格式，健檢不只看「有沒有」，還會看「寫得好不好」。
             </p>
             <div className="mono mt-5 flex flex-wrap gap-5 text-[11.5px] text-ink3">
-              <span>2026-07-08</span>
-              <span>（作者待填）</span>
-              <span>（閱讀時間待填）</span>
+              <span>{post.date}</span>
+              <span>{ORG.name}</span>
+              <span>約 {post.readMinutes} 分鐘</span>
             </div>
           </div>
         </div>

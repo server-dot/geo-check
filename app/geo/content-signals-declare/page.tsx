@@ -2,11 +2,18 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
 import Footer from "@/components/marketing/Footer";
+import Breadcrumb from "@/components/seo/Breadcrumb";
+import ArticleJsonLd from "@/components/seo/ArticleJsonLd";
+import { findPost } from "@/lib/geo-posts";
+import { ORG } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "要讓 AI 引用你的內容，該怎麼表態？｜AI 搜尋能見度健檢",
-  description: "Content Signals 是寫在 robots.txt 裡的新欄位，回答的是「抓到之後可以拿來幹嘛」，跟能不能抓進來是兩回事。三個欄位是什麼、要不要表態。",
+  title: "要讓 AI 引用你的內容，該怎麼表態？",
+  description: "Content Signals 是寫在 robots.txt 裡的新欄位，回答的是「抓到之後可以拿來幹嘛」，跟能不能抓是兩回事。三個欄位各是什麼、要不要表態。",
+  alternates: { canonical: "/geo/content-signals-declare" },
 };
+
+const post = findPost("/geo/content-signals-declare");
 
 const STEPS = [
   { name: "決定三個問題的答案：要不要被搜尋索引、要不要當 AI 回答的來源、要不要被拿去訓練模型", tag: "5 分鐘" },
@@ -24,14 +31,13 @@ export default function ContentSignalsArticlePage() {
   return (
     <div className="marketing">
       <Masthead active="geo" />
+      <ArticleJsonLd post={post} description={metadata.description ?? post.excerpt} />
 
       <div className="border-b border-line">
         <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr] gap-x-6 px-10 pb-[52px] pt-[60px]">
           <div className="k">POST</div>
           <div>
-            <div className="mono text-[11.5px] text-ink3">
-              <Link href="/geo">GEO 知識</Link> / AI 可達性
-            </div>
+            <Breadcrumb items={[{ name: "首頁", href: "/" }, { name: "GEO 知識", href: "/geo" }, { name: post.cat }]} />
             <h1 className="mt-4 max-w-[22em] text-[44px] leading-[1.18] tracking-[-0.035em]">
               要讓 AI 引用你的內容，該怎麼表態？
             </h1>
@@ -40,9 +46,9 @@ export default function ContentSignalsArticlePage() {
               爬蟲進得來，不代表你同意它把內容拿去訓練模型，或當成 AI 回答的來源。
             </p>
             <div className="mono mt-5 flex flex-wrap gap-5 text-[11.5px] text-ink3">
-              <span>2026-06-19</span>
-              <span>（作者待填）</span>
-              <span>（閱讀時間待填）</span>
+              <span>{post.date}</span>
+              <span>{ORG.name}</span>
+              <span>約 {post.readMinutes} 分鐘</span>
             </div>
           </div>
         </div>

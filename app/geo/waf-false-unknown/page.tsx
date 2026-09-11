@@ -2,11 +2,18 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
 import Footer from "@/components/marketing/Footer";
+import Breadcrumb from "@/components/seo/Breadcrumb";
+import ArticleJsonLd from "@/components/seo/ArticleJsonLd";
+import { findPost } from "@/lib/geo-posts";
+import { ORG } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "健檢顯示「無法判定」，是防火牆擋住了嗎？｜AI 搜尋能見度健檢",
+  title: "健檢顯示「無法判定」，是防火牆擋住了嗎？",
   description: "robots.txt 回應 403，不代表網站對 AI 開放，只是我們讀不到。健檢怎麼辨識是哪家 WAF，以及你要怎麼自己確認。",
+  alternates: { canonical: "/geo/waf-false-unknown" },
 };
+
+const post = findPost("/geo/waf-false-unknown");
 
 const STEPS = [
   { name: "打開 https://你的網域/robots.txt，看瀏覽器能不能正常顯示內容", tag: "2 分鐘" },
@@ -24,14 +31,13 @@ export default function WafFalseUnknownArticlePage() {
   return (
     <div className="marketing">
       <Masthead active="geo" />
+      <ArticleJsonLd post={post} description={metadata.description ?? post.excerpt} />
 
       <div className="border-b border-line">
         <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr] gap-x-6 px-10 pb-[52px] pt-[60px]">
           <div className="k">POST</div>
           <div>
-            <div className="mono text-[11.5px] text-ink3">
-              <Link href="/geo">GEO 知識</Link> / 技術與索引
-            </div>
+            <Breadcrumb items={[{ name: "首頁", href: "/" }, { name: "GEO 知識", href: "/geo" }, { name: post.cat }]} />
             <h1 className="mt-4 max-w-[22em] text-[44px] leading-[1.18] tracking-[-0.035em]">
               健檢顯示「無法判定」，是防火牆擋住了嗎？
             </h1>
@@ -40,9 +46,9 @@ export default function WafFalseUnknownArticlePage() {
               「沒設限、應該算過關」，但讀不到答案跟答案是好的，是兩件不一樣的事。
             </p>
             <div className="mono mt-5 flex flex-wrap gap-5 text-[11.5px] text-ink3">
-              <span>2026-08-29</span>
-              <span>（作者待填）</span>
-              <span>（閱讀時間待填）</span>
+              <span>{post.date}</span>
+              <span>{ORG.name}</span>
+              <span>約 {post.readMinutes} 分鐘</span>
             </div>
           </div>
         </div>

@@ -6,8 +6,9 @@ import Footer from "@/components/marketing/Footer";
 import ContactTopicChips from "@/components/marketing/ContactTopicChips";
 
 export const metadata: Metadata = {
-  title: "聯絡我們｜AI 搜尋能見度健檢",
+  title: "聯絡我們",
   description: "健檢報告的問題、想知道怎麼修，或是要我們接手優化，填表單或用 Line 傳網址給我們都可以。",
+  alternates: { canonical: "/contact" },
 };
 
 const CONTACTS = [
@@ -47,6 +48,7 @@ export default async function ContactPage({
 
       <SubpageHero
         k="CONTACT"
+        crumb="聯絡我們"
         eyebrow="聯絡我們 · CONTACT"
         heading={<>健檢報告的問題、<mark className="lime-highlight">直接問我們</mark>。</>}
         lede="報告看不懂、想知道怎麼修，或是要我們接手優化，填表單或用 Line 傳網址給我們都可以。週一至週五 10:00–19:00 回覆。"
@@ -115,7 +117,7 @@ export default async function ContactPage({
             <p className="mt-2 text-[14.5px] text-ink2">掃 QR code 加好友，直接把要檢查的網址貼過來，比填表單快。</p>
             <a href={LINE_URL} className="mt-[18px] block w-[168px]">
               {/* eslint-disable-next-line @next/next/no-img-element -- 固定素材、非使用者上傳圖片，不需要 next/image 的最佳化/尺寸協商 */}
-              <img src="/line-qr.png" alt="加 GEOCHECK 官方 Line 好友的 QR code" className="block h-[168px] w-[168px] rounded-lg border border-line" />
+              <img src="/line-qr.webp" alt="加 GEOCHECK 官方 Line 好友的 QR code" className="block h-[168px] w-[168px] rounded-lg border border-line" />
             </a>
 
             <ul className="mt-[34px] list">

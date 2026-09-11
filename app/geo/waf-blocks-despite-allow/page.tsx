@@ -2,12 +2,19 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
 import Footer from "@/components/marketing/Footer";
+import Breadcrumb from "@/components/seo/Breadcrumb";
+import ArticleJsonLd from "@/components/seo/ArticleJsonLd";
+import { findPost } from "@/lib/geo-posts";
+import { ORG } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "robots.txt 明明允許，AI 爬蟲卻連不進來？｜AI 搜尋能見度健檢",
+  title: "robots.txt 明明允許，AI 爬蟲卻連不進來？",
   description:
-    "robots.txt 寫 Allow，AI 爬蟲實測還是被擋——問題通常出在 WAF／CDN，不是 robots.txt。WAF／CDN 是什麼、為什麼會蓋過 robots.txt 的允許，以及怎麼放行。",
+    "robots.txt 寫 Allow，AI 爬蟲實測還是被擋，問題通常出在 WAF／CDN。它是什麼、為什麼會蓋過 robots.txt 的允許、怎麼放行。",
+  alternates: { canonical: "/geo/waf-blocks-despite-allow" },
 };
+
+const post = findPost("/geo/waf-blocks-despite-allow");
 
 const STEPS = [
   { name: "確認健檢辨識出的 WAF／CDN 廠商（回應標頭裡通常看得出來）", tag: "2 分鐘" },
@@ -25,14 +32,13 @@ export default function WafBlocksDespiteAllowArticlePage() {
   return (
     <div className="marketing">
       <Masthead active="geo" />
+      <ArticleJsonLd post={post} description={metadata.description ?? post.excerpt} />
 
       <div className="border-b border-line">
         <div className="mx-auto grid max-w-[1120px] grid-cols-[56px_1fr] gap-x-6 px-10 pb-[52px] pt-[60px]">
           <div className="k">POST</div>
           <div>
-            <div className="mono text-[11.5px] text-ink3">
-              <Link href="/geo">GEO 知識</Link> / 技術與索引
-            </div>
+            <Breadcrumb items={[{ name: "首頁", href: "/" }, { name: "GEO 知識", href: "/geo" }, { name: post.cat }]} />
             <h1 className="mt-4 max-w-[22em] text-[44px] leading-[1.18] tracking-[-0.035em]">
               robots.txt 明明允許，AI 爬蟲卻連不進來？
             </h1>
@@ -41,9 +47,9 @@ export default function WafBlocksDespiteAllowArticlePage() {
               健檢誤判，是 robots.txt 跟真正擋下請求的東西，根本是兩層完全獨立的系統。
             </p>
             <div className="mono mt-5 flex flex-wrap gap-5 text-[11.5px] text-ink3">
-              <span>2026-09-04</span>
-              <span>（作者待填）</span>
-              <span>（閱讀時間待填）</span>
+              <span>{post.date}</span>
+              <span>{ORG.name}</span>
+              <span>約 {post.readMinutes} 分鐘</span>
             </div>
           </div>
         </div>

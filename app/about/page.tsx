@@ -5,8 +5,9 @@ import SubpageHero from "@/components/marketing/SubpageHero";
 import Footer from "@/components/marketing/Footer";
 
 export const metadata: Metadata = {
-  title: "關於我們｜AI 搜尋能見度健檢",
+  title: "關於我們",
   description: "積木媒體行銷｜台北的 SEO 與 AI SEO 團隊",
+  alternates: { canonical: "/about" },
 };
 
 const CHECKED_COUNT = Number(process.env.CHECKED_COUNT ?? 250);
@@ -32,6 +33,7 @@ export default function AboutPage() {
 
       <SubpageHero
         k="ABOUT"
+        crumb="關於我們"
         eyebrow="關於我們 · ABOUT"
         heading={<mark className="lime-highlight">積木媒體行銷</mark>}
         lede="我們是台北的 SEO 與 AI SEO 團隊，做關鍵字優化、網站架構、內容與外部連結，也處理 AIO / GEO / AEO 的能見度問題。這份健檢是我們在客戶專案裡實際會跑的檢查，整理出來給大家自己用。"
