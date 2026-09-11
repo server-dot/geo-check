@@ -3150,8 +3150,8 @@ export default function HomeClient({
                   兩張比三張各自能分到更多寬度，文字自然變大、更好讀。 */}
               <div className="mt-[30px] grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {[
-                  { src: "/report-screenshot-1.webp", alt: "健檢報告截圖：五分類總覽，總分 78 分（B 級・良好）與檢測總覽長條圖" },
-                  { src: "/report-screenshot-3.webp", alt: "健檢報告截圖：21 項深度健檢表格，逐項列出狀態、建議與問題頁面" },
+                  { src: "/report-screenshot-1.webp", alt: "健檢報告圖：總分 80 分（B 級・良好）、需處理／可優化／正常計數、AI 爬蟲累積讀到的字數曲線" },
+                  { src: "/report-screenshot-3.webp", alt: "健檢報告截圖：21 項深度健檢表格，逐項列出狀態、現況、這代表什麼與問題頁面" },
                 ].map((img) => (
                   // eslint-disable-next-line @next/next/no-img-element -- 固定素材、非使用者上傳圖片，不需要 next/image 的最佳化/尺寸協商
                   <img
