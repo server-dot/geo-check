@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
 import Footer from "@/components/marketing/Footer";
 import ArticleIndex from "@/components/marketing/ArticleIndex";
@@ -97,20 +96,6 @@ export default function GeoGuidePage() {
             <h2 className="text-[24px] md:text-[30px]">GEO 知識分享</h2>
             <p className="mt-4 text-ink2">健檢報告上標成需處理的項目，這裡一項一篇：為什麼會被判成需處理、怎麼改、改完怎麼複驗。</p>
             <ArticleIndex />
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-ink text-paper">
-        <div className="mx-auto max-w-[1120px] px-5 md:px-10 py-12 md:py-[72px]">
-          <h2 className="max-w-[20em] text-[34px] tracking-[-0.035em]">看看這些情況在你的網站上是什麼結果。</h2>
-          <div className="mt-7 flex gap-3">
-            <Link href="/" className="btn-lime no-underline">
-              開始檢測
-            </Link>
-            <Link href="/scoring" className="btn-line-dark">
-              看判斷標準
-            </Link>
           </div>
         </div>
       </div>
