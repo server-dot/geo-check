@@ -7,6 +7,7 @@ import Masthead from "@/components/marketing/Masthead";
 import Section from "@/components/marketing/Section";
 import Footer from "@/components/marketing/Footer";
 import { tallyCitedDomains, type CitedDomain } from "@/lib/geo-cited-domains";
+import { track } from "@/lib/ga";
 
 // 首頁 hero 下面的三格數字帶，掛載時跑一次 1100ms 的 ease-out-cubic count-up
 // （跟設計稿 dc-runtime 的 componentDidMount 那段動畫邏輯一致）。
@@ -1843,6 +1844,7 @@ function ReportBoardSection({
         if (!pdf) return;
         const host = (() => { try { return new URL(props.origin).hostname; } catch { return "site"; } })();
         pdf.save(`geocheck-${host}-${new Date().toISOString().slice(0, 10)}.pdf`);
+        track("pdf_download", { domain: host, pages: boards.length });
       } catch (e) {
         if (!cancelled) setExportError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -2914,6 +2916,7 @@ export default function HomeClient({
     setLoading(true);
     setError("");
     setStatus(null);
+    track("audit_start", { domain: url.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "") });
     try {
       const res = await fetch("/api/geo", {
         method: "POST",
@@ -2926,7 +2929,9 @@ export default function HomeClient({
       activeJobId.current = jobId;
       await pollJob(jobId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "檢測失敗");
+      const reason = err instanceof Error ? err.message : "檢測失敗";
+      track("audit_fail", { reason: reason.slice(0, 100) });
+      setError(reason);
       setLoading(false);
     }
   }
@@ -2944,6 +2949,19 @@ export default function HomeClient({
       setStatus(d);
       if (d.status === "completed") {
         setLoading(false);
+        // 完成才算一次真的健檢：GA 事件帶網域、總分、等第、三種狀態各幾項
+        const cats = buildCategories5(d.engine, d.audit);
+        const overall = computeOverallScore(cats);
+        const count = (st: string) => (d.audit ?? []).filter((c) => c.status === st).length;
+        track("audit_complete", {
+          domain: d.engine?.origin.replace(/^https?:\/\//, "") ?? "",
+          score: overall.score,
+          grade: overall.grade,
+          ok: count("ok"),
+          warn: count("warn"),
+          fail: count("fail"),
+          pages: d.progress?.crawled ?? 0,
+        });
         return;
       }
       if (d.status === "failed") throw new Error(d.error ?? "健檢失敗");
@@ -3012,6 +3030,7 @@ export default function HomeClient({
         map[r.keyword] = r.results;
       }
       setKeywordResults(map);
+      track("keyword_query", { keyword_count: activeKeywords.length });
     } catch (err) {
       setKeywordError(err instanceof Error ? err.message : "查詢失敗");
     } finally {
