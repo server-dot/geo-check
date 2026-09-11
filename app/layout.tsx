@@ -53,6 +53,7 @@ const SITE_JSONLD = {
       url: ORG.url,
       logo: ORG.logo,
       telephone: ORG.telephone,
+      email: ORG.email,
       description: ORG.description,
       address: { "@type": "PostalAddress", ...ORG.address },
       openingHours: ORG.openingHours,

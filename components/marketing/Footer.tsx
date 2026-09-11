@@ -43,6 +43,9 @@ export default function Footer() {
             <div className="k text-[#a2acbd]">聯絡</div>
             <div className="mono mt-[14px] grid gap-2 text-xs text-[#a7b1c2]">
               <span>02-27457601</span>
+              <a href="mailto:seo@stack.com.tw" className="footer-link">
+                seo@stack.com.tw
+              </a>
               <a href="https://lin.ee/UhKq8H1" className="footer-link">
                 Line 官方帳號
               </a>

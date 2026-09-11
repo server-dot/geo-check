@@ -16,6 +16,7 @@ export const ORG = {
   url: 'https://stack.com.tw/',
   logo: `${SITE_URL}/geocheck-logo.webp`,
   telephone: '+886-2-2745-7601',
+  email: 'seo@stack.com.tw',
   description: '台北的 SEO 與 AI SEO 團隊，做關鍵字優化、網站架構、內容與外部連結，也處理 AIO / GEO / AEO 的能見度問題。',
   address: {
     streetAddress: '信義區東興路 49 號 11 樓',

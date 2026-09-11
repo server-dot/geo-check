@@ -13,6 +13,7 @@ export const metadata: Metadata = {
 
 const CONTACTS = [
   { name: "電話", value: "02-27457601", note: "週一至週五" },
+  { name: "Email", value: "seo@stack.com.tw", note: "合作洽詢" },
   { name: "地址", value: "台北市信義區東興路 49 號 11 樓", note: "台北" },
   { name: "營業時間", value: "週一至週五 10:00–19:00", note: "—" },
   { name: "網站", value: "stack.com.tw", note: "積木媒體行銷" },
