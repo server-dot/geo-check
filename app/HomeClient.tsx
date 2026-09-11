@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";
+import { StepAuditIcon, StepInputIcon, StepReportIcon } from "@/components/marketing/StepIcons";
 import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
 import Section from "@/components/marketing/Section";
@@ -43,13 +44,14 @@ const HOME_CHECKS = [
 ];
 
 const HOME_STEPS = [
-  { no: "01", title: "輸入網址", body: "不需要註冊，也不用裝任何東西。只讀取公開可存取的內容。" },
+  { no: "01", title: "輸入網址", body: "貼上網址就好，不用註冊。", Icon: StepInputIcon },
   {
     no: "02",
     title: "六層檢測 + 深度健檢",
-    body: "以 8 家爬蟲的身分請求頁面、關掉 JavaScript 量可讀內容、實際去問 AI 引擎，再跑 21 項深度健檢。",
+    body: "以 8 家爬蟲的身分實際請求、關掉 JavaScript 量內容、再去問 AI 引擎。",
+    Icon: StepAuditIcon,
   },
-  { no: "03", title: "看報告、排順序", body: "拿到總分與逐項判定。需處理的項目附上量到的值與建議做法，可以直接轉給工程師。" },
+  { no: "03", title: "看報告、排順序", body: "總分與逐項判定，需處理的附上量到的值，可直接轉給工程師。", Icon: StepReportIcon },
 ];
 
 type BotStatus = "allowed" | "blocked" | "unknown" | "mismatch";
@@ -2893,12 +2895,14 @@ export default function HomeClient({
             </Section>
 
             <Section k="02" eyebrow="HOW IT WORKS" title="三個步驟，約 40 秒">
-              <dl className="figs grid-cols-3 text-left">
+              {/* 小積木 2026-09-11 給的設計稿：長文字改成「圖示＋一句話」；間距數值是他用 tweaks 面板調出來的（靠左、圖示→編號 18px、左右 28px）。 */}
+              <dl className="figs figs--steps mt-[30px] grid-cols-3">
                 {HOME_STEPS.map((s) => (
-                  <div key={s.no} className="px-5 pb-6 pt-[22px]">
-                    <div className="k">{s.no}</div>
+                  <div key={s.no}>
+                    <s.Icon />
+                    <div className="k mt-[18px]">{s.no}</div>
                     <p className="mt-2.5 text-[19px] font-bold tracking-[-0.03em]">{s.title}</p>
-                    <p className="mt-2.5 text-[13.5px] leading-[1.55] text-ink2">{s.body}</p>
+                    <p className="mt-2.5 max-w-[22em] text-[13.5px] leading-[1.7] text-ink2">{s.body}</p>
                   </div>
                 ))}
               </dl>

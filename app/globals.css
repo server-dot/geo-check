@@ -187,6 +187,10 @@ code {
   text-align: center;
 }
 .figs > div { background: var(--paper); padding: 16px 0 18px; }
+/* 首頁「三個步驟」那組：圖示版本內距要比數字版大，這裡直接寫死——
+   .figs > div 沒包 @layer 會贏過 Tailwind 的 p-* utility，在 JSX 上加 pt-8 是沒用的。 */
+.figs--steps { text-align: left; }
+.figs--steps > div { padding: 40px 28px 36px; }
 /* 32px 字級的大數字，值萬一比預期長會畫出格子外——
    overflow-wrap:normal 預設不允許字中斷行，保留這行當安全網。 */
 .figs b {
