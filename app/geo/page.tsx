@@ -42,7 +42,7 @@ export default function GeoGuidePage() {
       </div>
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_minmax(0,800px)] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
+        <div className="reveal mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_minmax(0,800px)] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
           <div className="k hidden md:block">01</div>
           <div>
             <h2 className="text-[24px] md:text-[30px]">什麼是 GEO？</h2>
@@ -60,7 +60,7 @@ export default function GeoGuidePage() {
       </div>
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_minmax(0,800px)] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
+        <div className="reveal mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_minmax(0,800px)] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
           <div className="k hidden md:block">02</div>
           <div>
             <h2 className="text-[24px] md:text-[30px]">和 SEO 差在哪</h2>
@@ -90,7 +90,7 @@ export default function GeoGuidePage() {
       </div>
 
       <div className="border-b border-line">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_minmax(0,800px)] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
+        <div className="reveal mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_minmax(0,800px)] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
           <div className="k hidden md:block">03</div>
           <div>
             <h2 className="text-[24px] md:text-[30px]">GEO 知識分享</h2>

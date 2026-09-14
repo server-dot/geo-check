@@ -3110,7 +3110,7 @@ export default function HomeClient({
 
         {/* 三格數字帶：count-up 動畫見 useCountUpProgress()。 */}
         <div className="border-b border-line bg-ink text-paper">
-          <div className="mx-auto max-w-[1120px] px-5 md:px-10">
+          <div className="reveal mx-auto max-w-[1120px] px-5 md:px-10">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-px border-t border-white/[.14] bg-white/[.14]">
               {stats.map((s) => (
                 <div key={s.label} className="bg-ink px-8 pb-11 pt-10">

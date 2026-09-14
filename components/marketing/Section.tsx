@@ -16,7 +16,7 @@ export default function Section({
 }) {
   return (
     <div className={noBorder ? undefined : "border-b border-line"}>
-      <div className="mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
+      <div className="reveal mx-auto grid max-w-[1120px] grid-cols-1 md:grid-cols-[56px_1fr] gap-x-6 px-5 md:px-10 py-12 md:py-[72px]">
         <div className="k hidden md:block">{k}</div>
         <div>
           {eyebrow && <div className="eyebrow">{eyebrow}</div>}
