@@ -32,10 +32,12 @@ export const metadata: Metadata = {
     locale: "zh_TW",
     images: ["/geocheck-logo.webp"],
   },
-  // Search Console 的驗證碼由環境變數給，沒設就不輸出這個 meta
-  verification: process.env.GOOGLE_SITE_VERIFICATION
-    ? { google: process.env.GOOGLE_SITE_VERIFICATION }
-    : undefined,
+  // Search Console 驗證碼（公開值，寫死即可；環境變數有設則優先）
+  verification: {
+    google:
+      process.env.GOOGLE_SITE_VERIFICATION ??
+      "lEA83cRi1KMpPr4ikdteXJnb9uMmo5S5YIZP23XipRw",
+  },
 };
 
 // GA4：NEXT_PUBLIC_GA_ID 沒設就完全不載入，本機開發不會打到正式的評估 ID
