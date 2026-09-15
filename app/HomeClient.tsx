@@ -42,6 +42,7 @@ const HOME_CHECKS = [
   { name: "內容使用授權（Content Signals）", why: "search / ai-input / ai-train 三項的表態" },
   { name: "llms.txt", why: "有沒有、格式完不完整、連結解不解得開" },
   { name: "AI 認不認得你（實際去問）", why: "送出提問給 Perplexity 與 ChatGPT，原話與引用來源照貼" },
+  { name: "AI 推不推薦你（自動問推薦題）", why: "三個不含品牌名的推薦題，看 AI 點名推薦了誰、有沒有你" },
   { name: "多頁 SEO + GEO 深度健檢", why: "結構化資料、索引、網站健康、外部權威等 21 項" },
 ];
 
@@ -49,7 +50,7 @@ const HOME_STEPS = [
   { no: "01", title: "輸入網址", body: "貼上網址就好，不用註冊。", Icon: StepInputIcon },
   {
     no: "02",
-    title: "六層檢測 + 深度健檢",
+    title: "七層檢測 + 深度健檢",
     body: "以 8 家爬蟲的身分實際請求、關掉 JavaScript 量內容、再去問 AI 引擎。",
     Icon: StepAuditIcon,
   },
@@ -144,6 +145,8 @@ interface VisibilityCardData {
   query: string;
   answer: string;
   citedSelf: boolean;
+  // 推薦題才有：回答正文有沒有真的點名你。undefined 代表這張卡不分這一層（品牌題、關鍵字查詢）
+  namedSelf?: boolean;
   citations: { url: string; title: string; isSelf: boolean }[];
   advice: string;
 }
@@ -170,6 +173,7 @@ interface RecommendVisibility {
   askedAt: string;
   totalAnswers: number;
   citedSelfCount: number;
+  namedSelfCount: number;
 }
 
 interface LlmsTxtLink {
@@ -2658,18 +2662,90 @@ function BotAccessList({ results, origin }: { results: AiBotResult[]; origin?: s
   );
 }
 
+// AI 的回答不是純段落：Perplexity 常回 Markdown 表格、清單，還會把很長的網址
+// 直接寫進正文。原本整段當一個 <p> 丟出去，表格的 `|` 會擠成一長串、長網址
+// 撐破卡片（2026-09-15 小積木回報「跑版」）。這裡按行處理：連續的 `|` 開頭行
+// 收成真的表格（自己可以橫向捲，不撐破外層），其餘逐行輸出。
 function renderAnswerMarkdown(text: string, citations: { url: string }[]): React.ReactNode {
-  const paragraphs = text.split(/\n{2,}/).filter((p) => p.trim());
-  return paragraphs.map((para, pi) => (
-    <p key={pi} className={pi > 0 ? "mt-2" : undefined}>
-      {renderInlineMarkdown(para, citations)}
-    </p>
-  ));
+  const lines = text.split(/\r?\n/);
+  const blocks: React.ReactNode[] = [];
+  let para: string[] = [];
+  let table: string[] = [];
+
+  // 收尾的 | 可能因為回答被 max_tokens 截斷而不見，只要開頭是 | 就當成同一張表的列
+  const isTableRow = (l: string, inTable: boolean) => (inTable ? /^\s*\|/.test(l) : /^\s*\|.*\|\s*$/.test(l));
+  // |---|---| 這種分隔列只是格式，不是內容
+  const isTableDivider = (l: string) => /^\s*\|[\s:|-]+\|\s*$/.test(l);
+
+  const flushPara = () => {
+    if (para.length === 0) return;
+    blocks.push(
+      <p key={`p${blocks.length}`} className={blocks.length > 0 ? "mt-2" : undefined}>
+        {renderInlineMarkdown(para.join("\n"), citations)}
+      </p>,
+    );
+    para = [];
+  };
+  const flushTable = () => {
+    if (table.length === 0) return;
+    const rows = table
+      .filter((l) => !isTableDivider(l))
+      .map((l) => l.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim()));
+    if (rows.length > 0) {
+      const [head, ...body] = rows;
+      blocks.push(
+        <div key={`t${blocks.length}`} className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[30em] border-collapse text-[13px]">
+            <thead>
+              <tr>
+                {head.map((c, i) => (
+                  <th key={i} className="whitespace-nowrap border border-line bg-inset px-2 py-1 text-left font-semibold">
+                    {renderInlineMarkdown(c, citations)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {body.map((r, ri) => (
+                <tr key={ri}>
+                  {r.map((c, ci) => (
+                    <td key={ci} className="break-words border border-line px-2 py-1 align-top">
+                      {renderInlineMarkdown(c, citations)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      );
+    }
+    table = [];
+  };
+
+  for (const line of lines) {
+    if (isTableRow(line, table.length > 0)) {
+      flushPara();
+      table.push(line);
+      continue;
+    }
+    flushTable();
+    if (!line.trim()) {
+      flushPara();
+      continue;
+    }
+    para.push(line);
+  }
+  flushTable();
+  flushPara();
+  return blocks;
 }
 
 function renderInlineMarkdown(text: string, citations: { url: string }[]): React.ReactNode[] {
   const tokens: React.ReactNode[] = [];
-  const pattern = /\*\*([^*]+)\*\*|\[(\d+)\]/g;
+  // 三種：**粗體**、[1] 引用編號、[文字](網址) 連結。
+  // 最後一種原本沒處理，整串網址會照原樣印出來，長的直接撐破卡片。
+  const pattern = /\*\*([^*]+)\*\*|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\[(\d+)\]/g;
   let last = 0;
   let key = 0;
   let m: RegExpExecArray | null;
@@ -2681,8 +2757,14 @@ function renderInlineMarkdown(text: string, citations: { url: string }[]): React
           {m[1]}
         </strong>,
       );
-    } else if (m[2] !== undefined) {
-      const url = citations[Number(m[2]) - 1]?.url;
+    } else if (m[2] !== undefined && m[3] !== undefined) {
+      tokens.push(
+        <a key={key++} href={m[3]} target="_blank" rel="noopener noreferrer" className="break-all underline-offset-2">
+          {m[2]}
+        </a>,
+      );
+    } else if (m[4] !== undefined) {
+      const url = citations[Number(m[4]) - 1]?.url;
       tokens.push(
         url ? (
           <a
@@ -2692,10 +2774,10 @@ function renderInlineMarkdown(text: string, citations: { url: string }[]): React
             rel="noopener noreferrer"
             className="ml-0.5 align-super text-[10px] text-blue-600 hover:underline"
           >
-            [{m[2]}]
+            [{m[4]}]
           </a>
         ) : (
-          `[${m[2]}]`
+          `[${m[4]}]`
         ),
       );
     }
@@ -2714,8 +2796,11 @@ function renderInlineMarkdown(text: string, citations: { url: string }[]): React
 // 客觀的「引用網域」彙總在下面另一塊，兩個一起看。
 function RecommendBlock({ data }: { data: RecommendVisibility }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const hit = data.citedSelfCount;
+  // 標題用「答案裡真的點名你」的次數，不是「引用清單裡有你」——後者只代表 AI 查過你，
+  // Perplexity 一個回答就列二十筆來源，把那個講成「AI 引用了你」是報喜不報憂。
+  const hit = data.namedSelfCount;
   const total = data.totalAnswers;
+  const citedOnly = data.citedSelfCount - data.namedSelfCount;
   const askedAt = new Date(data.askedAt);
   const askedLabel = `${askedAt.getMonth() + 1}/${askedAt.getDate()} ${String(askedAt.getHours()).padStart(2, "0")}:${String(askedAt.getMinutes()).padStart(2, "0")}`;
   const selfNamed = data.names.some((n) => n.isSelf);
@@ -2727,11 +2812,16 @@ function RecommendBlock({ data }: { data: RecommendVisibility }) {
         <p className="mono text-[11px] font-medium tracking-wide text-ink3 uppercase">我們先幫你問了 {data.questions.length} 題</p>
         <p className="mt-1 text-lg font-bold text-ink">
           {hit === 0
-            ? `🟡 ${total} 次回答，沒有一次引用你的網站`
+            ? `🟡 ${total} 次回答，沒有一次把你寫進答案`
             : hit === total
-              ? `🟢 ${total} 次回答全部引用了你的網站`
-              : `🟢 ${total} 次回答裡有 ${hit} 次引用了你的網站`}
+              ? `🟢 ${total} 次回答全部把你寫進答案`
+              : `🟢 ${total} 次回答裡有 ${hit} 次把你寫進答案`}
         </p>
+        {citedOnly > 0 && (
+          <p className="mt-1 text-sm font-medium text-ink2">
+            另外有 {citedOnly} 次，你的網址出現在它的引用清單裡、但答案沒提到你——它讀到了你，只是沒拿你當答案。
+          </p>
+        )}
         <p className="mt-2 max-w-[38em] text-sm leading-relaxed text-ink2">
           這 {data.questions.length} 題是 AI 讀了你的首頁後，猜「一般人在找這類服務時會怎麼問」寫出來的，題目裡沒有你的品牌名。
           它們只是猜的，不是真實搜尋量；要看跟你主推項目對不對得上。
@@ -2771,7 +2861,7 @@ function RecommendBlock({ data }: { data: RecommendVisibility }) {
       <div className="mt-4 space-y-3">
         {data.questions.map((q) => {
           const isOpen = !!open[q.question];
-          const qHit = q.results.filter((r) => r.citedSelf).length;
+          const qHit = q.results.filter((r) => r.namedSelf).length;
           return (
             <div key={q.question} className="rounded-[10px] border border-line bg-card">
               <button
@@ -2781,7 +2871,7 @@ function RecommendBlock({ data }: { data: RecommendVisibility }) {
               >
                 <span className="text-sm font-semibold text-ink">「{q.question}」</span>
                 <span className="mono shrink-0 text-xs text-ink3">
-                  {qHit === 0 ? "沒引用你" : `${qHit}/${q.results.length} 引用你`} {isOpen ? "▲" : "▼"}
+                  {qHit === 0 ? "沒推薦你" : `${qHit}/${q.results.length} 推薦你`} {isOpen ? "▲" : "▼"}
                 </span>
               </button>
               {isOpen && (
@@ -2804,7 +2894,15 @@ function BrandVisibilityCard({ result }: { result: VisibilityCardData }) {
     <div className="rounded-[10px] border border-line bg-card p-6">
       <p className="mono text-[11px] font-medium tracking-wide text-ink3 uppercase">{result.engine}</p>
       <p className="mt-1 text-lg font-bold text-ink">
-        {result.citedSelf ? "🟢 引用了你自己的網站" : "🟡 沒有引用你自己的網站"}
+        {result.namedSelf === undefined
+          ? result.citedSelf
+            ? "🟢 引用了你自己的網站"
+            : "🟡 沒有引用你自己的網站"
+          : result.namedSelf
+            ? "🟢 答案裡推薦了你"
+            : result.citedSelf
+              ? "🟡 查過你，但答案裡沒推薦你"
+              : "🟡 沒有推薦你"}
       </p>
       <p className="mt-2 text-sm leading-relaxed text-ink2">{result.advice}</p>
 
@@ -2815,7 +2913,7 @@ function BrandVisibilityCard({ result }: { result: VisibilityCardData }) {
 
       <div className="mt-4">
         <p className="text-xs font-medium text-ink3">{result.engine} 的實際回答：</p>
-        <div className="mt-1 rounded-lg border border-line bg-paper p-3 text-[14.5px] leading-relaxed text-ink2">
+        <div className="mt-1 overflow-hidden break-words rounded-lg border border-line bg-paper p-3 text-[14.5px] leading-relaxed text-ink2">
           {renderAnswerMarkdown(result.answer, result.citations)}
         </div>
       </div>
@@ -3176,7 +3274,7 @@ export default function HomeClient({
           <>
             <Section k="01" eyebrow="THE CHECK" title="健檢會看什麼">
               <p className="prose mt-4">
-                六個檢測層，最後一項是多頁深度健檢。判定字彙與總分算法寫在{" "}
+                七個檢測層，最後一項是多頁深度健檢。判定字彙與總分算法寫在{" "}
                 <a href="/scoring">判斷標準</a>。
               </p>
               <ul className="mt-[30px]">

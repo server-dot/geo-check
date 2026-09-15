@@ -157,7 +157,11 @@ export function buildReportMarkdown(job: AuditJob): string {
         `題目是推估，不是真實搜尋量。提問時間：${rec.askedAt}。`,
     );
     out.push('');
-    out.push(`- ${rec.totalAnswers} 次回答中，有 ${rec.citedSelfCount} 次引用了你的網站。`);
+    out.push(`- ${rec.totalAnswers} 次回答中，有 ${rec.namedSelfCount} 次把你寫進答案。`);
+    out.push(
+      `- 另有 ${rec.citedSelfCount - rec.namedSelfCount} 次，你的網址只出現在引用清單裡、答案正文沒提到你` +
+        `（「被引用」不等於「被推薦」——搜尋型模型一個回答會列十幾筆查過的來源）。`,
+    );
     if (rec.names.length > 0) {
       out.push('');
       out.push('AI 在回答裡點名推薦的對象（依被點名次數排序）：');
@@ -171,7 +175,9 @@ export function buildReportMarkdown(job: AuditJob): string {
       out.push(`### 「${esc(q.question)}」`);
       out.push('');
       for (const r of q.results) {
-        out.push(`**${r.engine}**：${r.citedSelf ? '引用了你的網站' : '沒有引用你的網站'}`);
+        out.push(
+          `**${r.engine}**：${r.namedSelf ? '答案裡推薦了你' : r.citedSelf ? '查過你，但答案裡沒推薦你' : '沒有推薦你'}`,
+        );
         out.push('');
         out.push(r.answer.split('\n').map((l) => `> ${l}`).join('\n'));
         out.push('');

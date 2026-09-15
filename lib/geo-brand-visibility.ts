@@ -43,7 +43,12 @@ const ENGINES: { engine: string; model: string }[] = [
   { engine: 'ChatGPT（GPT-4o＋即時搜尋）', model: 'openai/gpt-4o:online' },
 ];
 
-async function askModel(model: string, query: string, apiKey: string): Promise<{ content: string; citations: UrlCitation[] }> {
+async function askModel(
+  model: string,
+  query: string,
+  apiKey: string,
+  maxTokens: number,
+): Promise<{ content: string; citations: UrlCitation[] }> {
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -55,7 +60,7 @@ async function askModel(model: string, query: string, apiKey: string): Promise<{
     body: JSON.stringify({
       model,
       messages: [{ role: 'user', content: query }],
-      max_tokens: 500,
+      max_tokens: maxTokens,
       temperature: 0.2,
     }),
     signal: AbortSignal.timeout(30000),
@@ -84,11 +89,18 @@ export function isSameSite(a: string, b: string): boolean {
   return a === b || a.endsWith('.' + b) || b.endsWith('.' + a);
 }
 
-async function runOne(engine: string, model: string, query: string, domain: string, apiKey: string): Promise<VisibilityAnswer | null> {
+async function runOne(
+  engine: string,
+  model: string,
+  query: string,
+  domain: string,
+  apiKey: string,
+  maxTokens: number,
+): Promise<VisibilityAnswer | null> {
   let content: string;
   let rawCitations: UrlCitation[];
   try {
-    const r = await askModel(model, query, apiKey);
+    const r = await askModel(model, query, apiKey, maxTokens);
     content = r.content;
     rawCitations = r.citations;
   } catch {
@@ -110,11 +122,17 @@ async function runOne(engine: string, model: string, query: string, domain: stri
 // 對每個接好的引擎並行查詢同一個問題，個別失敗不影響其他引擎——
 // 一家 API 掛了，使用者還是看得到另一家的結果，不會整組開天窗。回傳
 // null 代表沒設 API key，呼叫端要自己決定怎麼呈現「沒查」跟「查了沒結果」的差別。
-export async function runVisibilityQueries(query: string, origin: string): Promise<VisibilityAnswer[] | null> {
+// maxTokens 預設 500 夠品牌題（一句介紹＋官網）用；推薦題會列好幾個對象、還常常
+// 回一張表格，500 會在表格中間被截斷，呼叫端要自己加大。
+export async function runVisibilityQueries(
+  query: string,
+  origin: string,
+  maxTokens = 500,
+): Promise<VisibilityAnswer[] | null> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return null;
   const domain = hostnameOf(origin);
-  const results = await Promise.all(ENGINES.map((e) => runOne(e.engine, e.model, query, domain, apiKey)));
+  const results = await Promise.all(ENGINES.map((e) => runOne(e.engine, e.model, query, domain, apiKey, maxTokens)));
   return results.filter((r): r is VisibilityAnswer => r !== null);
 }
 

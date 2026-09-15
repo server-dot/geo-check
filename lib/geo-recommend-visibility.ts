@@ -20,6 +20,10 @@ export interface RecommendQuestionResult {
 
 export interface RecommendAnswer extends VisibilityAnswer {
   advice: string;
+  // 回答「正文」裡有沒有真的點名你。citedSelf 只代表你的網址出現在引用清單裡——
+  // Perplexity 一個回答會列二十筆來源，其中大多數只是它查過的資料，不是它推薦的對象。
+  // 只看 citedSelf 會把「查過你」講成「推薦你」，這是整份報告最容易講錯的一句話。
+  namedSelf: boolean;
 }
 
 export interface RecommendedName {
@@ -35,7 +39,8 @@ export interface RecommendVisibility {
   names: RecommendedName[];
   askedAt: string;    // ISO 時間，畫面上要標「這是幾點問的」——AI 回答會隨時間變
   totalAnswers: number;
-  citedSelfCount: number;
+  citedSelfCount: number;  // 引用清單裡出現你的網址的次數（寬鬆）
+  namedSelfCount: number;  // 回答正文真的點名你的次數（嚴格，畫面上的標題用這個）
 }
 
 export interface RecommendInput {
@@ -219,10 +224,21 @@ export async function extractRecommendedNames(
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh-Hant'));
 }
 
-function adviceFor(a: VisibilityAnswer, question: string): string {
-  return a.citedSelf
-    ? `${a.engine} 回答「${question}」時引用了你自己的網站——這題 AI 找得到你、也願意拿你當答案。`
-    : `${a.engine} 回答「${question}」時沒有引用你的網站——這題 AI 推的是別人。`;
+// 三態，不是兩態：「引用清單有你」跟「答案裡推薦你」差很多，混在一起講會變成報喜不報憂。
+function adviceFor(a: VisibilityAnswer, question: string, namedSelf: boolean): string {
+  if (namedSelf) return `${a.engine} 在回答「${question}」時直接把你寫進答案裡——這題你進得了 AI 的推薦名單。`;
+  if (a.citedSelf)
+    return `${a.engine} 查過你的網站（你的網址出現在它的引用清單裡），但回答「${question}」時沒有把你寫進推薦名單——它讀到了你，只是沒拿你當答案。`;
+  return `${a.engine} 回答「${question}」時沒有引用也沒有提到你——這題 AI 推的是別人。`;
+}
+
+// 回答正文有沒有真的提到你：比對品牌名，以及自家網域（AI 常常直接把網址寫進正文）。
+function mentionsSelf(answer: string, brandName: string, domain: string): boolean {
+  const text = answer.toLowerCase();
+  const brand = brandName.trim().toLowerCase();
+  if (brand.length >= 2 && text.includes(brand)) return true;
+  const root = domain.toLowerCase().replace(/^www\./, '');
+  return root.length >= 4 && text.includes(root);
 }
 
 export async function runRecommendVisibility(input: RecommendInput, origin: string): Promise<RecommendVisibility | null> {
@@ -238,10 +254,14 @@ export async function runRecommendVisibility(input: RecommendInput, origin: stri
   if (questions.length === 0) return null;
 
   const askedAt = new Date().toISOString();
+  const domain = hostnameOf(origin);
   const perQuestion = await Promise.all(
     questions.map(async (question) => {
-      const answers = await runVisibilityQueries(`${question} 請具體推薦幾個，並附上來源網址。`, origin);
-      const results: RecommendAnswer[] = (answers ?? []).map((a) => ({ ...a, query: question, advice: adviceFor(a, question) }));
+      const answers = await runVisibilityQueries(`${question} 請具體推薦幾個，並附上來源網址。`, origin, 900);
+      const results: RecommendAnswer[] = (answers ?? []).map((a) => {
+        const named = mentionsSelf(a.answer, input.brandName, domain);
+        return { ...a, query: question, namedSelf: named, advice: adviceFor(a, question, named) };
+      });
       return { question, results };
     }),
   );
@@ -251,7 +271,7 @@ export async function runRecommendVisibility(input: RecommendInput, origin: stri
   const flat = questionsWithAnswers.flatMap((q) => q.results.map((r) => ({ engine: r.engine, question: q.question, answer: r.answer })));
   let names: RecommendedName[] = [];
   try {
-    names = await extractRecommendedNames(flat, input.brandName, hostnameOf(origin), apiKey);
+    names = await extractRecommendedNames(flat, input.brandName, domain, apiKey);
   } catch {
     names = []; // 抽名字失敗不影響前面的結果，畫面上還有引用網域可看
   }
@@ -263,5 +283,6 @@ export async function runRecommendVisibility(input: RecommendInput, origin: stri
     askedAt,
     totalAnswers: flat.length,
     citedSelfCount: questionsWithAnswers.reduce((n, q) => n + q.results.filter((r) => r.citedSelf).length, 0),
+    namedSelfCount: questionsWithAnswers.reduce((n, q) => n + q.results.filter((r) => r.namedSelf).length, 0),
   };
 }
