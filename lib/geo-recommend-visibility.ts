@@ -177,7 +177,7 @@ export async function extractRecommendedNames(
   type Entry = { name: string; norm: string; answers: Set<number>; engines: Set<string>; isSelf: boolean };
   const entries: Entry[] = [];
   const byNorm = new Map<string, Entry>();
-  const brandLower = brandName.toLowerCase();
+  const tokens = brandTokens(brandName);
   // 題目裡本來就在問的東西（n8n、Pinecone…）不是「被推薦的人」，模型再怎麼交代
   // 還是會抽出來，這裡用題目文字反過來擋掉；超過 24 字的多半是文章標題，也不要。
   const questionText = answers.map((a) => a.question.toLowerCase()).join('\n');
@@ -202,7 +202,7 @@ export async function extractRecommendedNames(
         .filter(Boolean);
       const lineWithName = answers[idx].answer.split('\n').find((l) => l.toLowerCase().includes(key)) ?? '';
       const isSelf =
-        (!!brandLower && (key.includes(brandLower) || brandLower.includes(key))) ||
+        tokens.some((t) => key.includes(t) || (key.length >= 3 && t.includes(key))) ||
         isSameSite(hostnameOf(name.startsWith('http') ? name : `https://${name}`), domain) ||
         selfMarks.some((m) => lineWithName.includes(m));
       let entry = byNorm.get(norm);
@@ -251,6 +251,20 @@ function adviceFor(a: VisibilityAnswer, question: string, namedSelf: boolean): s
 //    猜的，猜到的是「任嚴選線上購物」，但 AI 推的是它賣的「HH」；只比品牌名會把明明
 //    推薦了你的回答判成「查過你但沒推薦」（2026-09-15 小積木用 beauty-win.com 抓到）。
 //    Perplexity 的 [n] 對應引用清單第 n 筆，跟前端 renderInlineMarkdown 用同一套對法。
+// 猜到的站名常常是一整串（「Relove私密及全身保養 官方網站」），AI 寫的只有「Relove」。
+// 除了整串，也拿開頭的英文字跟第一段（空白／｜前）去比。太短的（<3 字）不算，
+// 「HH」這種兩個字母會誤中一堆東西，那種靠下面的引用標記判。
+export function brandTokens(brandName: string): string[] {
+  const full = brandName.trim().toLowerCase();
+  const out = new Set<string>();
+  if (full.length >= 2) out.add(full);
+  const latin = full.match(/^[a-z0-9][a-z0-9\-]{2,}/)?.[0];
+  if (latin) out.add(latin);
+  const head = full.split(/[\s|｜\-–—:：]/)[0]?.trim();
+  if (head && head.length >= 3) out.add(head);
+  return [...out];
+}
+
 function mentionsSelf(
   answer: string,
   brandName: string,
@@ -258,8 +272,7 @@ function mentionsSelf(
   citations: { url: string; isSelf: boolean }[],
 ): boolean {
   const text = answer.toLowerCase();
-  const brand = brandName.trim().toLowerCase();
-  if (brand.length >= 2 && text.includes(brand)) return true;
+  if (brandTokens(brandName).some((t) => text.includes(t))) return true;
   const root = domain.toLowerCase().replace(/^www\./, '');
   if (root.length >= 4 && text.includes(root)) return true;
   return citations.some((c, i) => c.isSelf && new RegExp(`\\[${i + 1}\\]`).test(answer));
