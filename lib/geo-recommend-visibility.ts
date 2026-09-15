@@ -49,6 +49,9 @@ export interface RecommendInput {
   description: string;
   h1: string[];
   leadParagraphs: string[];
+  // 首頁純文字開頭。電商站的 <title> 常是「XX 線上購物」這種空話，靠標題猜出來的
+  // 題目會變成「有沒有推薦的線上購物平台」；商品分類名多半在正文裡，要一起餵。
+  preview: string;
 }
 
 const MODEL = 'openai/gpt-4.1-mini';
@@ -98,6 +101,8 @@ function buildQuestionPrompt(input: RecommendInput): string {
 【主標題】${input.h1.join('／') || '（無）'}
 【首頁內文摘錄】
 ${lead || '（無）'}
+【首頁純文字開頭】
+${input.preview.slice(0, 800) || '（無）'}
 
 規則：
 - 問題裡絕對不可以出現這個品牌的名稱「${input.brandName}」、網址，或任何能指向這個網站的字眼。要問的是「這一類」，不是「這一家」。
@@ -107,7 +112,7 @@ ${lead || '（無）'}
   1. 推薦型：「有沒有推薦的…（網站／老師／公司）」
   2. 選擇型：「台灣哪幾家／哪些人做…比較好」「找…要怎麼挑」
   3. 情境型：「我是…（一個具體身分或處境），想…，可以找誰或看哪裡」
-- 主題要貼著這個網站實際在提供的服務或內容，不要泛到「AI 工具推薦」這種太大的題。
+- 主題要貼著這個網站實際在賣、在做的東西（看內文與商品分類，不要只看標題），不要泛到「AI 工具推薦」「線上購物平台」這種太大的題。
 
 只回傳 JSON：{"questions":["問題一","問題二","問題三"]}`;
 }
@@ -157,7 +162,7 @@ function normalizeForMerge(name: string): string {
 }
 
 export async function extractRecommendedNames(
-  answers: { engine: string; question: string; answer: string }[],
+  answers: { engine: string; question: string; answer: string; citations: { url: string; isSelf: boolean }[] }[],
   brandName: string,
   domain: string,
   apiKey: string,
@@ -190,9 +195,16 @@ export async function extractRecommendedNames(
       if (key.length >= 2 && questionText.includes(key)) continue;
       const norm = normalizeForMerge(name);
       if (!norm) continue;
+      // 名字對不上品牌名時（站名「任嚴選」、AI 推的是它賣的「HH」），看那一行的引用標記
+      // 有沒有指到你的網址——有就是在推你。
+      const selfMarks = answers[idx].citations
+        .map((c, i) => (c.isSelf ? `[${i + 1}]` : ''))
+        .filter(Boolean);
+      const lineWithName = answers[idx].answer.split('\n').find((l) => l.toLowerCase().includes(key)) ?? '';
       const isSelf =
         (!!brandLower && (key.includes(brandLower) || brandLower.includes(key))) ||
-        isSameSite(hostnameOf(name.startsWith('http') ? name : `https://${name}`), domain);
+        isSameSite(hostnameOf(name.startsWith('http') ? name : `https://${name}`), domain) ||
+        selfMarks.some((m) => lineWithName.includes(m));
       let entry = byNorm.get(norm);
       if (!entry) {
         entry = { name, norm, answers: new Set(), engines: new Set(), isSelf };
@@ -232,13 +244,25 @@ function adviceFor(a: VisibilityAnswer, question: string, namedSelf: boolean): s
   return `${a.engine} 回答「${question}」時沒有引用也沒有提到你——這題 AI 推的是別人。`;
 }
 
-// 回答正文有沒有真的提到你：比對品牌名，以及自家網域（AI 常常直接把網址寫進正文）。
-function mentionsSelf(answer: string, brandName: string, domain: string): boolean {
+// 回答正文有沒有真的推薦你。三種證據，任一成立就算：
+// 1. 正文出現猜到的品牌名
+// 2. 正文出現自家網域（AI 常直接把網址寫進正文）
+// 3. 正文的引用標記 [n] 指到你的網址——這條最重要。品牌名是從 <title>／Organization
+//    猜的，猜到的是「任嚴選線上購物」，但 AI 推的是它賣的「HH」；只比品牌名會把明明
+//    推薦了你的回答判成「查過你但沒推薦」（2026-09-15 小積木用 beauty-win.com 抓到）。
+//    Perplexity 的 [n] 對應引用清單第 n 筆，跟前端 renderInlineMarkdown 用同一套對法。
+function mentionsSelf(
+  answer: string,
+  brandName: string,
+  domain: string,
+  citations: { url: string; isSelf: boolean }[],
+): boolean {
   const text = answer.toLowerCase();
   const brand = brandName.trim().toLowerCase();
   if (brand.length >= 2 && text.includes(brand)) return true;
   const root = domain.toLowerCase().replace(/^www\./, '');
-  return root.length >= 4 && text.includes(root);
+  if (root.length >= 4 && text.includes(root)) return true;
+  return citations.some((c, i) => c.isSelf && new RegExp(`\\[${i + 1}\\]`).test(answer));
 }
 
 export async function runRecommendVisibility(input: RecommendInput, origin: string): Promise<RecommendVisibility | null> {
@@ -259,7 +283,7 @@ export async function runRecommendVisibility(input: RecommendInput, origin: stri
     questions.map(async (question) => {
       const answers = await runVisibilityQueries(`${question} 請具體推薦幾個，並附上來源網址。`, origin, 900);
       const results: RecommendAnswer[] = (answers ?? []).map((a) => {
-        const named = mentionsSelf(a.answer, input.brandName, domain);
+        const named = mentionsSelf(a.answer, input.brandName, domain, a.citations);
         return { ...a, query: question, namedSelf: named, advice: adviceFor(a, question, named) };
       });
       return { question, results };
@@ -268,7 +292,9 @@ export async function runRecommendVisibility(input: RecommendInput, origin: stri
   const questionsWithAnswers = perQuestion.filter((q) => q.results.length > 0);
   if (questionsWithAnswers.length === 0) return null;
 
-  const flat = questionsWithAnswers.flatMap((q) => q.results.map((r) => ({ engine: r.engine, question: q.question, answer: r.answer })));
+  const flat = questionsWithAnswers.flatMap((q) =>
+    q.results.map((r) => ({ engine: r.engine, question: q.question, answer: r.answer, citations: r.citations })),
+  );
   let names: RecommendedName[] = [];
   try {
     names = await extractRecommendedNames(flat, input.brandName, domain, apiKey);

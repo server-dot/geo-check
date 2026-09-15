@@ -260,6 +260,7 @@ export async function POST(req: NextRequest) {
             description: vis.description,
             h1: vis.h1,
             leadParagraphs: vis.leadParagraphs,
+            preview: vis.preview,
           },
           origin,
         ).catch(() => null)
