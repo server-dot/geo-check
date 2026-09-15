@@ -2811,11 +2811,16 @@ function RecommendBlock({ data }: { data: RecommendVisibility }) {
       <div className="rounded-[10px] border border-line bg-card p-6">
         <p className="mono text-[11px] font-medium tracking-wide text-ink3 uppercase">我們先幫你問了 {data.questions.length} 題</p>
         <p className="mt-1 text-lg font-bold text-ink">
-          {hit === 0
-            ? `🟡 ${total} 次回答，沒有一次把你寫進答案`
-            : hit === total
+          {/* 三態要真的是三態：綠＝答案裡有你、黃＝它查過你但沒寫進答案、紅＝完全沒有。
+              兩個黃燈等於燈號沒作用（2026-09-15 小積木回報）。這一層不計入總分，
+              紅燈是「目前在名單外」的現況，不是「你做錯了什麼要修」。 */}
+          {hit > 0
+            ? hit === total
               ? `🟢 ${total} 次回答全部把你寫進答案`
-              : `🟢 ${total} 次回答裡有 ${hit} 次把你寫進答案`}
+              : `🟢 ${total} 次回答裡有 ${hit} 次把你寫進答案`
+            : citedOnly > 0
+              ? `🟡 ${total} 次回答都沒把你寫進答案，但它查過你`
+              : `🔴 ${total} 次回答，沒有一次提到你`}
         </p>
         {citedOnly > 0 && (
           <p className="mt-1 text-sm font-medium text-ink2">
@@ -2871,7 +2876,12 @@ function RecommendBlock({ data }: { data: RecommendVisibility }) {
               >
                 <span className="text-sm font-semibold text-ink">「{q.question}」</span>
                 <span className="mono shrink-0 text-xs text-ink3">
-                  {qHit === 0 ? "沒推薦你" : `${qHit}/${q.results.length} 推薦你`} {isOpen ? "▲" : "▼"}
+                  {qHit > 0
+                    ? `🟢 ${qHit}/${q.results.length} 推薦你`
+                    : q.results.some((r) => r.citedSelf)
+                      ? "🟡 查過你沒推你"
+                      : "🔴 沒推薦你"}{" "}
+                  {isOpen ? "▲" : "▼"}
                 </span>
               </button>
               {isOpen && (
@@ -2897,12 +2907,12 @@ function BrandVisibilityCard({ result }: { result: VisibilityCardData }) {
         {result.namedSelf === undefined
           ? result.citedSelf
             ? "🟢 引用了你自己的網站"
-            : "🟡 沒有引用你自己的網站"
+            : "🔴 沒有引用你自己的網站"
           : result.namedSelf
             ? "🟢 答案裡推薦了你"
             : result.citedSelf
               ? "🟡 查過你，但答案裡沒推薦你"
-              : "🟡 沒有推薦你"}
+              : "🔴 沒有推薦你"}
       </p>
       <p className="mt-2 text-sm leading-relaxed text-ink2">{result.advice}</p>
 
