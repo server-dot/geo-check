@@ -1,4 +1,4 @@
-import { LEVEL, CATEGORY, sortByOrder, type CheckResult } from './geo-audit-rules';
+import { LEVEL, CATEGORY, sortByOrder, type CheckResult, type CheckStatus } from './geo-audit-rules';
 import { runAiChecks } from './geo-audit-ai';
 import { buildLocalBizCheck, buildSchemaCompletenessCheck } from './geo-schema-check';
 import { normalizeUrl, type CrawlResult } from './geo-audit-crawler';
@@ -170,9 +170,17 @@ export async function aggregateAuditChecks(
       if (probs.length) tkdDetails.push({ url: p.url, note: probs.join('、') });
     }
     const issues = te + tl + de + dl;
-    out.push(issues
-      ? { key: 'tkd', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: '每頁的標題與描述完不完整', status: 'fail', advice: `${Y} 頁裡，標題留空 ${te} 頁、太長 ${tl} 頁；描述留空 ${de} 頁、太長 ${dl} 頁。`, impact: '標題跟描述是 Google 和 AI 判斷「這頁在講什麼」的第一手依據，也是客戶在搜尋結果上唯一看得到的兩行字。留空等於沒自我介紹，太長會被切掉，客戶看到的是半句話。', technical: `標題長度改用像素寬度估算（全形≈${FULLWIDTH_PX}px／半形≈${HALFWIDTH_PX}px，安全上限 ${TITLE_SAFE_PX}px），比純字數門檻更貼近 Google 搜尋結果的實際截斷點；描述以 80 字為門檻。`, evidence: `標題 空${te}/長${tl}｜描述 空${de}/長${dl}（共 ${Y} 頁）`, details: tkdDetails }
-      : { key: 'tkd', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: '每頁的標題與描述完不完整', status: 'ok', advice: `爬到的 ${Y} 頁，標題跟描述都有填，長度也都在安全範圍內`, evidence: `共 ${Y} 頁皆正常` });
+    // 原本「40 頁裡有 1 頁標題太長就紅」，太嚴（2026-09-15 小積木回報）。改成看比例，
+    // 而且「留空」跟「太長」分開：標題留空是這一頁沒自我介紹，真的卡住；太長只是搜尋結果
+    // 上被切掉，是體質問題。需處理＝標題留空達一成以上，或有問題的頁面過半；其餘可優化。
+    const problemPages = tkdDetails.length;
+    const tkdStatus: CheckStatus = issues === 0 ? 'ok' : (te >= Math.max(1, Math.ceil(Y * 0.1)) || problemPages > Y / 2) ? 'fail' : 'warn';
+    const tkdTechnical = `標題長度改用像素寬度估算（全形≈${FULLWIDTH_PX}px／半形≈${HALFWIDTH_PX}px，安全上限 ${TITLE_SAFE_PX}px），比純字數門檻更貼近 Google 搜尋結果的實際截斷點；描述以 80 字為門檻。判定：標題留空達一成以上或有問題的頁面過半 → 需處理；其餘有問題 → 可優化。`;
+    out.push(tkdStatus === 'ok'
+      ? { key: 'tkd', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: '每頁的標題與描述完不完整', status: 'ok', advice: `爬到的 ${Y} 頁，標題跟描述都有填，長度也都在安全範圍內`, evidence: `共 ${Y} 頁皆正常` }
+      : tkdStatus === 'fail'
+        ? { key: 'tkd', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: '每頁的標題與描述完不完整', status: 'fail', advice: `${Y} 頁裡，標題留空 ${te} 頁、太長 ${tl} 頁；描述留空 ${de} 頁、太長 ${dl} 頁。`, impact: '標題跟描述是 Google 和 AI 判斷「這頁在講什麼」的第一手依據，也是客戶在搜尋結果上唯一看得到的兩行字。留空等於沒自我介紹，太長會被切掉，客戶看到的是半句話。', technical: tkdTechnical, evidence: `標題 空${te}/長${tl}｜描述 空${de}/長${dl}（共 ${Y} 頁，${problemPages} 頁有問題）`, details: tkdDetails }
+        : { key: 'tkd', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: '每頁的標題與描述完不完整', status: 'warn', advice: `${Y} 頁裡有 ${problemPages} 頁要修：標題留空 ${te} 頁、太長 ${tl} 頁；描述留空 ${de} 頁、太長 ${dl} 頁。大多數頁面沒問題。`, impact: '太長的標題在搜尋結果上會被切掉，客戶看到的是半句話；描述太長或留空，Google 會自己從內文抓一段來代替，不一定是你想講的重點。', technical: tkdTechnical, evidence: `標題 空${te}/長${tl}｜描述 空${de}/長${dl}（共 ${Y} 頁，${problemPages} 頁有問題）`, details: tkdDetails });
   }
 
   // 11. h1、h2 使用
@@ -192,9 +200,20 @@ export async function aggregateAuditChecks(
       if (p.h2 === 0) probs.push('沒有小標題');
       if (probs.length) headingDetails.push({ url: p.url, note: probs.join('、') });
     }
-    out.push(problems.length
-      ? { key: 'headings', level: LEVEL.RANK, category: CATEGORY.TECH, item: '每頁有沒有清楚的大小標題', status: 'fail', advice: `${Y} 頁裡：${problems.join('、')}。`, impact: '大小標題是內容的骨架，AI 靠它判斷這頁的重點是什麼、哪些是主題哪些是細節。沒有主標題等於整頁是一團沒有分段的文字；有兩個主標題等於同時宣稱兩件事是重點，AI 只能挑一個猜。', technical: '對應 HTML 的 <h1>／<h2> 標籤。每頁只留一個 <h1>，並用 <h2> 分出段落層次。', evidence: problems.join('、'), details: headingDetails }
-      : { key: 'headings', level: LEVEL.RANK, category: CATEGORY.TECH, item: '每頁有沒有清楚的大小標題', status: 'ok', advice: `爬到的 ${Y} 頁標題層次都完整`, evidence: `共 ${Y} 頁皆正常` });
+    // 跟 tkd 同一套比例判定：主標題出問題（沒有／兩個以上）達一成，或有問題的頁面過半 → 需處理；
+    // 其餘可優化。只缺小標題的頁面（短的商品頁、活動頁常見）不該一頁就整項紅。
+    // impact 只講這個網站實際碰到的狀況，不把「兩個主標題」那句硬塞給沒這問題的站。
+    const h1Problems = noH1 + multiH1;
+    const headingStatus: CheckStatus =
+      problems.length === 0 ? 'ok' : (h1Problems >= Math.max(1, Math.ceil(Y * 0.1)) || headingDetails.length > Y / 2) ? 'fail' : 'warn';
+    const impactParts = ['大小標題是內容的骨架，AI 靠它判斷這頁的重點是什麼、哪些是主題哪些是細節。'];
+    if (noH1) impactParts.push('沒有主標題，AI 得自己猜這頁在講什麼。');
+    if (multiH1) impactParts.push('有兩個主標題等於同時宣稱兩件事是重點，AI 只能挑一個猜。');
+    if (noH2) impactParts.push('沒有小標題，整頁是一段沒有分段的文字，AI 抓不出哪一段能拿來當答案；內容很短的頁面影響不大，長的頁面影響就大。');
+    const headingTechnical = '對應 HTML 的 <h1>／<h2> 標籤。每頁只留一個 <h1>，並用 <h2> 分出段落層次。判定：主標題出問題的頁面達一成或有問題的頁面過半 → 需處理；其餘有問題 → 可優化。';
+    out.push(headingStatus === 'ok'
+      ? { key: 'headings', level: LEVEL.RANK, category: CATEGORY.TECH, item: '每頁有沒有清楚的大小標題', status: 'ok', advice: `爬到的 ${Y} 頁標題層次都完整`, evidence: `共 ${Y} 頁皆正常` }
+      : { key: 'headings', level: LEVEL.RANK, category: CATEGORY.TECH, item: '每頁有沒有清楚的大小標題', status: headingStatus, advice: `${Y} 頁裡：${problems.join('、')}。${headingStatus === 'warn' ? '大多數頁面沒問題。' : ''}`, impact: impactParts.join(''), technical: headingTechnical, evidence: `${problems.join('、')}（共 ${Y} 頁，${headingDetails.length} 頁有問題）`, details: headingDetails });
   }
 
   // 12a. Schema：純規則核對全站 JSON-LD 欄位完整度，不用 AI 猜
