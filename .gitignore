@@ -41,3 +41,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 public/__mobile.html
+
+# 部落格草稿：截圖裡有信箱畫面與別站的報告，不進版控
+/blog-drafts

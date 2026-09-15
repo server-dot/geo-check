@@ -7,6 +7,7 @@ import Masthead from "@/components/marketing/Masthead";
 import Section from "@/components/marketing/Section";
 import Footer from "@/components/marketing/Footer";
 import { tallyCitedDomains, type CitedDomain } from "@/lib/geo-cited-domains";
+import { buildCategories5, computeOverallScore, CATEGORY5_KEY_MAP, CATEGORY5_ORDER, type Category5 } from "@/lib/geo-score";
 import { track } from "@/lib/ga";
 
 // 首頁 hero 下面的三格數字帶，掛載時跑一次 1100ms 的 ease-out-cubic count-up
@@ -155,6 +156,22 @@ interface KeywordVisibilityResult extends VisibilityCardData {
   keyword: string;
 }
 
+// 推薦題自動查詢（對應後端 RecommendVisibility）
+interface RecommendedName {
+  name: string;
+  count: number;
+  engines: string[];
+  isSelf: boolean;
+}
+interface RecommendVisibility {
+  brandName: string;
+  questions: { question: string; results: VisibilityCardData[] }[];
+  names: RecommendedName[];
+  askedAt: string;
+  totalAnswers: number;
+  citedSelfCount: number;
+}
+
 interface LlmsTxtLink {
   text: string;
   url: string;
@@ -230,6 +247,8 @@ interface StatusResponse {
   schemaCards?: SchemaTypeCard[];
   // 逐頁可讀字數（爬取順序），健檢報告圖的累積曲線用
   pageWords?: number[];
+  // 推薦題自動查詢，完成才有；null 代表沒跑（沒 API key 或失敗）
+  recommendVisibility?: RecommendVisibility | null;
   error?: string;
 }
 
@@ -496,94 +515,6 @@ function StatusChip({ glyph, color, size = 18 }: { glyph: string; color: string;
       {glyph}
     </span>
   );
-}
-
-interface Category5 {
-  name: string;
-  passRate: number; // (ok×1 + warn×0.5) / total × 100，四捨五入
-  total: number;
-  ok: number;
-  warn: number;
-  fail: number;
-}
-
-// 設計稿提案的五分類合併（依 lib/geo-audit-rules.ts 的 CATEGORY／key 為準，不是
-// 照設計稿範例數字硬套——那組數字是從截圖判讀的，跟實際程式碼的分類邊界對不齊）：
-// AI 可達性＝純 engine 層（bot 存取＋Content Signals＋llms.txt），不動 21 項深度健檢；
-// 其餘四組是 21 項深度健檢依 key 重新分組。
-const CATEGORY5_KEY_MAP: Record<string, string> = {
-  duplicate: "內容與追蹤",
-  externalLinks: "內容與追蹤",
-  analytics: "內容與追蹤",
-  tkd: "內容與追蹤",
-  schema: "結構化資料",
-  localbiz: "結構化資料",
-  sitemap: "技術與索引",
-  robots: "技術與索引",
-  indexing: "技術與索引",
-  headings: "技術與索引",
-  llmsSeo: "技術與索引",
-  page: "技術與索引",
-  viewport: "技術與索引",
-  breadcrumb: "技術與索引",
-  internalLinks: "技術與索引",
-  brokenLinks: "技術與索引",
-  homepage: "技術與索引",
-  imgAlt: "技術與索引",
-  imgFormat: "技術與索引",
-  eeat: "品牌與權威",
-  aboutPage: "品牌與權威",
-  contactPage: "品牌與權威",
-  // categoryDepth 量的是「網址最深幾層 + 幾頁有麵包屑」，那是網站結構，不是品牌
-  // 權威。它原本掛在品牌與權威底下，讓一個只有 2 項的分類憑一個技術指標拿到 75 分
-  // ——一個連 GSC 都沒裝的網站不可能有 75 分的品牌權威。移到技術與索引。
-  categoryDepth: "技術與索引",
-};
-const CATEGORY5_ORDER = ["AI 可達性", "內容與追蹤", "結構化資料", "技術與索引", "品牌與權威"];
-
-function buildCategories5(engine?: EngineResult, audit?: CheckItem[]): Category5[] {
-  const buckets = new Map<string, { ok: number; warn: number; fail: number }>();
-  const bump = (name: string, status: CheckStatus) => {
-    const b = buckets.get(name) ?? { ok: 0, warn: 0, fail: 0 };
-    b[status] += 1;
-    buckets.set(name, b);
-  };
-
-  if (engine) {
-    for (const b of engine.results) {
-      bump("AI 可達性", b.status === "allowed" ? "ok" : b.status === "blocked" ? "fail" : "warn");
-    }
-    if (engine.contentSignals) bump("AI 可達性", engine.contentSignals.declared ? "ok" : "warn");
-    if (engine.llmsTxt.exists !== null) {
-      bump("AI 可達性", engine.llmsTxt.exists ? (engine.llmsTxt.quality?.status === "ok" ? "ok" : "warn") : "warn");
-    }
-  }
-
-  if (audit) {
-    for (const c of audit) {
-      const group = CATEGORY5_KEY_MAP[c.key];
-      if (group) bump(group, c.status);
-    }
-  }
-
-  return CATEGORY5_ORDER.map((name) => {
-    const b = buckets.get(name) ?? { ok: 0, warn: 0, fail: 0 };
-    const total = b.ok + b.warn + b.fail;
-    const passRate = total > 0 ? Math.round(((b.ok + b.warn * 0.5) / total) * 100) : 0;
-    return { name, passRate, total, ok: b.ok, warn: b.warn, fail: b.fail };
-  });
-}
-
-// 總分＝5 分類各自 passRate 的平均（每個分類權重相同，跟雷達圖五個角一一對應，
-// 不會因為某個分類底下檢測項目數量多就搶走權重）。等第門檻是隨性抓的區間，
-// 沒有業界標準可循——先求「有個總覽數字」堪用，之後要調全靠這幾個數字改。
-function computeOverallScore(categories: Category5[]): { score: number; grade: string; gradeLabel: string } {
-  const score = categories.length > 0 ? Math.round(categories.reduce((s, c) => s + c.passRate, 0) / categories.length) : 0;
-  const grade =
-    score >= 85 ? "A" : score >= 70 ? "B" : score >= 55 ? "C" : score >= 40 ? "D" : "F";
-  const gradeLabel =
-    score >= 85 ? "優異" : score >= 70 ? "良好" : score >= 55 ? "普通" : score >= 40 ? "待加強" : "不合格";
-  return { score, grade, gradeLabel };
 }
 
 // ── 報告總表（一張圖看完）──────────────────────────────
@@ -1809,8 +1740,9 @@ function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData 
 // 按了才動態載入，不進首頁的 bundle。
 function ReportBoardSection({
   keywordPage,
+  jobId,
   ...props
-}: React.ComponentProps<typeof ReportBoard> & { keywordPage: KeywordPageData | null }) {
+}: React.ComponentProps<typeof ReportBoard> & { keywordPage: KeywordPageData | null; jobId: string | null }) {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const exportRef = useRef<HTMLDivElement>(null);
@@ -1858,14 +1790,21 @@ function ReportBoardSection({
     <div>
       <div className="report-board-actions mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="eyebrow">五分類總覽</h2>
-        <button
-          type="button"
-          onClick={() => { setExportError(null); setExporting(true); }}
-          disabled={exporting}
-          className="btn-line text-xs disabled:opacity-60"
-        >
-          {exporting ? "產生中…" : "下載 PDF"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {jobId && (
+            <a href={`/api/geo/markdown?id=${jobId}`} target="_blank" rel="noopener noreferrer" className="btn-line text-xs">
+              AI 可讀版
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={() => { setExportError(null); setExporting(true); }}
+            disabled={exporting}
+            className="btn-line text-xs disabled:opacity-60"
+          >
+            {exporting ? "產生中…" : "下載 PDF"}
+          </button>
+        </div>
       </div>
       <div className="report-board-scroll">
         <ReportBoard {...props} />
@@ -1875,6 +1814,12 @@ function ReportBoardSection({
         認不認得你、優先處理順序全部在一張紙上，直接轉給合作對象。
         {keywordPage ? "關鍵字 AI 能見度的結果會放在第 2 頁。" : "下面查過關鍵字的話，結果會多一頁放進去。"}
       </p>
+      {jobId && (
+        <p className="report-board-actions mt-1.5 text-xs text-ink3">
+          「AI 可讀版」是同一份報告的純文字（Markdown）版本。這份報告一直在講 AI 讀不讀得到你的內容，
+          而報告本身是前端畫出來的頁面，AI 抓下去只有骨架——所以我們自己也附一份讀得到的。連結只有你手上這一份，一小時後失效。
+        </p>
+      )}
       {exportError && <p className="mt-2 text-xs text-fail">PDF 沒產出來：{exportError}</p>}
       {exporting && (
         <div ref={exportRef} className="rb-export" aria-hidden="true">
@@ -2763,6 +2708,97 @@ function renderInlineMarkdown(text: string, citations: { url: string }[]): React
 // 品牌能見度：不只講「AI 讀不讀得到你的網站」，而是真的去問 Perplexity
 // 「你知道這個品牌嗎」，讓使用者看到實際的回答文字跟引用來源——
 // 有沒有引用到自己的網域，是這整份健檢裡最直接的「有沒有效」證據。
+// 推薦題自動查詢區塊：三題各引擎的回答卡 + 「AI 點名推薦了誰」名單。
+// 題目是模型從首頁內容猜的，畫面上要講明白，不能讓人以為是真實搜尋量。
+// 名單是從回答正文抽的專有名詞（主觀），所以每張卡都保留原文可以核對；
+// 客觀的「引用網域」彙總在下面另一塊，兩個一起看。
+function RecommendBlock({ data }: { data: RecommendVisibility }) {
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const hit = data.citedSelfCount;
+  const total = data.totalAnswers;
+  const askedAt = new Date(data.askedAt);
+  const askedLabel = `${askedAt.getMonth() + 1}/${askedAt.getDate()} ${String(askedAt.getHours()).padStart(2, "0")}:${String(askedAt.getMinutes()).padStart(2, "0")}`;
+  const selfNamed = data.names.some((n) => n.isSelf);
+  const others = data.names.filter((n) => !n.isSelf).slice(0, 12);
+
+  return (
+    <div className="mb-3">
+      <div className="rounded-[10px] border border-line bg-card p-6">
+        <p className="mono text-[11px] font-medium tracking-wide text-ink3 uppercase">我們先幫你問了 {data.questions.length} 題</p>
+        <p className="mt-1 text-lg font-bold text-ink">
+          {hit === 0
+            ? `🟡 ${total} 次回答，沒有一次引用你的網站`
+            : hit === total
+              ? `🟢 ${total} 次回答全部引用了你的網站`
+              : `🟢 ${total} 次回答裡有 ${hit} 次引用了你的網站`}
+        </p>
+        <p className="mt-2 max-w-[38em] text-sm leading-relaxed text-ink2">
+          這 {data.questions.length} 題是 AI 讀了你的首頁後，猜「一般人在找這類服務時會怎麼問」寫出來的，題目裡沒有你的品牌名。
+          它們只是猜的，不是真實搜尋量；要看跟你主推項目對不對得上。
+        </p>
+
+        {data.names.length > 0 && (
+          <div className="mt-5">
+            <p className="text-sm font-semibold text-ink">AI 在回答裡點名推薦的：</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {data.names.filter((n) => n.isSelf).map((n) => (
+                <span key={n.name} className="inline-flex items-center gap-1.5 rounded-full border border-lime bg-inset px-3 py-1 text-sm font-semibold text-ink">
+                  {n.name}
+                  <span className="mono text-xs text-ink3">{n.count} 次</span>
+                </span>
+              ))}
+              {others.map((n) => (
+                <span key={n.name} className="inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-sm text-ink2">
+                  {n.name}
+                  <span className="mono text-xs text-ink3">{n.count} 次</span>
+                </span>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-ink3">
+              {selfNamed
+                ? "名單裡有你。其他名字是同一批問題底下 AI 也會推的對象。"
+                : "名單裡沒有你。這些名字才是客戶問 AI 時真的會看到的答案。"}
+              {data.names.length > others.length + (selfNamed ? 1 : 0) && ` 另有 ${data.names.length - others.length - (selfNamed ? 1 : 0)} 個只被點名一次的沒列。`}
+            </p>
+          </div>
+        )}
+
+        <p className="mt-4 text-xs text-ink3">
+          {askedLabel} 問的，Perplexity 與 ChatGPT（GPT-4o＋即時搜尋）各問一次。AI 的回答會隨時間、問法變動，這是當下的快照，不是趨勢。
+        </p>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {data.questions.map((q) => {
+          const isOpen = !!open[q.question];
+          const qHit = q.results.filter((r) => r.citedSelf).length;
+          return (
+            <div key={q.question} className="rounded-[10px] border border-line bg-card">
+              <button
+                type="button"
+                onClick={() => setOpen((prev) => ({ ...prev, [q.question]: !isOpen }))}
+                className="flex w-full items-start justify-between gap-3 p-4 text-left"
+              >
+                <span className="text-sm font-semibold text-ink">「{q.question}」</span>
+                <span className="mono shrink-0 text-xs text-ink3">
+                  {qHit === 0 ? "沒引用你" : `${qHit}/${q.results.length} 引用你`} {isOpen ? "▲" : "▼"}
+                </span>
+              </button>
+              {isOpen && (
+                <div className="space-y-3 border-t border-line p-4">
+                  {q.results.map((r) => (
+                    <BrandVisibilityCard key={r.engine} result={r} />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function BrandVisibilityCard({ result }: { result: VisibilityCardData }) {
   return (
     <div className="rounded-[10px] border border-line bg-card p-6">
@@ -2896,6 +2932,8 @@ export default function HomeClient({
   // 記住「目前使用者在等的 job」——pollJob 收到回應時如果不是這個 id 就丟棄，
   // 避免連按兩次或用 Enter 繞過按鈕 disabled 時，舊的/別的 job 蓋掉新的結果畫面。
   const activeJobId = useRef<string | null>(null);
+  // ref 改值不會重繪，但「AI 可讀版」連結要跟著這次健檢的 id 出現在畫面上，所以另外存一份 state
+  const [reportJobId, setReportJobId] = useState<string | null>(null);
   const [showRawContent, setShowRawContent] = useState(false);
   const [customKeywords, setCustomKeywords] = useState<string[]>([]);
   const [addedSuggestions, setAddedSuggestions] = useState<string[]>([]);
@@ -2927,6 +2965,7 @@ export default function HomeClient({
       if (!res.ok) throw new Error(data.error ?? "檢測失敗");
       const jobId = data.jobId as string;
       activeJobId.current = jobId;
+      setReportJobId(jobId);
       await pollJob(jobId);
     } catch (err) {
       const reason = err instanceof Error ? err.message : "檢測失敗";
@@ -2982,8 +3021,15 @@ export default function HomeClient({
 
   // 把所有關鍵字查詢的引用來源彙總成一份「AI 目前的推薦名單」。
   // 純前端計算，資料是已經查回來的 keywordResults，不會多花任何 API 額度。
+  // 自動跑的推薦題跟使用者自己查的關鍵字合在一起算——對 AI 來說都是「這個主題底下推誰」。
+  const recommend = status?.recommendVisibility ?? null;
+  const recommendAsKeywordResults: Record<string, KeywordVisibilityResult[]> = Object.fromEntries(
+    (recommend?.questions ?? []).map((q) => [q.question, q.results.map((r) => ({ ...r, keyword: q.question }))]),
+  );
+  const allKeywordResults: Record<string, KeywordVisibilityResult[]> = { ...recommendAsKeywordResults, ...keywordResults };
+  const allKeywordOrder = [...Object.keys(recommendAsKeywordResults), ...activeKeywords];
   const citedDomains = tallyCitedDomains(
-    Object.entries(keywordResults).flatMap(([keyword, results]) =>
+    Object.entries(allKeywordResults).flatMap(([keyword, results]) =>
       results.map((r) => ({ keyword, citations: r.citations })),
     ),
   );
@@ -3296,14 +3342,15 @@ export default function HomeClient({
                 它們的，所以整個拿掉，不是搬到別的地方。 */}
             <div className="mt-6">
               <ReportBoardSection
+                jobId={reportJobId}
                 origin={engine.origin}
                 engine={engine}
                 audit={status?.audit}
                 pageWords={status?.pageWords}
                 crawledPages={status?.progress.crawled ?? 0}
                 keywordPage={
-                  Object.keys(keywordResults).length > 0
-                    ? { keywords: activeKeywords, results: keywordResults, citedDomains }
+                  Object.keys(allKeywordResults).length > 0
+                    ? { keywords: allKeywordOrder, results: allKeywordResults, citedDomains }
                     : null
                 }
               />
@@ -3324,7 +3371,23 @@ export default function HomeClient({
               <h2 className="text-[19px] font-bold text-ink">關鍵字 AI 能見度</h2>
               <p className="mt-1 text-sm font-medium text-ink2">你想搶的主題，AI 推薦名單裡有你嗎？</p>
               <p className="mb-3 mt-1.5 max-w-[34em] text-xs text-ink3">
-                上面看的是「AI 知不知道你」；這裡看的是「有人拿某個主題去問 AI，AI 會不會推薦到你」——這才是大部分人真正在意的問題。以下是從標題／描述自動抓的候選字，只是建議，不會自動加入查詢，要自己點才會加進去。
+                上面看的是「AI 知不知道你」；這裡看的是「有人拿某個主題去問 AI，AI 會不會推薦到你」——這才是大部分人真正在意的問題。
+              </p>
+
+              {status?.status !== "completed" && status?.status !== "failed" && (
+                <p className="mb-3 text-sm text-ink3">我們正在幫你問 AI 幾個推薦題，深度健檢跑完會一起出來…</p>
+              )}
+
+              {recommend && (
+                <RecommendBlock data={recommend} />
+              )}
+
+              {status?.status === "completed" && !recommend && (
+                <p className="mb-3 text-sm text-ink3">這次沒有自動幫你問推薦題（AI 查詢沒開或呼叫失敗），下面可以自己加關鍵字查。</p>
+              )}
+
+              <p className="mb-3 mt-6 max-w-[34em] text-xs text-ink3">
+                想查別的主題，自己加關鍵字。以下是從標題／描述自動抓的候選字，只是建議，不會自動加入查詢，要自己點才會加進去。
               </p>
               <div className="rounded-[10px] border border-line bg-card p-6">
                 {suggestedKeywords.length > 0 && (
@@ -3419,9 +3482,9 @@ export default function HomeClient({
 
               {citedDomains.length > 0 && (
                 <div className="mt-6">
-                  <h3 className="text-[17px] font-bold text-ink">這些關鍵字底下，AI 在推誰</h3>
+                  <h3 className="text-[17px] font-bold text-ink">這些題目底下，AI 引用了哪些網站</h3>
                   <p className="mb-3 mt-1.5 max-w-[34em] text-xs text-ink3">
-                    把上面每個回答的引用來源依網域彙總起來，就是 AI 目前的推薦名單，依被引用次數排序。名單裡通常會混進百科、社群、論壇——那是 AI 找資料的地方，不是你的同業；要看的是跟你做同一件事、卻被引用到的那幾個網域。
+                    把上面每個回答（自動問的推薦題＋你自己查的關鍵字）的引用來源依網域彙總起來，依被引用次數排序。名單裡通常會混進百科、社群、論壇——那是 AI 找資料的地方，不是你的同業；要看的是跟你做同一件事、卻被引用到的那幾個網域。
                   </p>
                   <div className="rounded-[10px] border border-line bg-card p-6">
                     <ol className="space-y-2.5">

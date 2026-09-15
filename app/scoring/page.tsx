@@ -8,7 +8,7 @@ import FaqJsonLd from "@/components/seo/FaqJsonLd";
 
 export const metadata: Metadata = {
   title: "判斷標準",
-  description: "六個檢測層、三種判定加一種不判定、總分怎麼算、深度健檢的五個分類。",
+  description: "七個檢測層、三種判定加一種不判定、總分怎麼算、深度健檢的五個分類。",
   alternates: { canonical: "/scoring" },
 };
 
@@ -41,6 +41,12 @@ const LAYERS = [
     name: "AI 認不認得你（實際去問）",
     what: "Perplexity 與 ChatGPT 對你的品牌的回答與引用來源",
     how: "實際送出提問，原話與引用連結原封不動貼給你，指向你自己網域的加 ★",
+    verdicts: "★ 引用自己 / 沒有引用你",
+  },
+  {
+    name: "AI 推不推薦你（自動問的推薦題）",
+    what: "三個「找這類服務的人會問 AI 的問題」，以及各引擎回答裡點名推薦了誰",
+    how: "先讓模型讀首頁猜出三個不含品牌名的推薦題，實際問過後把被點名的對象整理成名單",
     verdicts: "★ 引用自己 / 沒有引用你",
   },
   {
@@ -80,12 +86,20 @@ const FAQS = [
     a: "除了 SEO 該看的東西，我們會用 GPTBot、ClaudeBot 等爬蟲的身分實際請求你的頁面，還會實際去問 AI 引擎一個問題，看它答得出你的品牌嗎、引用的是誰的網站。",
   },
   {
-    q: "扣分權重為什麼是 −4 / −0.5？",
-    a: "需處理代表 AI 讀取或引用會直接卡住，可優化是體質問題。權重是目前採用的算法，之後調整會同步改這一頁。",
+    q: "可優化為什麼只算半分，不是不給分？",
+    a: "可優化代表「能用，但體質不夠好」——AI 讀得到，只是會讀得比較吃力或判斷得比較沒把握，跟需處理的「直接卡住」不一樣。所以算 0.5 分，需處理算 0 分。這是目前採用的算法，之後調整會同步改這一頁。",
+  },
+  {
+    q: "AI 沒推薦我，會扣分嗎？",
+    a: "不會。AI 認不認得你、推不推薦你這兩層不計入總分。那是當下的現況快照，背後的原因可能是內容深度、品牌知名度、外部提及——把它折成分數，等於暗示「你補了 llms.txt 就會被推薦」，那是假因果。",
   },
   {
     q: "我 SEO 做得好，為什麼分數不高？",
     a: "分數看的是 AI 能不能讀到、抽得出、敢引用你的內容——結構化資料、可讀字數、Content Signals、llms.txt 這些排名工具不查的東西。排名好不等於容易被引用。",
+  },
+  {
+    q: "那三個推薦題是誰決定的？",
+    a: "模型讀過你的首頁之後猜的，規則是「不能出現你的品牌名」——要問的是這一類，不是這一家。這是推估，不是真實搜尋量，要自己對照主推的服務看題目合不合。想查別的主題，報告下面可以自己加關鍵字。",
   },
   {
     q: "過幾天重跑，分數會不一樣嗎？",
@@ -111,11 +125,11 @@ export default function ScoringPage() {
             每一項都是<mark className="lime-highlight">實測結果。</mark>
           </>
         }
-        lede="用 GPTBot 等身分實際發送請求、把問題丟給 Perplexity 和 ChatGPT 問一次，再跑一次多頁深度健檢，共六個檢測層。判定只有三種：正常、可優化、需處理；讀不到答案時標成 ⚪ 無法判定，並告訴你怎麼自己確認。"
+        lede="用 GPTBot 等身分實際發送請求、把問題丟給 Perplexity 和 ChatGPT 問一次、再問幾個不含品牌名的推薦題，最後跑一次多頁深度健檢，共七個檢測層。判定只有三種：正常、可優化、需處理；讀不到答案時標成 ⚪ 無法判定，並告訴你怎麼自己確認。"
       />
 
-      <Section k="01" eyebrow="SIX LAYERS" title="六個檢測層">
-        <p className="prose mt-4">前四層是「AI 進不進得來、讀不讀得到、你有沒有表態」，第五層是實際去問 AI，第六層是多頁深度健檢。</p>
+      <Section k="01" eyebrow="SEVEN LAYERS" title="七個檢測層">
+        <p className="prose mt-4">前四層是「AI 進不進得來、讀不讀得到、你有沒有表態」，第五、六層是實際去問 AI——一個問「認不認得你」，一個問「推不推薦你」——第七層是多頁深度健檢。</p>
         <table className="mt-[30px]">
           <thead>
             <tr>
@@ -156,25 +170,26 @@ export default function ScoringPage() {
       </Section>
 
       <Section k="03" eyebrow="THE SCORE" title="總分怎麼算">
-        <p className="prose mt-4">從 100 分開始扣。只有深度健檢的項目會扣分，AI 引擎層（爬蟲存取、內容可讀、Content Signals、llms.txt）全部通過時不扣分。</p>
+        <p className="prose mt-4">
+          總分不是扣分制，是五個分類各自的通過率平均。每個分類權重相同——不會因為某個分類底下的檢測項目比較多，就讓那個分類主宰總分。
+        </p>
         <div className="report-preview">
-          {"起始 100 分\n每個需處理（fail）的深度健檢項目   −4 分\n每個可優化（warn）的深度健檢項目   −0.5 分\nAI 引擎層全部通過時不扣分\n四捨五入到整數"}
+          {"每個分類的通過率 =（正常 × 1 ＋ 可優化 × 0.5）÷ 該分類項目數 × 100\n總分 = 五個分類通過率的平均，四捨五入到整數\n\n例：95、63、75、82、83 →（95＋63＋75＋82＋83）÷ 5 = 79.6 → 80 分"}
         </div>
-        <dl className="figs mt-[26px] max-w-[52em] grid-cols-1 sm:grid-cols-3">
-          <div>
-            <b>100</b>
-            <span>起始分數</span>
-          </div>
-          <div>
-            <b>−4</b>
-            <span>每個需處理項目</span>
-          </div>
-          <div>
-            <b>−0.5</b>
-            <span>每個可優化項目</span>
-          </div>
-        </dl>
-        <p className="note">四捨五入到整數。例：21 項深度健檢中 4 項需處理、5 項可優化 → 100 − 16 − 2.5 = 81.5 → 82 分。</p>
+        <p className="note">
+          報告裡會把這一行算式直接印出來，你可以自己對。需處理的項目算 0 分、可優化算半分——可優化代表「能用但體質不好」，不是完全不通過。
+        </p>
+        <p className="prose mt-[26px]">等第只是給總分一個講法，門檻是我們自己訂的區間，沒有業界標準可以對照：</p>
+        <ul className="mt-[26px] list">
+          <li className="list-row"><div className="nm">A 級・優異</div><div className="why">五個分類大致都通過，剩下的是細節</div><div className="st">85–100</div></li>
+          <li className="list-row"><div className="nm">B 級・良好</div><div className="why">主要的路都通，有幾個分類明顯拖後腿</div><div className="st">70–84</div></li>
+          <li className="list-row"><div className="nm">C 級・普通</div><div className="why">有一半左右的項目沒過，要排優先序處理</div><div className="st">55–69</div></li>
+          <li className="list-row"><div className="nm">D 級・待加強</div><div className="why">多數項目沒過，AI 讀你的內容會處處卡住</div><div className="st">40–54</div></li>
+          <li className="list-row"><div className="nm">F 級・不合格</div><div className="why">基本的可達性或內容就不成立</div><div className="st">0–39</div></li>
+        </ul>
+        <p className="note">
+          AI 認不認得你、AI 推不推薦你這兩層不計入總分。那是現況快照，不是你的網站做錯了什麼——把它折成分數會變成假因果。
+        </p>
       </Section>
 
       <Section k="04" eyebrow="FIVE CATEGORIES" title="深度健檢的五個分類">

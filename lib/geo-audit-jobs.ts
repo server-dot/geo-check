@@ -5,6 +5,7 @@ import type { WafHint } from './geo-waf-fingerprint';
 import type { BrandVisibilityResult } from './geo-brand-visibility';
 import type { LlmsTxtQuality } from './geo-llms-txt';
 import type { SchemaTypeCard } from './geo-schema-check';
+import type { RecommendVisibility } from './geo-recommend-visibility';
 
 // ── GEO 深度健檢：背景工作進度存放（module 內 in-memory Map）────────────
 // 多頁爬蟲＋AI 語意判斷跑起來要幾十秒到一兩分鐘，改成背景 job：
@@ -41,6 +42,9 @@ export interface AuditJob {
   schemaCards?: SchemaTypeCard[];
   // 逐頁可讀字數，依爬取順序。健檢報告圖的累積曲線用這個畫。
   pageWords?: number[];
+  // 推薦題自動查詢（3 題 × 各引擎 + 被點名的名單）。跟爬蟲並行跑，完成才有；
+  // null 代表沒設 API key 或整段失敗，前端就不顯示這一塊。
+  recommendVisibility?: RecommendVisibility | null;
   error?: string;
   createdAt: number;
   updatedAt: number;

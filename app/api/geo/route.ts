@@ -9,7 +9,8 @@ import {
 import { analyzeContentVisibility, type ContentVisibility } from '@/lib/geo-content-visibility';
 import { detectWaf, type WafHint } from '@/lib/geo-waf-fingerprint';
 import { probeBotAccess, type ProbeResult } from '@/lib/geo-bot-probe';
-import { checkBrandVisibility } from '@/lib/geo-brand-visibility';
+import { checkBrandVisibility, guessBrandName } from '@/lib/geo-brand-visibility';
+import { runRecommendVisibility } from '@/lib/geo-recommend-visibility';
 import { analyzeLlmsTxt } from '@/lib/geo-llms-txt';
 import { createAuditJob, updateAuditJob, type EngineResult } from '@/lib/geo-audit-jobs';
 import { readTextCapped, crawlSite } from '@/lib/geo-audit-crawler';
@@ -248,6 +249,21 @@ export async function POST(req: NextRequest) {
 
   // ── 背景執行（不 await，讓請求先回 jobId）──
   void (async () => {
+    // 推薦題查詢跟爬蟲互不相依，先開跑；要等結果時再 await。
+    // 這段自己吞錯（回 null），不能讓它把整個深度健檢弄成 failed。
+    const vis = engine.visibility;
+    const recommendPromise = vis
+      ? runRecommendVisibility(
+          {
+            brandName: guessBrandName(vis.title, vis.orgName),
+            title: vis.title,
+            description: vis.description,
+            h1: vis.h1,
+            leadParagraphs: vis.leadParagraphs,
+          },
+          origin,
+        ).catch(() => null)
+      : Promise.resolve(null);
     try {
       const crawl = await crawlSite(origin, {
         onProgress: (p) =>
@@ -265,10 +281,13 @@ export async function POST(req: NextRequest) {
         rawSchemaCards,
         crawl.pages.map((p) => ({ url: p.url, mainText: p.mainText })),
       );
+      updateAuditJob(job.id, { status: 'analyzing', message: '等 AI 回答推薦題…' });
+      const recommendVisibility = await recommendPromise;
       updateAuditJob(job.id, {
         status: 'completed',
         result: audit,
         schemaCards,
+        recommendVisibility,
         pageWords: crawl.pages.filter((p) => p.ok && !p.nonHtml).map((p) => p.mainTextLength),
         message: `完成，爬取 ${crawl.pages.length} 頁、產出 ${audit.length} 項深度檢測`,
       });
