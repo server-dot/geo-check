@@ -1593,7 +1593,10 @@ function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData 
   const host = origin.replace(/^https?:\/\//, "").replace(/\/$/, "");
   const keywords = data.keywords.filter((k) => data.results[k]);
   const allResults = keywords.flatMap((k) => data.results[k]);
-  const hit = allResults.filter((r) => r.citedSelf).length;
+  // 自動推薦題帶 namedSelf（答案裡真的點名你），使用者自己查的關鍵字沒有這一欄——
+  // 有就用嚴格的那個，沒有就退回「引用清單裡有你」。
+  const scored = (r: KeywordVisibilityResult) => (r.namedSelf === undefined ? r.citedSelf : r.namedSelf);
+  const hit = allResults.filter(scored).length;
   const engineCount = new Set(allResults.map((r) => r.engine)).size;
   const selfRank = data.citedDomains.findIndex((d) => d.isSelf);
   const top = data.citedDomains.slice(0, 10);
@@ -1601,6 +1604,7 @@ function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData 
   const rest = data.citedDomains.length - top.length;
   const selfBelow = selfRank >= 10 ? data.citedDomains[selfRank] : null;
   const hitStatus: CheckStatus = allResults.length === 0 ? "warn" : hit === allResults.length ? "ok" : hit > 0 ? "warn" : "fail";
+  const citedOnly = allResults.filter((r) => r.citedSelf && r.namedSelf === false).length;
 
   return (
     <div
@@ -1642,7 +1646,13 @@ function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData 
           unit={`/${allResults.length}`}
           color={RB_STATUS_VAR[hitStatus]}
           dot={RB_STATUS_DOT[hitStatus]}
-          note={hit === 0 ? "AI 回答這些關鍵字時沒有引用你" : `${allResults.length} 次提問裡有 ${hit} 次引用了你的網站`}
+          note={
+            hit > 0
+              ? `${allResults.length} 次提問裡有 ${hit} 次把你寫進答案`
+              : citedOnly > 0
+                ? `${allResults.length} 次都沒把你寫進答案，其中 ${citedOnly} 次它查過你`
+                : "AI 回答這些題目時沒有提到你"
+          }
         />
         <RbStat label="被引用的網域" value={data.citedDomains.length} unit="個" dot="🌐" note="所有回答的引用來源，依網域彙總" />
         <RbStat
@@ -1659,7 +1669,7 @@ function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData 
       <div style={{ display: "grid", gridTemplateColumns: keywords.length === 1 ? "1fr" : "repeat(2,1fr)", gap: 16 }}>
         {keywords.map((k) => (
           <RbCard key={k} style={{ gap: 12 }}>
-            <RbCardTitle title={`「${k}」`} note={`${data.results[k].filter((r) => r.citedSelf).length}/${data.results[k].length} 家提到你`} />
+            <RbCardTitle title={`「${k}」`} note={`${data.results[k].filter(scored).length}/${data.results[k].length} 家提到你`} />
             {data.results[k].length === 0 ? (
               <div style={rbEmpty}>這個關鍵字沒有查到結果。</div>
             ) : (
@@ -1669,8 +1679,15 @@ function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData 
                   <div key={r.engine} style={{ border: "1px solid var(--rb-hair)", borderRadius: 9, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 7 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                       <span className="mono rb-clip" style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.engine}</span>
-                      <span style={{ fontSize: 12, whiteSpace: "nowrap", flex: "none", color: r.citedSelf ? "var(--rb-ok)" : "var(--rb-fail)" }}>
-                        {r.citedSelf ? "🟢 有提到你" : "🔴 沒有引用你"}
+                      <span
+                        style={{
+                          fontSize: 12,
+                          whiteSpace: "nowrap",
+                          flex: "none",
+                          color: scored(r) ? "var(--rb-ok)" : r.citedSelf ? "var(--rb-warn)" : "var(--rb-fail)",
+                        }}
+                      >
+                        {scored(r) ? "🟢 有提到你" : r.citedSelf ? "🟡 查過你沒推你" : "🔴 沒有提到你"}
                       </span>
                     </div>
                     <div style={{ fontSize: 12.5, lineHeight: 1.65, color: "var(--rb-ink2)" }}>{r.advice}</div>
@@ -1701,10 +1718,10 @@ function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData 
                 <span className="mono" style={{ fontSize: 11.5, color: "var(--rb-ink3)", textAlign: "right" }}>{i + 1}</span>
                 <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                    <span className="mono rb-clip" style={{ fontSize: 12.5, fontWeight: d.isSelf ? 600 : 400, color: d.isSelf ? "var(--rb-gold)" : "var(--rb-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span className="mono rb-clip" style={{ fontSize: 12.5, fontWeight: d.isSelf ? 600 : 400, color: d.isSelf ? "var(--rb-gold)" : "var(--rb-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: "none", maxWidth: "62%" }}>
                       {d.isSelf ? "★ " : ""}{d.domain}
                     </span>
-                    <span style={{ fontSize: 11, color: "var(--rb-ink3)", whiteSpace: "nowrap", flex: "none" }}>{d.keywords.map((k) => `「${k}」`).join("")}</span>
+                    <span style={{ fontSize: 11, color: "var(--rb-ink3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{citedInLabel(d.keywords)}</span>
                   </div>
                   <div style={{ height: 5, borderRadius: 999, background: "rgba(48,60,84,0.11)", overflow: "hidden" }}>
                     <div style={{ width: `${Math.max(6, (d.count / maxCount) * 100)}%`, height: "100%", background: d.isSelf ? "var(--rb-lime)" : "rgba(48,60,84,0.45)" }} />
@@ -2666,6 +2683,14 @@ function BotAccessList({ results, origin }: { results: AiBotResult[]; origin?: s
 // 直接寫進正文。原本整段當一個 <p> 丟出去，表格的 `|` 會擠成一長串、長網址
 // 撐破卡片（2026-09-15 小積木回報「跑版」）。這裡按行處理：連續的 `|` 開頭行
 // 收成真的表格（自己可以橫向捲，不撐破外層），其餘逐行輸出。
+// 「這個網域出現在哪些題目底下」的標籤。使用者自己加的關鍵字很短（「n8n 教學」），
+// 直接列出來最清楚；但自動生成的推薦題是一整句話，三句列出來會把整列撐爆
+// （2026-09-15 小積木回報報告圖跑版：網域欄被擠成一字一行）。太長就只講題數。
+function citedInLabel(keywords: string[]): string {
+  const joined = keywords.map((k) => `「${k}」`).join("");
+  return [...joined].length <= 18 ? joined : `出現在 ${keywords.length} 題`;
+}
+
 function renderAnswerMarkdown(text: string, citations: { url: string }[]): React.ReactNode {
   const lines = text.split(/\r?\n/);
   const blocks: React.ReactNode[] = [];
@@ -3608,9 +3633,7 @@ export default function HomeClient({
                             </span>
                           )}
                           <span className="mono text-xs text-ink3">{d.count} 次</span>
-                          <span className="text-xs text-ink3">
-                            {d.keywords.map((k) => `「${k}」`).join("")}
-                          </span>
+                          <span className="text-xs text-ink3">{citedInLabel(d.keywords)}</span>
                         </li>
                       ))}
                     </ol>
