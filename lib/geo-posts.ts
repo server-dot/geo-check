@@ -77,6 +77,14 @@ export const POSTS: Post[] = [
     date: '2026-09-04',
     readMinutes: 3,
   },
+  {
+    cat: '內容品質',
+    title: '標題與描述要怎麼寫，AI 引用你的時候才不會講錯？',
+    excerpt: '每一頁的 <title> 跟 meta description，Google 拿去組搜尋結果那兩行字，ChatGPT 有時候只拿這個介紹你的頁面。留空、太長、每頁都一樣各會出什麼事，健檢用像素寬度怎麼量，怎麼修。',
+    href: '/geo/title-description-for-ai',
+    date: '2026-09-17',
+    readMinutes: 3,
+  },
 ];
 
 export const PUBLISHED_POSTS = POSTS.filter((p): p is Post & { href: string } => !!p.href);

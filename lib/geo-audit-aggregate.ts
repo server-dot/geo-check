@@ -180,7 +180,7 @@ export async function aggregateAuditChecks(
       ? { key: 'tkd', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: '每頁的標題與描述完不完整', status: 'ok', advice: `爬到的 ${Y} 頁，標題跟描述都有填，長度也都在安全範圍內`, evidence: `共 ${Y} 頁皆正常` }
       : tkdStatus === 'fail'
         ? { key: 'tkd', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: '每頁的標題與描述完不完整', status: 'fail', advice: `${Y} 頁裡，標題留空 ${te} 頁、太長 ${tl} 頁；描述留空 ${de} 頁、太長 ${dl} 頁。`, impact: '標題跟描述是 Google 和 AI 判斷「這頁在講什麼」的第一手依據，也是客戶在搜尋結果上唯一看得到的兩行字。留空等於沒自我介紹，太長會被切掉，客戶看到的是半句話。', technical: tkdTechnical, evidence: `標題 空${te}/長${tl}｜描述 空${de}/長${dl}（共 ${Y} 頁，${problemPages} 頁有問題）`, details: tkdDetails }
-        : { key: 'tkd', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: '每頁的標題與描述完不完整', status: 'warn', advice: `${Y} 頁裡有 ${problemPages} 頁要修：標題留空 ${te} 頁、太長 ${tl} 頁；描述留空 ${de} 頁、太長 ${dl} 頁。大多數頁面沒問題。`, impact: '太長的標題在搜尋結果上會被切掉，客戶看到的是半句話；描述太長或留空，Google 會自己從內文抓一段來代替，不一定是你想講的重點。', technical: tkdTechnical, evidence: `標題 空${te}/長${tl}｜描述 空${de}/長${dl}（共 ${Y} 頁，${problemPages} 頁有問題）`, details: tkdDetails });
+        : { key: 'tkd', level: LEVEL.RANK, category: CATEGORY.TRACKING, item: '每頁的標題與描述完不完整', status: 'warn', advice: `${Y} 頁裡有 ${problemPages} 頁要修：標題留空 ${te} 頁、太長 ${tl} 頁；描述留空 ${de} 頁、太長 ${dl} 頁。大多數頁面沒問題。`, impact: '標題跟描述太長，在搜尋結果上會被切掉，客戶看到的是半句話；描述留空的話，Google 會自己從內文抓一段來代替，不一定是你想講的重點。', technical: tkdTechnical, evidence: `標題 空${te}/長${tl}｜描述 空${de}/長${dl}（共 ${Y} 頁，${problemPages} 頁有問題）`, details: tkdDetails });
   }
 
   // 11. h1、h2 使用

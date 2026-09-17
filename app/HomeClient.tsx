@@ -295,8 +295,9 @@ const CHECK_UI: Record<CheckStatus, { badge: string; text: string }> = {
 // 前端不用再猜，整個解析器連同 AdviceDiagnosis 一起刪掉。
 
 // 報告文案刻意保留少數幾個專有名詞——不是沒清乾淨，是這幾個有對應的知識文章，
-// 留著才有錨點可以把讀者帶進 /geo 知識庫。沒有文章可連的術語（TKD、canonical、
+// 留著才有錨點可以把讀者帶進 /geo 知識庫。沒有文章可連的術語（canonical、
 // noindex、SSR/SSG、aria-hidden…）一律收進技術細節區，不留在白話文案裡。
+// 「標題跟描述」是白話詞不是術語，列進來是因為 tkd 那篇文章寫好了，三種狀態的文案都含這個詞。
 // 按長度由長到短排序，避免「Content-Signal」被短的子字串先搶走比對。
 const SUGGESTION_GLOSSARY: { term: string; href: string }[] = [
   { term: "Content-Signal", href: "/geo/content-signals-declare" },
@@ -305,6 +306,7 @@ const SUGGESTION_GLOSSARY: { term: string; href: string }[] = [
   { term: "robots.txt", href: "/geo/robots-txt-blocking-ai" },
   { term: "JavaScript", href: "/geo/js-rendering-empty-shell" },
   { term: "WAF", href: "/geo/waf-blocks-despite-allow" },
+  { term: "標題跟描述", href: "/geo/title-description-for-ai" },
 ].sort((a, b) => b.term.length - a.term.length);
 
 // 只存 pattern 字串，不存 RegExp 實例——帶 g 旗標的 RegExp 會把 lastIndex 記在
