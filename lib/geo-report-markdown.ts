@@ -1,6 +1,7 @@
 import type { AuditJob } from './geo-audit-jobs';
 import { buildCategories5, computeOverallScore } from './geo-score';
 import { tallyCitedDomains } from './geo-cited-domains';
+import { summarizeSources, sourceHeadline, SOURCE_KIND_META } from './geo-citation-sources';
 import { sortByOrder } from './geo-audit-rules';
 import { SITE_NAME } from '@/lib/site';
 
@@ -199,6 +200,26 @@ export function buildReportMarkdown(job: AuditJob): string {
       out.push('| --- | --- | --- | --- |');
       for (const d of cited.slice(0, 20)) out.push(`| ${d.domain} | ${d.count} | ${d.keywords.length} | ${d.isSelf ? '是' : ''} |`);
       out.push('');
+    }
+
+    // 行銷部門那一區：同一批引用來源，依「行銷能不能自己動手」分類
+    const breakdown = summarizeSources(
+      rec.questions.flatMap((q) =>
+        q.results.flatMap((r) => r.citations.map((c) => ({ keyword: q.question, url: c.url, title: c.title, isSelf: c.isSelf }))),
+      ),
+    );
+    if (breakdown.total > 0) {
+      out.push('### 行銷部門自己能做的：AI 引用的來源裡，哪些不用工程師也能去佈局');
+      out.push('');
+      out.push(sourceHeadline(breakdown));
+      out.push('');
+      for (const k of breakdown.kinds) {
+        const meta = SOURCE_KIND_META[k.kind];
+        out.push(`**${meta.label}**：${k.count} 次、${k.domains} 個網域、${Math.round(k.share * 100)}%——${meta.action}`);
+        for (const t of k.targets.slice(0, 5)) out.push(`- ${t.title ? esc(t.title) + ' ' : ''}${t.url}（${t.count} 次）`);
+        if (k.targets.length > 5) out.push(`- …另外 ${k.targets.length - 5} 個`);
+        out.push('');
+      }
     }
   }
 

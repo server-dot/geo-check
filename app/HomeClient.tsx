@@ -7,6 +7,7 @@ import Masthead from "@/components/marketing/Masthead";
 import Section from "@/components/marketing/Section";
 import Footer from "@/components/marketing/Footer";
 import { tallyCitedDomains, type CitedDomain } from "@/lib/geo-cited-domains";
+import { summarizeSources, sourceHeadline, SOURCE_KIND_META, type SourceBreakdown, type SourceKindSummary } from "@/lib/geo-citation-sources";
 import { buildCategories5, computeOverallScore, CATEGORY5_KEY_MAP, CATEGORY5_ORDER, type Category5 } from "@/lib/geo-score";
 import { track } from "@/lib/ga";
 import { SITE_NAME } from "@/lib/site";
@@ -1589,6 +1590,7 @@ export type KeywordPageData = {
   keywords: string[];
   results: Record<string, KeywordVisibilityResult[]>;
   citedDomains: CitedDomain[];
+  sourceBreakdown: SourceBreakdown;
 };
 
 function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData }) {
@@ -1745,6 +1747,37 @@ function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData 
               {rest > 0 && <div style={{ color: "var(--rb-ink3)" }}>另外還有 {rest} 個網域被引用過，多半只出現一次，屬於長尾，這裡不列。</div>}
             </div>
           )}
+        </RbCard>
+      )}
+
+      {/* 行銷部門自己能做的：同一批引用來源依「行銷能不能自己動手」分類，
+          PDF 版只放比例列＋每類前 3 個網址，細節在網頁版展開看 */}
+      {data.sourceBreakdown.total > 0 && (
+        <RbCard style={{ gap: 12 }}>
+          <RbCardTitle title="行銷部門自己能做的" note="AI 引用的來源裡，哪些不用工程師也能去佈局" />
+          <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.5, color: "var(--rb-ink)" }}>{sourceHeadline(data.sourceBreakdown)}</div>
+          <div style={{ display: "flex", height: 8, borderRadius: 999, overflow: "hidden", background: "rgba(48,60,84,0.11)" }}>
+            {data.sourceBreakdown.kinds.map((k) => (
+              <div key={k.kind} style={{ width: `${k.share * 100}%`, background: SOURCE_KIND_TONE[k.kind] }} />
+            ))}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", columnGap: 28, rowGap: 10 }}>
+            {data.sourceBreakdown.kinds.filter((k) => k.kind !== "self" && k.kind !== "gov").map((k) => (
+              <div key={k.kind} style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 2, background: SOURCE_KIND_TONE[k.kind], flex: "none", alignSelf: "center" }} />
+                  <span style={{ fontSize: 12.5, fontWeight: 700 }}>{SOURCE_KIND_META[k.kind].label}</span>
+                  <span className="mono" style={{ fontSize: 11, color: "var(--rb-ink3)" }}>{k.count} 次 · {Math.round(k.share * 100)}%</span>
+                </div>
+                <div style={{ fontSize: 11, color: "var(--rb-ink3)", lineHeight: 1.5 }}>{SOURCE_KIND_META[k.kind].action}</div>
+                {k.targets.slice(0, 3).map((t) => (
+                  <div key={t.url} className="rb-clip" style={{ fontSize: 11.5, color: "var(--rb-ink2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {t.title ? t.title : readableUrl(t.url)} <span className="mono" style={{ color: "var(--rb-ink3)" }}>· {t.domain}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
         </RbCard>
       )}
 
@@ -2822,6 +2855,90 @@ function renderInlineMarkdown(text: string, citations: { url: string }[]): React
 // 題目是模型從首頁內容猜的，畫面上要講明白，不能讓人以為是真實搜尋量。
 // 名單是從回答正文抽的專有名詞（主觀），所以每張卡都保留原文可以核對；
 // 客觀的「引用網域」彙總在下面另一塊，兩個一起看。
+// 「行銷部門自己能做的」——把 AI 引用來源依「行銷能不能自己動手」分類。
+// 上面那份推薦名單告訴你 AI 引了誰；這一區告訴行銷主管：那些來源裡，哪些是不用找工程師、
+// 自己就能去佈局的位置（清單文、論壇、媒體、資料庫），並把網址直接列出來。
+// 文案規範同報告其他區：講現況、講這一類是什麼位置，不寫「建議」「應該」。
+const SOURCE_KIND_TONE: Record<string, string> = {
+  listicle: "var(--lime)",
+  forum: "rgba(48,60,84,0.55)",
+  media: "rgba(48,60,84,0.45)",
+  reference: "rgba(48,60,84,0.35)",
+  other: "rgba(48,60,84,0.22)",
+  gov: "rgba(48,60,84,0.16)",
+  self: "var(--goldInk)",
+};
+
+function SourceKindRow({ k, origin }: { k: SourceKindSummary; origin: string }) {
+  const [open, setOpen] = useState(false);
+  const meta = SOURCE_KIND_META[k.kind];
+  // 政府／自己只給數字，點了才看；其他類別預設展開前 5 筆——「同業」那一類雖然行銷動不了，
+  // 但看標題就知道 AI 在拿哪種頁面當答案（服務頁、教學文、案例），這對下一步要補什麼內容有用
+  const actionable = k.kind !== "gov" && k.kind !== "self";
+  const shown = open ? k.targets : k.targets.slice(0, actionable ? 5 : 0);
+  const rest = k.targets.length - shown.length;
+  void origin;
+  return (
+    <div className="border-t border-line pt-3 first:border-t-0 first:pt-0">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="text-sm font-semibold text-ink">{meta.label}</span>
+        <span className="mono text-xs text-ink3">
+          {k.count} 次 · {k.domains} 個網域 · {Math.round(k.share * 100)}%
+        </span>
+        <span className="text-xs text-ink3">{meta.action}</span>
+      </div>
+      <div className="mt-1.5 h-[5px] overflow-hidden rounded-full" style={{ background: "rgba(48,60,84,0.11)" }}>
+        <div style={{ width: `${Math.max(3, k.share * 100)}%`, height: "100%", background: SOURCE_KIND_TONE[k.kind] }} />
+      </div>
+      {shown.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {shown.map((t) => (
+            <li key={t.url} className="flex flex-wrap items-baseline gap-x-2 text-sm">
+              <a href={t.url} target="_blank" rel="noopener noreferrer" className="min-w-0 break-all">
+                {t.title ? t.title : readableUrl(t.url)}
+              </a>
+              <span className="mono text-[11px] text-ink3">{t.domain} · {t.count} 次</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {rest > 0 && (
+        <button type="button" onClick={() => setOpen(true)} className="mt-1.5 text-xs text-ink3 underline underline-offset-2">
+          還有 {rest} 個{actionable ? "" : "，展開"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function MarketingSourcesBlock({ breakdown, origin }: { breakdown: SourceBreakdown; origin: string }) {
+  if (breakdown.total === 0) return null;
+  const listicle = breakdown.kinds.find((k) => k.kind === "listicle");
+  return (
+    <div className="mt-8">
+      <h2 className="eyebrow mb-3">行銷部門自己能做的</h2>
+      <h3 className="text-[17px] font-bold text-ink">AI 引用的這些來源，哪些不用工程師也能去佈局</h3>
+      <p className="mb-3 mt-1.5 max-w-[34em] text-xs text-ink3">
+        上面那些項目多半要工程師動手。這裡把同一批引用來源換個角度分：清單文可以爭取被列進去、論壇可以參與討論、媒體可以投稿、資料庫頁面可以自己更新——這些是行銷部門不碰程式碼就能動的位置。分類只看網址跟標題，是大概的歸類。
+      </p>
+      <div className="rounded-[10px] border border-line bg-card p-6">
+        <p className="text-base font-bold text-ink">{sourceHeadline(breakdown)}</p>
+        {listicle && (listicle.share >= 0.15 || listicle.targets.length >= 3) && (
+          <p className="mt-1 max-w-[38em] text-sm text-ink2">
+            {listicle.domains === 1 ? "這篇清單文" : `這 ${listicle.targets.length} 篇清單文`}
+            是 AI 回答這些題目時拿來當名單的，你的網站不在它們引用的頁面裡——被列進其中一篇，AI 下次回答就多一個提到你的來源。
+          </p>
+        )}
+        <div className="mt-4 space-y-3">
+          {breakdown.kinds.map((k) => (
+            <SourceKindRow key={k.kind} k={k} origin={origin} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RecommendBlock({ data }: { data: RecommendVisibility }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   // 標題用「答案裡真的點名你」的次數，不是「引用清單裡有你」——後者只代表 AI 查過你，
@@ -3169,6 +3286,12 @@ export default function HomeClient({
       results.map((r) => ({ keyword, citations: r.citations })),
     ),
   );
+  // 同一批引用來源，換成「行銷能不能自己動手」的分法（見 lib/geo-citation-sources.ts）
+  const sourceBreakdown = summarizeSources(
+    Object.entries(allKeywordResults).flatMap(([keyword, results]) =>
+      results.flatMap((r) => r.citations.map((c) => ({ keyword, url: c.url, title: c.title, isSelf: c.isSelf }))),
+    ),
+  );
   // Perplexity 一個回答就會帶 20 筆引用，兩個關鍵字查下來動輒四十個網域，
   // 其中絕大多數只出現一次——那是長尾，不是 AI 真的在推的名單。畫面只列前十，
   // 剩下的用一句話帶過就好，不要逼使用者自己從四十行裡找重點。
@@ -3486,7 +3609,7 @@ export default function HomeClient({
                 crawledPages={status?.progress.crawled ?? 0}
                 keywordPage={
                   Object.keys(allKeywordResults).length > 0
-                    ? { keywords: allKeywordOrder, results: allKeywordResults, citedDomains }
+                    ? { keywords: allKeywordOrder, results: allKeywordResults, citedDomains, sourceBreakdown }
                     : null
                 }
               />
@@ -3673,6 +3796,8 @@ export default function HomeClient({
                   </div>
                 </div>
               )}
+
+              {sourceBreakdown.total > 0 && <MarketingSourcesBlock breakdown={sourceBreakdown} origin={engine.origin} />}
             </div>
 
             {engine.visibility && (
