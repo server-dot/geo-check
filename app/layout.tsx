@@ -23,8 +23,8 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${SITE_TAGLINE}｜${SITE_NAME}`,
-    template: `%s｜${SITE_TAGLINE}`,
+    default: `${SITE_NAME}｜${SITE_TAGLINE}`,
+    template: `%s｜${SITE_NAME}`,
   },
   description: SITE_DESCRIPTION,
   openGraph: {
@@ -65,7 +65,7 @@ const SITE_JSONLD = {
     {
       "@type": "WebSite",
       "@id": `${SITE_URL}/#website`,
-      name: `${SITE_NAME} ${SITE_TAGLINE}`,
+      name: SITE_NAME,
       url: `${SITE_URL}/`,
       description: SITE_DESCRIPTION,
       inLanguage: "zh-Hant",

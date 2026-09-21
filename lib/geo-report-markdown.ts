@@ -2,6 +2,7 @@ import type { AuditJob } from './geo-audit-jobs';
 import { buildCategories5, computeOverallScore } from './geo-score';
 import { tallyCitedDomains } from './geo-cited-domains';
 import { sortByOrder } from './geo-audit-rules';
+import { SITE_NAME } from '@/lib/site';
 
 // ── GEO：報告的 AI 可讀版（Markdown）─────────────────────
 // 這份報告整頁在講「AI 讀不讀得到你的內容」：可讀字數、選單佔比、JS 空殼、
@@ -37,7 +38,7 @@ export function buildReportMarkdown(job: AuditJob): string {
 
   out.push(`# ${host}｜AI 搜尋能見度健檢報告`);
   out.push('');
-  out.push(`> 檢測網址：${job.url}　·　檢測時間：${new Date(job.createdAt).toISOString()}　·　工具：GEOCHECK（geo.stack.com.tw）`);
+  out.push(`> 檢測網址：${job.url}　·　檢測時間：${new Date(job.createdAt).toISOString()}　·　工具：${SITE_NAME}（geo.stack.com.tw）`);
   out.push('');
   out.push(
     '_這是同一份報告的純文字版，給 AI 與其他程式讀。內容與畫面上的報告一致，' +
@@ -225,7 +226,7 @@ export function buildReportMarkdown(job: AuditJob): string {
 
   out.push('---');
   out.push('');
-  out.push('報告由 GEOCHECK 產出：https://geo.stack.com.tw');
+  out.push(`報告由 ${SITE_NAME} 產出：https://geo.stack.com.tw`);
   out.push('');
   return out.join('\n');
 }

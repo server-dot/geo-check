@@ -9,6 +9,7 @@ import Footer from "@/components/marketing/Footer";
 import { tallyCitedDomains, type CitedDomain } from "@/lib/geo-cited-domains";
 import { buildCategories5, computeOverallScore, CATEGORY5_KEY_MAP, CATEGORY5_ORDER, type Category5 } from "@/lib/geo-score";
 import { track } from "@/lib/ga";
+import { SITE_NAME } from "@/lib/site";
 
 // 首頁 hero 下面的三格數字帶，掛載時跑一次 1100ms 的 ease-out-cubic count-up
 // （跟設計稿 dc-runtime 的 componentDidMount 那段動畫邏輯一致）。
@@ -1184,7 +1185,7 @@ function ReportBoard({
           {/* eslint-disable-next-line @next/next/no-img-element -- 這張圖要能跟著列印輸出，
               next/image 的 lazy/placeholder 在列印時可能還沒換成真圖 */}
           <img src="/geocheck-logo.webp" alt="" style={{ height: 28, width: 41, objectFit: "contain" }} />
-          <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.02em" }}>GEOCHECK</span>
+          <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.02em" }}>{SITE_NAME}</span>
           <div style={{ width: 1, height: 34, background: "var(--rb-hair)" }} />
           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
             <div style={{ fontSize: 21, fontWeight: 700, letterSpacing: "-0.02em" }}>AI 能見度健檢總覽</div>
@@ -1623,7 +1624,7 @@ function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData 
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           {/* eslint-disable-next-line @next/next/no-img-element -- 同第一頁，要跟著輸出成圖 */}
           <img src="/geocheck-logo.webp" alt="" style={{ height: 28, width: 41, objectFit: "contain" }} />
-          <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.02em" }}>GEOCHECK</span>
+          <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.02em" }}>{SITE_NAME}</span>
           <div style={{ width: 1, height: 34, background: "var(--rb-hair)" }} />
           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
             <div style={{ fontSize: 21, fontWeight: 700, letterSpacing: "-0.02em" }}>關鍵字 AI 能見度</div>

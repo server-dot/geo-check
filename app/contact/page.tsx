@@ -118,7 +118,7 @@ export default async function ContactPage({
             <p className="mt-2 text-[14.5px] text-ink2">掃 QR code 加好友，直接把要檢查的網址貼過來，比填表單快。</p>
             <a href={LINE_URL} className="mt-[18px] block w-[168px]">
               {/* eslint-disable-next-line @next/next/no-img-element -- 固定素材、非使用者上傳圖片，不需要 next/image 的最佳化/尺寸協商 */}
-              <img src="/line-qr.webp" alt="加 GEOCHECK 官方 Line 好友的 QR code" className="block h-[168px] w-[168px] rounded-lg border border-line" />
+              <img src="/line-qr.webp" alt="加積木媒體行銷官方 Line 好友的 QR code" className="block h-[168px] w-[168px] rounded-lg border border-line" />
             </a>
 
             <ul className="mt-[34px] list">

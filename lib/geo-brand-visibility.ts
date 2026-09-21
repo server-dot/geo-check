@@ -13,6 +13,7 @@
 // 共用——差別只在問的問題內容跟怎麼解讀結果，所以下面把「問一個引擎、拿引用
 // 結果」這件事抽成可以共用的 runVisibilityQueries()。
 
+import { SITE_URL } from "@/lib/site";
 export interface VisibilityAnswer {
   engine: string;
   query: string;
@@ -54,7 +55,7 @@ async function askModel(
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://geo-check.app',
+      'HTTP-Referer': SITE_URL,
       'X-Title': 'GEO Check Visibility Query',
     },
     body: JSON.stringify({

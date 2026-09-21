@@ -1,4 +1,5 @@
 import type { SchemaTypeCard } from './geo-schema-check';
+import { SITE_URL } from '@/lib/site';
 
 // ── GEO 深度健檢：Schema 缺欄位補完建議 ──────────────────
 // 「結構化資料」專區只做到「缺什麼」，這裡再往前一步：拿缺欄位所在那一頁的
@@ -33,7 +34,7 @@ async function askOpenRouter(prompt: string, apiKey: string): Promise<string> {
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://geo-check.app',
+      'HTTP-Referer': SITE_URL,
       'X-Title': 'GEO Check Schema Completion',
     },
     body: JSON.stringify({

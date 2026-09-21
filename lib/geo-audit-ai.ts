@@ -1,5 +1,6 @@
 import { LEVEL, CATEGORY } from './geo-audit-rules';
 import type { CheckResult, CheckStatus } from './geo-audit-rules';
+import { SITE_URL } from '@/lib/site';
 
 // ── GEO 深度健檢：AI 語意判斷層 ──────────────────────────
 // 規則判不了的語意題，交給 AI（走 OpenRouter）：E-E-A-T 權威訊號足不足。
@@ -28,7 +29,7 @@ async function askOpenRouter(prompt: string, apiKey: string): Promise<string> {
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://geo-check.app',
+      'HTTP-Referer': SITE_URL,
       'X-Title': 'GEO Check Deep Audit',
     },
     body: JSON.stringify({

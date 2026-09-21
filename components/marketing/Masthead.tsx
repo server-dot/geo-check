@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SITE_NAME, SITE_TAGLINE } from "@/lib/site";
 
 // 五個行銷頁共用的 sticky 導覽列。首頁（active 不給）不顯示「開始檢測」按鈕、
 // 也不 bold 任何導覽項——因為首頁本身就是那個動作的入口，不需要再引導一次。
@@ -18,9 +19,9 @@ export default function Masthead({ active }: { active?: "geo" | "scoring" | "pri
       <div className="mx-auto flex max-w-[1120px] flex-wrap items-center gap-x-6 px-5 md:h-[68px] md:flex-nowrap md:px-10">
         <Link href="/" className="mark py-3 md:py-0">
           {/* eslint-disable-next-line @next/next/no-img-element -- 固定素材、非使用者上傳圖片，不需要 next/image 的最佳化/尺寸協商 */}
-          <img src="/geocheck-logo.webp" alt="GEOCHECK" className="h-[28px] w-[41px] shrink-0 object-contain" />
-          <b>GEOCHECK</b>
-          <em className="hidden sm:inline">AI 搜尋能見度健檢</em>
+          <img src="/geocheck-logo.webp" alt={SITE_NAME} className="h-[28px] w-[41px] shrink-0 object-contain" />
+          <b>{SITE_NAME}</b>
+          <em className="hidden sm:inline">{SITE_TAGLINE}</em>
         </Link>
         <div className="nav-scroll -mx-5 flex w-[calc(100%+2.5rem)] items-center gap-5 overflow-x-auto whitespace-nowrap border-t border-line px-5 py-2.5 text-sm md:mx-0 md:ml-auto md:w-auto md:gap-6 md:overflow-visible md:border-0 md:p-0">
           {NAV_ITEMS.map((item) => (

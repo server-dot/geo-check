@@ -4,8 +4,10 @@
 // 改一處全站一致，不會出現 robots.txt 指的 sitemap 網址跟 canonical 網域對不起來這種事。
 
 export const SITE_URL = 'https://geo.stack.com.tw';
-export const SITE_NAME = 'GEOCHECK';
-export const SITE_TAGLINE = 'AI 搜尋能見度健檢';
+// 名字要有「積木」：geo + check 太通用，2026-09 光台灣就有三家叫 GeoCheck，
+// 品牌在前才搶得到「積木 GEO」「GEO 健檢」這兩種打法
+export const SITE_NAME = '積木 GEO 健檢';
+export const SITE_TAGLINE = 'AI 搜尋能見度檢測';
 // 描述控制在 80 字內（健檢的 TKD 門檻）
 export const SITE_DESCRIPTION =
   '免費檢測網站在 ChatGPT、Perplexity 等 AI 搜尋引擎眼中的能見度：以 AI 爬蟲身分實測、實際去問 AI 認不認得你，並跑多頁深度健檢。';

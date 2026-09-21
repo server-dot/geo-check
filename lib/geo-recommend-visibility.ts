@@ -1,4 +1,5 @@
 import { runVisibilityQueries, hostnameOf, isSameSite, type VisibilityAnswer } from './geo-brand-visibility';
+import { SITE_URL } from '@/lib/site';
 
 // ── GEO：推薦題自動查詢 ──────────────────────────────────
 // 品牌能見度（geo-brand-visibility.ts）問的是「AI 認不認得你」；關鍵字能見度
@@ -63,7 +64,7 @@ async function askJson(prompt: string, apiKey: string, maxTokens: number): Promi
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://geo-check.app',
+      'HTTP-Referer': SITE_URL,
       'X-Title': 'GEO Check Recommend Query',
     },
     body: JSON.stringify({

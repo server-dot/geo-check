@@ -15,7 +15,7 @@ const PAGE_NOTES: Record<string, string> = {
 
 export function GET() {
   const lines = [
-    `# ${SITE_NAME} ${SITE_TAGLINE}`,
+    `# ${SITE_NAME}｜${SITE_TAGLINE}`,
     '',
     `> 免費的 AI 搜尋能見度健檢工具，由台北的 SEO／AI SEO 團隊積木媒體行銷經營。實際以 GPTBot、ClaudeBot、PerplexityBot 等 AI 爬蟲的身分讀你的網站、實際去問 Perplexity 與 ChatGPT 認不認得你的品牌，再跑多頁 SEO + GEO 深度健檢，每一項都給實測值。`,
     '',
