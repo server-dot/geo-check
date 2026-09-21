@@ -1750,36 +1750,52 @@ function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData 
         </RbCard>
       )}
 
-      {/* 行銷部門自己能做的：同一批引用來源依「行銷能不能自己動手」分類，
-          PDF 版只放比例列＋每類前 3 個網址，細節在網頁版展開看 */}
-      {data.sourceBreakdown.total > 0 && (
-        <RbCard style={{ gap: 12 }}>
-          <RbCardTitle title="行銷部門自己能做的" note="AI 引用的來源裡，哪些不用工程師也能去佈局" />
-          <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.5, color: "var(--rb-ink)" }}>{sourceHeadline(data.sourceBreakdown)}</div>
-          <div style={{ display: "flex", height: 8, borderRadius: 999, overflow: "hidden", background: "rgba(48,60,84,0.11)" }}>
-            {data.sourceBreakdown.kinds.map((k) => (
-              <div key={k.kind} style={{ width: `${k.share * 100}%`, background: SOURCE_KIND_TONE[k.kind] }} />
-            ))}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", columnGap: 28, rowGap: 10 }}>
-            {data.sourceBreakdown.kinds.filter((k) => k.kind !== "self" && k.kind !== "gov").map((k) => (
-              <div key={k.kind} style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                  <span style={{ width: 10, height: 10, borderRadius: 2, background: SOURCE_KIND_TONE[k.kind], flex: "none", alignSelf: "center" }} />
-                  <span style={{ fontSize: 12.5, fontWeight: 700 }}>{SOURCE_KIND_META[k.kind].label}</span>
-                  <span className="mono" style={{ fontSize: 11, color: "var(--rb-ink3)" }}>{k.count} 次 · {Math.round(k.share * 100)}%</span>
+      {/* 行銷部門自己能做的：大數字＋橫條圖，跟網頁版同一套視覺；PDF 沒有展開，每類只印前 2 個網址 */}
+      {data.sourceBreakdown.total > 0 && (() => {
+        const b = data.sourceBreakdown;
+        const hero = sourceHero(b);
+        const max = Math.max(...b.kinds.map((k) => k.count));
+        const totalDomains = b.kinds.reduce((n, k) => n + k.domains, 0);
+        const fillOf = (kind: string) => (kind === "self" ? "transparent" : ACTIONABLE_KINDS.has(kind) ? "var(--rb-lime)" : "rgba(48,60,84,0.42)");
+        return (
+          <RbCard style={{ gap: 12 }}>
+            <RbCardTitle title="行銷部門自己能做的" note={`${b.total} 次引用 · ${totalDomains} 個網域 · 你 ${b.selfCount} 次`} />
+            <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+              <span className="mono" style={{ fontSize: 40, fontWeight: 700, lineHeight: 1, color: "var(--rb-ink)" }}>{hero.pct}%</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--rb-ink)" }}>的引用來自{hero.kindLabel}——{hero.line}</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", columnGap: 28, rowGap: 10, alignItems: "start" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                {kindsWithSelf(b).map((k) => (
+                  <div key={k.kind} style={{ display: "grid", gridTemplateColumns: "7.5em 1fr 3em", alignItems: "center", columnGap: 10 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--rb-ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{SOURCE_KIND_META[k.kind].label}</span>
+                    <span style={{ height: 12, borderRadius: 4, background: "rgba(48,60,84,0.07)", overflow: "hidden" }}>
+                      <span style={{ display: "block", height: "100%", width: `${Math.max(2, (k.count / max) * 100)}%`, borderRadius: 4, background: fillOf(k.kind), border: k.kind === "self" ? "2px solid var(--rb-lime)" : "none", boxSizing: "border-box" }} />
+                    </span>
+                    <span className="mono" style={{ fontSize: 11.5, color: "var(--rb-ink2)", textAlign: "right" }}>{k.count} 次</span>
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: 14, fontSize: 10.5, color: "var(--rb-ink3)", marginTop: 2 }}>
+                  <span><span style={{ display: "inline-block", width: 12, height: 8, borderRadius: 2, background: "var(--rb-lime)", marginRight: 5, verticalAlign: "middle" }} />行銷能自己動手</span>
+                  <span><span style={{ display: "inline-block", width: 12, height: 8, borderRadius: 2, background: "rgba(48,60,84,0.42)", marginRight: 5, verticalAlign: "middle" }} />要靠自家內容／改不了</span>
                 </div>
-                <div style={{ fontSize: 11, color: "var(--rb-ink3)", lineHeight: 1.5 }}>{SOURCE_KIND_META[k.kind].action}</div>
-                {k.targets.slice(0, 3).map((t) => (
-                  <div key={t.url} className="rb-clip" style={{ fontSize: 11.5, color: "var(--rb-ink2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {t.title ? t.title : readableUrl(t.url)} <span className="mono" style={{ color: "var(--rb-ink3)" }}>· {t.domain}</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+                {b.kinds.filter((k) => k.kind !== "self" && k.kind !== "gov").slice(0, 4).map((k) => (
+                  <div key={k.kind} style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--rb-ink)" }}>{SOURCE_KIND_META[k.kind].label}<span className="mono" style={{ fontWeight: 400, color: "var(--rb-ink3)", marginLeft: 6 }}>{Math.round(k.share * 100)}%</span></div>
+                    {k.targets.slice(0, 2).map((t) => (
+                      <div key={t.url} className="rb-clip" style={{ fontSize: 11, color: "var(--rb-ink2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {t.title ? t.title : readableUrl(t.url)} <span className="mono" style={{ color: "var(--rb-ink3)" }}>· {t.domain}</span>
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>
-            ))}
-          </div>
-        </RbCard>
-      )}
+            </div>
+          </RbCard>
+        );
+      })()}
 
       <div className="mono" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 6, fontSize: 11.5, color: "var(--rb-ink3)" }}>
         <div>AI 搜尋能見度健檢 · {host} · {today}</div>
@@ -2856,84 +2872,114 @@ function renderInlineMarkdown(text: string, citations: { url: string }[]): React
 // 名單是從回答正文抽的專有名詞（主觀），所以每張卡都保留原文可以核對；
 // 客觀的「引用網域」彙總在下面另一塊，兩個一起看。
 // 「行銷部門自己能做的」——把 AI 引用來源依「行銷能不能自己動手」分類。
-// 上面那份推薦名單告訴你 AI 引了誰；這一區告訴行銷主管：那些來源裡，哪些是不用找工程師、
-// 自己就能去佈局的位置（清單文、論壇、媒體、資料庫），並把網址直接列出來。
-// 文案規範同報告其他區：講現況、講這一類是什麼位置，不寫「建議」「應該」。
-const SOURCE_KIND_TONE: Record<string, string> = {
-  listicle: "var(--lime)",
-  forum: "rgba(48,60,84,0.55)",
-  media: "rgba(48,60,84,0.45)",
-  reference: "rgba(48,60,84,0.35)",
-  other: "rgba(48,60,84,0.22)",
-  gov: "rgba(48,60,84,0.16)",
-  self: "var(--goldInk)",
-};
+// 第一眼只有一個大數字、一張橫條圖、一行圖例；網址清單跟「分類怎麼來的」全部收在展開裡
+// （小積木 09-21：整份報告字太多）。顏色只分兩種：金＝行銷能動手、深藍＝要靠自家內容或改不了，
+// 每列都有文字標籤跟數字，不靠顏色辨識。
+const ACTIONABLE_KINDS = new Set(["listicle", "forum", "media", "reference"]);
 
-function SourceKindRow({ k, origin }: { k: SourceKindSummary; origin: string }) {
+// 自己 0 次也要畫一列空的：「你：0 次」那條空槓比任何一句話都清楚
+function kindsWithSelf(b: SourceBreakdown): SourceKindSummary[] {
+  if (b.kinds.some((k) => k.kind === "self")) return b.kinds;
+  return [...b.kinds, { kind: "self", count: 0, share: 0, domains: 0, targets: [] }];
+}
+
+function sourceHero(b: SourceBreakdown): { pct: number; kindLabel: string; line: string } {
+  const top = b.kinds.filter((k) => k.kind !== "self").sort((a, c) => c.count - a.count)[0];
+  if (!top) return { pct: 100, kindLabel: "你的網站", line: "AI 的引用全部來自你自己的網站" };
+  const pct = Math.round(top.share * 100);
+  const label = SOURCE_KIND_META[top.kind].label;
+  const line = ACTIONABLE_KINDS.has(top.kind)
+    ? `AI 主要引的是${label}，這是行銷不用工程師就能去佈局的位置`
+    : top.kind === "other"
+      ? "AI 直接拿同業自己的頁面當答案，不是靠媒體或清單文"
+      : `AI 主要引的是${label}`;
+  return { pct, kindLabel: label, line };
+}
+
+function SourceBar({ k, max }: { k: SourceKindSummary; max: number }) {
   const [open, setOpen] = useState(false);
   const meta = SOURCE_KIND_META[k.kind];
-  // 政府／自己只給數字，點了才看；其他類別預設展開前 5 筆——「同業」那一類雖然行銷動不了，
-  // 但看標題就知道 AI 在拿哪種頁面當答案（服務頁、教學文、案例），這對下一步要補什麼內容有用
-  const actionable = k.kind !== "gov" && k.kind !== "self";
-  const shown = open ? k.targets : k.targets.slice(0, actionable ? 5 : 0);
-  const rest = k.targets.length - shown.length;
-  void origin;
+  const actionable = ACTIONABLE_KINDS.has(k.kind);
+  const isSelf = k.kind === "self";
+  const fill = isSelf ? "transparent" : actionable ? "var(--lime)" : "rgba(48,60,84,0.42)";
+  const border = isSelf ? "2px solid var(--lime)" : "none";
   return (
-    <div className="border-t border-line pt-3 first:border-t-0 first:pt-0">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="text-sm font-semibold text-ink">{meta.label}</span>
-        <span className="mono text-xs text-ink3">
-          {k.count} 次 · {k.domains} 個網域 · {Math.round(k.share * 100)}%
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="grid w-full items-center gap-x-3 text-left"
+        style={{ gridTemplateColumns: "7.5em 1fr 3.2em 1.4em" }}
+        aria-expanded={open}
+      >
+        <span className="truncate text-[13px] font-semibold text-ink">{meta.label}</span>
+        <span className="h-[14px] overflow-hidden rounded-[4px]" style={{ background: "rgba(48,60,84,0.07)" }}>
+          <span className="block h-full rounded-[4px]" style={{ width: k.count === 0 ? "3px" : `${Math.max(2, (k.count / max) * 100)}%`, background: fill, border, boxSizing: "border-box" }} />
         </span>
-        <span className="text-xs text-ink3">{meta.action}</span>
-      </div>
-      <div className="mt-1.5 h-[5px] overflow-hidden rounded-full" style={{ background: "rgba(48,60,84,0.11)" }}>
-        <div style={{ width: `${Math.max(3, k.share * 100)}%`, height: "100%", background: SOURCE_KIND_TONE[k.kind] }} />
-      </div>
-      {shown.length > 0 && (
-        <ul className="mt-2 space-y-1">
-          {shown.map((t) => (
-            <li key={t.url} className="flex flex-wrap items-baseline gap-x-2 text-sm">
-              <a href={t.url} target="_blank" rel="noopener noreferrer" className="min-w-0 break-all">
-                {t.title ? t.title : readableUrl(t.url)}
-              </a>
-              <span className="mono text-[11px] text-ink3">{t.domain} · {t.count} 次</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {rest > 0 && (
-        <button type="button" onClick={() => setOpen(true)} className="mt-1.5 text-xs text-ink3 underline underline-offset-2">
-          還有 {rest} 個{actionable ? "" : "，展開"}
-        </button>
+        <span className="mono text-right text-[12px] text-ink2">{k.count} 次</span>
+        <span className="text-right text-[11px] text-ink3">{k.targets.length > 0 ? (open ? "▾" : "▸") : ""}</span>
+      </button>
+      {open && k.targets.length > 0 && (
+        <div className="mb-2 ml-[7.5em] mt-1.5 border-l-2 border-line pl-3">
+          <p className="mb-1.5 text-xs text-ink2">{meta.action}</p>
+          <ul className="space-y-1">
+            {k.targets.slice(0, 8).map((t) => (
+              <li key={t.url} className="flex flex-wrap items-baseline gap-x-2 text-[13px] leading-snug">
+                <a href={t.url} target="_blank" rel="noopener noreferrer" className="min-w-0 break-all">
+                  {t.title ? t.title : readableUrl(t.url)}
+                </a>
+                <span className="mono text-[11px] text-ink3">{t.domain}{t.count > 1 ? ` · ${t.count} 次` : ""}</span>
+              </li>
+            ))}
+            {k.targets.length > 8 && <li className="text-xs text-ink3">…另外 {k.targets.length - 8} 個</li>}
+          </ul>
+        </div>
       )}
     </div>
   );
 }
 
 function MarketingSourcesBlock({ breakdown, origin }: { breakdown: SourceBreakdown; origin: string }) {
+  const [why, setWhy] = useState(false);
+  void origin;
   if (breakdown.total === 0) return null;
-  const listicle = breakdown.kinds.find((k) => k.kind === "listicle");
+  const hero = sourceHero(breakdown);
+  const max = Math.max(...breakdown.kinds.map((k) => k.count));
+  const totalDomains = breakdown.kinds.reduce((n, k) => n + k.domains, 0);
   return (
     <div className="mt-8">
       <h2 className="eyebrow mb-3">行銷部門自己能做的</h2>
-      <h3 className="text-[17px] font-bold text-ink">AI 引用的這些來源，哪些不用工程師也能去佈局</h3>
-      <p className="mb-3 mt-1.5 max-w-[34em] text-xs text-ink3">
-        上面那些項目多半要工程師動手。這裡把同一批引用來源換個角度分：清單文可以爭取被列進去、論壇可以參與討論、媒體可以投稿、資料庫頁面可以自己更新——這些是行銷部門不碰程式碼就能動的位置。分類只看網址跟標題，是大概的歸類。
-      </p>
       <div className="rounded-[10px] border border-line bg-card p-6">
-        <p className="text-base font-bold text-ink">{sourceHeadline(breakdown)}</p>
-        {listicle && (listicle.share >= 0.15 || listicle.targets.length >= 3) && (
-          <p className="mt-1 max-w-[38em] text-sm text-ink2">
-            {listicle.domains === 1 ? "這篇清單文" : `這 ${listicle.targets.length} 篇清單文`}
-            是 AI 回答這些題目時拿來當名單的，你的網站不在它們引用的頁面裡——被列進其中一篇，AI 下次回答就多一個提到你的來源。
-          </p>
-        )}
-        <div className="mt-4 space-y-3">
-          {breakdown.kinds.map((k) => (
-            <SourceKindRow key={k.kind} k={k} origin={origin} />
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+          <div className="flex items-baseline gap-3">
+            <span className="mono text-[44px] font-bold leading-none text-ink">{hero.pct}%</span>
+            <span className="text-sm font-semibold text-ink2">的引用來自{hero.kindLabel}</span>
+          </div>
+          <div className="mono text-xs text-ink3">
+            {breakdown.total} 次引用 · {totalDomains} 個網域 · 你 {breakdown.selfCount} 次
+          </div>
+        </div>
+        <p className="mt-1.5 text-[15px] font-bold text-ink">{hero.line}</p>
+
+        <div className="mt-5 space-y-2">
+          {kindsWithSelf(breakdown).map((k) => (
+            <SourceBar key={k.kind} k={k} max={max} />
           ))}
         </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11.5px] text-ink3">
+          <span className="inline-flex items-center gap-1.5"><i className="inline-block h-[10px] w-[14px] rounded-[3px]" style={{ background: "var(--lime)" }} />行銷能自己動手</span>
+          <span className="inline-flex items-center gap-1.5"><i className="inline-block h-[10px] w-[14px] rounded-[3px]" style={{ background: "rgba(48,60,84,0.42)" }} />要靠自家內容／改不了</span>
+          <span className="inline-flex items-center gap-1.5"><i className="inline-block h-[10px] w-[14px] rounded-[3px]" style={{ border: "2px solid var(--lime)" }} />你</span>
+          <button type="button" onClick={() => setWhy((v) => !v)} className="ml-auto underline underline-offset-2">
+            {why ? "收起" : "點每一列看網址 · 分類怎麼來的"}
+          </button>
+        </div>
+        {why && (
+          <p className="mt-2 max-w-[38em] text-xs leading-relaxed text-ink3">
+            拿上面每個回答的引用來源，依網址跟標題歸類：標題像「10 家推薦」「怎麼選」的算清單文；PTT、Dcard、FB、LinkedIn 算論壇／社群；新聞站、部落格平台算媒體；維基、104、Google 商家算資料庫；其餘多半是同業自己的公司網站。只看網址跟標題，是大概的歸類。
+          </p>
+        )}
       </div>
     </div>
   );
