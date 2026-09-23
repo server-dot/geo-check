@@ -5,7 +5,8 @@ import type { WafHint } from './geo-waf-fingerprint';
 import type { BrandVisibilityResult } from './geo-brand-visibility';
 import type { LlmsTxtQuality } from './geo-llms-txt';
 import type { SchemaTypeCard } from './geo-schema-check';
-import type { RecommendVisibility } from './geo-recommend-visibility';
+import type { RecommendVisibility, RecommendInput } from './geo-recommend-visibility';
+import type { MatchPage } from './geo-content-match';
 
 // ── GEO 深度健檢：背景工作進度存放（module 內 in-memory Map）────────────
 // 多頁爬蟲＋AI 語意判斷跑起來要幾十秒到一兩分鐘，改成背景 job：
@@ -56,7 +57,10 @@ const TTL = 60 * 60 * 1000; // 1 小時後清掉舊 job
 function sweep() {
   const now = Date.now();
   for (const [id, job] of jobs) {
-    if (now - job.updatedAt > TTL) jobs.delete(id);
+    if (now - job.updatedAt > TTL) {
+      jobs.delete(id);
+      contexts.delete(id);
+    }
   }
 }
 
@@ -85,4 +89,27 @@ export function updateAuditJob(id: string, patch: Partial<Omit<AuditJob, 'id' | 
 
 export function getAuditJob(id: string): AuditJob | undefined {
   return jobs.get(id);
+}
+
+// 使用者改題目重問時要用的原料：猜品牌名用的首頁資訊、爬到的頁面。
+// 跟 job 分開放，因為 status API 會把整個 job 回給前端，40 頁內文不該跟著送出去。
+export interface AuditJobContext {
+  origin: string;
+  recommendInput: RecommendInput;
+  pages: MatchPage[];
+}
+
+const contexts = new Map<string, AuditJobContext>();
+
+export function setAuditJobContext(id: string, ctx: AuditJobContext): void {
+  contexts.set(id, ctx);
+}
+
+export function getAuditJobContext(id: string): AuditJobContext | undefined {
+  // job 被 sweep 掉之後 context 也不能用了
+  if (!jobs.has(id)) {
+    contexts.delete(id);
+    return undefined;
+  }
+  return contexts.get(id);
 }

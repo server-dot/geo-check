@@ -7,7 +7,8 @@ import Masthead from "@/components/marketing/Masthead";
 import Section from "@/components/marketing/Section";
 import Footer from "@/components/marketing/Footer";
 import { tallyCitedDomains, type CitedDomain } from "@/lib/geo-cited-domains";
-import { summarizeSources, sourceHeadline, SOURCE_KIND_META, type SourceBreakdown, type SourceKindSummary } from "@/lib/geo-citation-sources";
+import { buildDiagnosis, GATE_SYMBOL, VERDICT_LABEL, type Diagnosis, type GateState } from "@/lib/geo-diagnosis";
+import type { ContentMatch } from "@/lib/geo-content-match";
 import { buildCategories5, computeOverallScore, CATEGORY5_KEY_MAP, CATEGORY5_ORDER, type Category5 } from "@/lib/geo-score";
 import { track } from "@/lib/ga";
 import { SITE_NAME } from "@/lib/site";
@@ -176,6 +177,8 @@ interface RecommendVisibility {
   totalAnswers: number;
   citedSelfCount: number;
   namedSelfCount: number;
+  contentMatch?: ContentMatch[] | null;
+  customQuestions?: boolean;
 }
 
 interface LlmsTxtLink {
@@ -1590,7 +1593,7 @@ export type KeywordPageData = {
   keywords: string[];
   results: Record<string, KeywordVisibilityResult[]>;
   citedDomains: CitedDomain[];
-  sourceBreakdown: SourceBreakdown;
+  diagnosis: Diagnosis | null;
 };
 
 function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData }) {
@@ -1750,49 +1753,39 @@ function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData 
         </RbCard>
       )}
 
-      {/* 行銷部門自己能做的：大數字＋橫條圖，跟網頁版同一套視覺；PDF 沒有展開，每類只印前 2 個網址 */}
-      {data.sourceBreakdown.total > 0 && (() => {
-        const b = data.sourceBreakdown;
-        const hero = sourceHero(b);
-        const max = Math.max(...b.kinds.map((k) => k.count));
-        const totalDomains = b.kinds.reduce((n, k) => n + k.domains, 0);
-        const fillOf = (kind: string) => (kind === "self" ? "transparent" : ACTIONABLE_KINDS.has(kind) ? "var(--rb-lime)" : "rgba(48,60,84,0.42)");
+      {/* AI 為什麼沒推薦你：三關，跟網頁版同一套判斷（lib/geo-diagnosis.ts）。PDF 沒有展開，第 2 關每題印一行 */}
+      {data.diagnosis && (() => {
+        const d = data.diagnosis;
+        const gates: [string, GateState, string][] = [
+          ["AI 認得你嗎", d.gate1.state, d.gate1.line],
+          ["有沒有一頁在回答", d.gate2.state, d.gate2.line],
+          ["別人有沒有推薦你", d.gate3.state, d.gate3.line],
+        ];
         return (
-          <RbCard style={{ gap: 12 }}>
-            <RbCardTitle title="行銷部門自己能做的" note={`${b.total} 次引用 · ${totalDomains} 個網域 · 你 ${b.selfCount} 次`} />
-            <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-              <span className="mono" style={{ fontSize: 40, fontWeight: 700, lineHeight: 1, color: "var(--rb-ink)" }}>{hero.pct}%</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--rb-ink)" }}>的引用來自{hero.kindLabel}——{hero.line}</span>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", columnGap: 28, rowGap: 10, alignItems: "start" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                {kindsWithSelf(b).map((k) => (
-                  <div key={k.kind} style={{ display: "grid", gridTemplateColumns: "7.5em 1fr 3em", alignItems: "center", columnGap: 10 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--rb-ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{SOURCE_KIND_META[k.kind].label}</span>
-                    <span style={{ height: 12, borderRadius: 4, background: "rgba(48,60,84,0.07)", overflow: "hidden" }}>
-                      <span style={{ display: "block", height: "100%", width: `${Math.max(2, (k.count / max) * 100)}%`, borderRadius: 4, background: fillOf(k.kind), border: k.kind === "self" ? "2px solid var(--rb-lime)" : "none", boxSizing: "border-box" }} />
-                    </span>
-                    <span className="mono" style={{ fontSize: 11.5, color: "var(--rb-ink2)", textAlign: "right" }}>{k.count} 次</span>
-                  </div>
-                ))}
-                <div style={{ display: "flex", gap: 14, fontSize: 10.5, color: "var(--rb-ink3)", marginTop: 2 }}>
-                  <span><span style={{ display: "inline-block", width: 12, height: 8, borderRadius: 2, background: "var(--rb-lime)", marginRight: 5, verticalAlign: "middle" }} />行銷能自己動手</span>
-                  <span><span style={{ display: "inline-block", width: 12, height: 8, borderRadius: 2, background: "rgba(48,60,84,0.42)", marginRight: 5, verticalAlign: "middle" }} />要靠自家內容／改不了</span>
+          <RbCard style={{ gap: 10 }}>
+            <RbCardTitle title="AI 為什麼沒推薦你" />
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--rb-ink)" }}>{d.conclusion}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {gates.map(([title, st, line], i) => (
+                <div key={title} style={{ display: "grid", gridTemplateColumns: "1.4em 9em 1fr", columnGap: 10, alignItems: "baseline" }}>
+                  <span className="mono" style={{ fontSize: 16, fontWeight: 700, color: GATE_COLOR[st] }}>{GATE_SYMBOL[st]}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--rb-ink)" }}>{i + 1}. {title}</span>
+                  <span style={{ fontSize: 12.5, color: "var(--rb-ink2)" }}>{line}</span>
                 </div>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
-                {b.kinds.filter((k) => k.kind !== "self" && k.kind !== "gov").slice(0, 4).map((k) => (
-                  <div key={k.kind} style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--rb-ink)" }}>{SOURCE_KIND_META[k.kind].label}<span className="mono" style={{ fontWeight: 400, color: "var(--rb-ink3)", marginLeft: 6 }}>{Math.round(k.share * 100)}%</span></div>
-                    {k.targets.slice(0, 2).map((t) => (
-                      <div key={t.url} className="rb-clip" style={{ fontSize: 11, color: "var(--rb-ink2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {t.title ? t.title : readableUrl(t.url)} <span className="mono" style={{ color: "var(--rb-ink3)" }}>· {t.domain}</span>
-                      </div>
-                    ))}
+              ))}
+            </div>
+            {d.gate2.matches.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, borderTop: "1px solid var(--rb-hair)", paddingTop: 8 }}>
+                {d.gate2.matches.map((m) => (
+                  <div key={m.question} className="rb-clip" style={{ fontSize: 11, color: "var(--rb-ink2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span style={{ fontWeight: 700, color: "var(--rb-ink)" }}>「{m.question}」</span>{" "}
+                    {VERDICT_LABEL[m.verdict]}
+                    {m.missing.length > 0 && <>（頁面上沒有：{m.missing.join("、")}）</>}
                   </div>
                 ))}
               </div>
-            </div>
+            )}
+            <div style={{ fontSize: 10.5, color: "var(--rb-ink3)" }}>{d.recencyNote}</div>
           </RbCard>
         );
       })()}
@@ -2871,121 +2864,174 @@ function renderInlineMarkdown(text: string, citations: { url: string }[]): React
 // 題目是模型從首頁內容猜的，畫面上要講明白，不能讓人以為是真實搜尋量。
 // 名單是從回答正文抽的專有名詞（主觀），所以每張卡都保留原文可以核對；
 // 客觀的「引用網域」彙總在下面另一塊，兩個一起看。
-// 「行銷部門自己能做的」——把 AI 引用來源依「行銷能不能自己動手」分類。
-// 第一眼只有一個大數字、一張橫條圖、一行圖例；網址清單跟「分類怎麼來的」全部收在展開裡
-// （小積木 09-21：整份報告字太多）。顏色只分兩種：金＝行銷能動手、深藍＝要靠自家內容或改不了，
-// 每列都有文字標籤跟數字，不靠顏色辨識。
-const ACTIONABLE_KINDS = new Set(["listicle", "forum", "media", "reference"]);
+// 「AI 為什麼沒推薦你」三關（判斷邏輯在 lib/geo-diagnosis.ts，三處共用）。
+// 第一眼只有一句結論＋三列燈號；第 2 關每題的對照（你最接近的頁、缺的字、AI 引的同業頁）收進展開。
+// 燈號一律「符號＋顏色」，不靠顏色單獨表意（warn/fail 色盲下同色）。
+const GATE_COLOR: Record<GateState, string> = {
+  pass: STATUS_COLOR.ok,
+  partial: STATUS_COLOR.warn,
+  fail: STATUS_COLOR.fail,
+  unknown: "#4a5468",
+};
 
-// 自己 0 次也要畫一列空的：「你：0 次」那條空槓比任何一句話都清楚
-function kindsWithSelf(b: SourceBreakdown): SourceKindSummary[] {
-  if (b.kinds.some((k) => k.kind === "self")) return b.kinds;
-  return [...b.kinds, { kind: "self", count: 0, share: 0, domains: 0, targets: [] }];
-}
+const GATE_TITLES = ["AI 認得你嗎", "有沒有一頁在回答", "別人有沒有推薦你"];
 
-function sourceHero(b: SourceBreakdown): { pct: number; kindLabel: string; line: string } {
-  const top = b.kinds.filter((k) => k.kind !== "self").sort((a, c) => c.count - a.count)[0];
-  if (!top) return { pct: 100, kindLabel: "你的網站", line: "AI 的引用全部來自你自己的網站" };
-  const pct = Math.round(top.share * 100);
-  const label = SOURCE_KIND_META[top.kind].label;
-  const line = ACTIONABLE_KINDS.has(top.kind)
-    ? `AI 主要引的是${label}，這是行銷不用工程師就能去佈局的位置`
-    : top.kind === "other"
-      ? "AI 直接拿同業自己的頁面當答案，不是靠媒體或清單文"
-      : `AI 主要引的是${label}`;
-  return { pct, kindLabel: label, line };
-}
-
-function SourceBar({ k, max }: { k: SourceKindSummary; max: number }) {
+function GateRow({ n, state, line, children }: { n: number; state: GateState; line: string; children?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
-  const meta = SOURCE_KIND_META[k.kind];
-  const actionable = ACTIONABLE_KINDS.has(k.kind);
-  const isSelf = k.kind === "self";
-  const fill = isSelf ? "transparent" : actionable ? "var(--lime)" : "rgba(48,60,84,0.42)";
-  const border = isSelf ? "2px solid var(--lime)" : "none";
+  const expandable = !!children;
+  const head = (
+    <>
+      <span className="mono text-[20px] font-bold leading-none" style={{ color: GATE_COLOR[state] }}>{GATE_SYMBOL[state]}</span>
+      <span className="text-[14px] font-bold text-ink">{n}. {GATE_TITLES[n - 1]}</span>
+      <span className="text-[14px] text-ink2">{line}</span>
+      <span className="text-right text-[13px] text-ink3">{expandable ? (open ? "▾" : "▸") : ""}</span>
+    </>
+  );
+  const grid = { gridTemplateColumns: "1.4em 9.5em 1fr 1.2em" };
   return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="grid w-full items-center gap-x-3 text-left"
-        style={{ gridTemplateColumns: "7.5em 1fr 3.2em 1.4em" }}
-        aria-expanded={open}
-      >
-        <span className="truncate text-[13px] font-semibold text-ink">{meta.label}</span>
-        <span className="h-[14px] overflow-hidden rounded-[4px]" style={{ background: "rgba(48,60,84,0.07)" }}>
-          <span className="block h-full rounded-[4px]" style={{ width: k.count === 0 ? "3px" : `${Math.max(2, (k.count / max) * 100)}%`, background: fill, border, boxSizing: "border-box" }} />
-        </span>
-        <span className="mono text-right text-[12px] text-ink2">{k.count} 次</span>
-        <span className="text-right text-[11px] text-ink3">{k.targets.length > 0 ? (open ? "▾" : "▸") : ""}</span>
-      </button>
-      {open && k.targets.length > 0 && (
-        <div className="mb-2 ml-[7.5em] mt-1.5 border-l-2 border-line pl-3">
-          <p className="mb-1.5 text-xs text-ink2">{meta.action}</p>
-          <ul className="space-y-1">
-            {k.targets.slice(0, 8).map((t) => (
-              <li key={t.url} className="flex flex-wrap items-baseline gap-x-2 text-[13px] leading-snug">
-                <a href={t.url} target="_blank" rel="noopener noreferrer" className="min-w-0 break-all">
-                  {t.title ? t.title : readableUrl(t.url)}
-                </a>
-                <span className="mono text-[11px] text-ink3">{t.domain}{t.count > 1 ? ` · ${t.count} 次` : ""}</span>
-              </li>
-            ))}
-            {k.targets.length > 8 && <li className="text-xs text-ink3">…另外 {k.targets.length - 8} 個</li>}
-          </ul>
-        </div>
+    <div className="border-t border-line py-3 first:border-t-0">
+      {expandable ? (
+        <button type="button" onClick={() => setOpen((v) => !v)} className="grid w-full items-baseline gap-x-3 text-left max-[560px]:!grid-cols-[1.4em_1fr_1.2em]" style={grid} aria-expanded={open}>
+          {head}
+        </button>
+      ) : (
+        <div className="grid items-baseline gap-x-3 max-[560px]:!grid-cols-[1.4em_1fr_1.2em]" style={grid}>{head}</div>
       )}
+      {open && children}
     </div>
   );
 }
 
-function MarketingSourcesBlock({ breakdown, origin }: { breakdown: SourceBreakdown; origin: string }) {
-  const [why, setWhy] = useState(false);
-  void origin;
-  if (breakdown.total === 0) return null;
-  const hero = sourceHero(breakdown);
-  const max = Math.max(...breakdown.kinds.map((k) => k.count));
-  const totalDomains = breakdown.kinds.reduce((n, k) => n + k.domains, 0);
+function MatchDetail({ m }: { m: ContentMatch }) {
   return (
-    <div className="mt-8">
-      <h2 className="eyebrow mb-3">行銷部門自己能做的</h2>
-      <div className="rounded-[10px] border border-line bg-card p-6">
-        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
-          <div className="flex items-baseline gap-3">
-            <span className="mono text-[44px] font-bold leading-none text-ink">{hero.pct}%</span>
-            <span className="text-sm font-semibold text-ink2">的引用來自{hero.kindLabel}</span>
-          </div>
-          <div className="mono text-xs text-ink3">
-            {breakdown.total} 次引用 · {totalDomains} 個網域 · 你 {breakdown.selfCount} 次
-          </div>
-        </div>
-        <p className="mt-1.5 text-[15px] font-bold text-ink">{hero.line}</p>
-
-        <div className="mt-5 space-y-2">
-          {kindsWithSelf(breakdown).map((k) => (
-            <SourceBar key={k.kind} k={k} max={max} />
-          ))}
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11.5px] text-ink3">
-          <span className="inline-flex items-center gap-1.5"><i className="inline-block h-[10px] w-[14px] rounded-[3px]" style={{ background: "var(--lime)" }} />行銷能自己動手</span>
-          <span className="inline-flex items-center gap-1.5"><i className="inline-block h-[10px] w-[14px] rounded-[3px]" style={{ background: "rgba(48,60,84,0.42)" }} />要靠自家內容／改不了</span>
-          <span className="inline-flex items-center gap-1.5"><i className="inline-block h-[10px] w-[14px] rounded-[3px]" style={{ border: "2px solid var(--lime)" }} />你</span>
-          <button type="button" onClick={() => setWhy((v) => !v)} className="ml-auto underline underline-offset-2">
-            {why ? "收起" : "點每一列看網址 · 分類怎麼來的"}
-          </button>
-        </div>
-        {why && (
-          <p className="mt-2 max-w-[38em] text-xs leading-relaxed text-ink3">
-            拿上面每個回答的引用來源，依網址跟標題歸類：標題像「10 家推薦」「怎麼選」的算清單文；PTT、Dcard、FB、LinkedIn 算論壇／社群；新聞站、部落格平台算媒體；維基、104、Google 商家算資料庫；其餘多半是同業自己的公司網站。只看網址跟標題，是大概的歸類。
-          </p>
-        )}
-      </div>
+    <div className="mt-3 border-l-2 border-line pl-3">
+      <p className="text-[13px] font-semibold text-ink">「{m.question}」</p>
+      <table className="mt-1.5 w-full text-[13px] leading-snug">
+        <tbody>
+          <tr>
+            <td className="w-[6.5em] py-1 align-top text-ink3">你最接近的</td>
+            <td className="py-1 text-ink2">
+              {m.pageUrl ? (
+                <a href={m.pageUrl} target="_blank" rel="noopener noreferrer" className="break-all">{m.pageTitle || readableUrl(m.pageUrl)}</a>
+              ) : "（沒有）"}
+              <span className="ml-2 whitespace-nowrap font-semibold" style={{ color: GATE_COLOR[m.verdict === "yes" ? "pass" : m.verdict === "partial" ? "partial" : "fail"] }}>{VERDICT_LABEL[m.verdict]}</span>
+            </td>
+          </tr>
+          {m.missing.length > 0 && (
+            <tr>
+              <td className="py-1 align-top text-ink3">你頁面上沒有</td>
+              <td className="py-1">
+                <span className="flex flex-wrap gap-1.5">
+                  {m.missing.map((w) => (
+                    <span key={w} className="rounded-full border border-line px-2 py-0.5 text-[12px] text-ink">{w}</span>
+                  ))}
+                </span>
+              </td>
+            </tr>
+          )}
+          {m.peerPages.length > 0 && (
+            <tr>
+              <td className="py-1 align-top text-ink3">AI 引的同業</td>
+              <td className="py-1">
+                <ul className="space-y-0.5">
+                  {m.peerPages.map((p) => (
+                    <li key={p.url} className="text-ink2">
+                      <a href={p.url} target="_blank" rel="noopener noreferrer" className="break-all">{p.title || readableUrl(p.url)}</a>
+                    </li>
+                  ))}
+                </ul>
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-function RecommendBlock({ data }: { data: RecommendVisibility }) {
+function DiagnosisBlock({ d }: { d: Diagnosis }) {
+  return (
+    <div className="mb-4 rounded-[10px] border border-line bg-card p-6">
+      <p className="mono text-[11px] font-medium tracking-wide text-ink3 uppercase">AI 為什麼沒推薦你</p>
+      <p className="mt-1 text-lg font-bold text-ink">{d.conclusion}</p>
+      <div className="mt-3">
+        <GateRow n={1} state={d.gate1.state} line={d.gate1.line} />
+        <GateRow n={2} state={d.gate2.state} line={d.gate2.line}>
+          {d.gate2.matches.length > 0 ? (
+            <div className="mb-1">{d.gate2.matches.map((m) => <MatchDetail key={m.question} m={m} />)}</div>
+          ) : undefined}
+        </GateRow>
+        <GateRow n={3} state={d.gate3.state} line={d.gate3.line}>
+          <p className="mt-2 max-w-[38em] border-l-2 border-line pl-3 text-[13px] leading-relaxed text-ink2">
+            問「推薦誰」的時候，AI 比較相信別人寫的推薦（接案平台、推薦文、論壇），不太信公司自己說自己好。
+            這一關這個工具量不到，只在前兩關都過了之後，才會說差距在這裡。
+          </p>
+        </GateRow>
+      </div>
+      <p className="mt-3 text-xs text-ink3">{d.recencyNote}</p>
+    </div>
+  );
+}
+
+// 改題目重問：AI 猜的題目可能不是客戶真的會問的，題目錯了，三關判斷全都跟著錯。
+function EditQuestions({ jobId, current, onDone }: { jobId: string | null; current: string[]; onDone: (r: RecommendVisibility) => void }) {
+  const [open, setOpen] = useState(false);
+  const [drafts, setDrafts] = useState<string[]>(() => [...current, "", "", ""].slice(0, 3));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  if (!jobId) return null;
+  async function submit() {
+    setBusy(true);
+    setErr("");
+    try {
+      const res = await fetch("/api/geo/recommend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId, questions: drafts.map((q) => q.trim()).filter(Boolean) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "重問失敗");
+      track("recommend_rerun", { questions: drafts.filter((q) => q.trim()).length });
+      onDone(data.recommendVisibility as RecommendVisibility);
+      setOpen(false);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "重問失敗");
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="mt-2 text-sm font-semibold text-ink underline underline-offset-2">
+        題目不對？改成客戶真的會問的
+      </button>
+    );
+  }
+  return (
+    <div className="mt-3 space-y-2">
+      {drafts.map((q, i) => (
+        <input
+          key={i}
+          value={q}
+          onChange={(e) => setDrafts((prev) => prev.map((p, j) => (j === i ? e.target.value : p)))}
+          placeholder={`第 ${i + 1} 題（8～80 字，不要寫你的品牌名）`}
+          className="w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink"
+          maxLength={80}
+          disabled={busy}
+        />
+      ))}
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={submit} disabled={busy} className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-paper disabled:opacity-50">
+          {busy ? "問 AI 中，約 30～60 秒…" : "用這幾題重問"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} disabled={busy} className="text-sm text-ink3">取消</button>
+      </div>
+      {err && <p className="text-sm" style={{ color: STATUS_COLOR.fail }}>✗ {err}</p>}
+    </div>
+  );
+}
+
+function RecommendBlock({ data, jobId, onReplace }: { data: RecommendVisibility; jobId: string | null; onReplace: (r: RecommendVisibility) => void }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   // 標題用「答案裡真的點名你」的次數，不是「引用清單裡有你」——後者只代表 AI 查過你，
   // Perplexity 一個回答就列二十筆來源，把那個講成「AI 引用了你」是報喜不報憂。
@@ -3000,7 +3046,7 @@ function RecommendBlock({ data }: { data: RecommendVisibility }) {
   return (
     <div className="mb-3">
       <div className="rounded-[10px] border border-line bg-card p-6">
-        <p className="mono text-[11px] font-medium tracking-wide text-ink3 uppercase">我們先幫你問了 {data.questions.length} 題</p>
+        <p className="mono text-[11px] font-medium tracking-wide text-ink3 uppercase">{data.customQuestions ? `用你的 ${data.questions.length} 題重問` : `我們先幫你問了 ${data.questions.length} 題`}</p>
         <p className="mt-1 text-lg font-bold text-ink">
           {/* 三態要真的是三態：綠＝答案裡有你、黃＝它查過你但沒寫進答案、紅＝完全沒有。
               兩個黃燈等於燈號沒作用（2026-09-15 小積木回報）。這一層不計入總分，
@@ -3019,9 +3065,11 @@ function RecommendBlock({ data }: { data: RecommendVisibility }) {
           </p>
         )}
         <p className="mt-2 max-w-[38em] text-sm leading-relaxed text-ink2">
-          這 {data.questions.length} 題是 AI 讀了你的首頁後，猜「一般人在找這類服務時會怎麼問」寫出來的，題目裡沒有你的品牌名。
-          它們只是猜的，不是真實搜尋量；要看跟你主推項目對不對得上。
+          {data.customQuestions
+            ? `這 ${data.questions.length} 題是你自己改的題目。`
+            : `這 ${data.questions.length} 題是 AI 讀了你的首頁後猜的，不是真實搜尋量。題目跟客戶真的會問的對不上，上面的判斷就不準。`}
         </p>
+        <EditQuestions jobId={jobId} current={data.questions.map((q) => q.question)} onDone={onReplace} />
 
         {data.names.length > 0 && (
           <div className="mt-5">
@@ -3240,6 +3288,7 @@ export default function HomeClient({
   const [keywordResults, setKeywordResults] = useState<Record<string, KeywordVisibilityResult[]>>({});
   const [keywordLoading, setKeywordLoading] = useState(false);
   const [keywordError, setKeywordError] = useState("");
+  const [recommendOverride, setRecommendOverride] = useState<RecommendVisibility | null>(null);
 
   // 按下「開始檢測」之後，「01 THE CHECK」以下那幾個行銷內容區塊（介紹健檢會看什麼、
   // 怎麼運作、報告長什麼樣）就不需要了——使用者已經在等結果，這些說明文字只會讓進度卡
@@ -3253,6 +3302,7 @@ export default function HomeClient({
     setLoading(true);
     setError("");
     setStatus(null);
+    setRecommendOverride(null);
     track("audit_start", { domain: url.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "") });
     try {
       const res = await fetch("/api/geo", {
@@ -3321,7 +3371,8 @@ export default function HomeClient({
   // 把所有關鍵字查詢的引用來源彙總成一份「AI 目前的推薦名單」。
   // 純前端計算，資料是已經查回來的 keywordResults，不會多花任何 API 額度。
   // 自動跑的推薦題跟使用者自己查的關鍵字合在一起算——對 AI 來說都是「這個主題底下推誰」。
-  const recommend = status?.recommendVisibility ?? null;
+  // 使用者改題目重問過，就用重問的結果蓋掉健檢時自動問的那份
+  const recommend = recommendOverride ?? status?.recommendVisibility ?? null;
   const recommendAsKeywordResults: Record<string, KeywordVisibilityResult[]> = Object.fromEntries(
     (recommend?.questions ?? []).map((q) => [q.question, q.results.map((r) => ({ ...r, keyword: q.question }))]),
   );
@@ -3332,12 +3383,8 @@ export default function HomeClient({
       results.map((r) => ({ keyword, citations: r.citations })),
     ),
   );
-  // 同一批引用來源，換成「行銷能不能自己動手」的分法（見 lib/geo-citation-sources.ts）
-  const sourceBreakdown = summarizeSources(
-    Object.entries(allKeywordResults).flatMap(([keyword, results]) =>
-      results.flatMap((r) => r.citations.map((c) => ({ keyword, url: c.url, title: c.title, isSelf: c.isSelf }))),
-    ),
-  );
+  // 「AI 為什麼沒推薦你」三關：品牌題（第 1 關）＋推薦題與內容比對（第 2、3 關）
+  const diagnosis = recommend && engine ? buildDiagnosis(engine.brandVisibility, recommend) : null;
   // Perplexity 一個回答就會帶 20 筆引用，兩個關鍵字查下來動輒四十個網域，
   // 其中絕大多數只出現一次——那是長尾，不是 AI 真的在推的名單。畫面只列前十，
   // 剩下的用一句話帶過就好，不要逼使用者自己從四十行裡找重點。
@@ -3655,7 +3702,7 @@ export default function HomeClient({
                 crawledPages={status?.progress.crawled ?? 0}
                 keywordPage={
                   Object.keys(allKeywordResults).length > 0
-                    ? { keywords: allKeywordOrder, results: allKeywordResults, citedDomains, sourceBreakdown }
+                    ? { keywords: allKeywordOrder, results: allKeywordResults, citedDomains, diagnosis }
                     : null
                 }
               />
@@ -3683,8 +3730,10 @@ export default function HomeClient({
                 <p className="mb-3 text-sm text-ink3">我們正在幫你問 AI 幾個推薦題，深度健檢跑完會一起出來…</p>
               )}
 
+              {diagnosis && <DiagnosisBlock d={diagnosis} />}
+
               {recommend && (
-                <RecommendBlock data={recommend} />
+                <RecommendBlock key={recommend.askedAt} data={recommend} jobId={reportJobId} onReplace={setRecommendOverride} />
               )}
 
               {status?.status === "completed" && !recommend && (
@@ -3843,7 +3892,6 @@ export default function HomeClient({
                 </div>
               )}
 
-              {sourceBreakdown.total > 0 && <MarketingSourcesBlock breakdown={sourceBreakdown} origin={engine.origin} />}
             </div>
 
             {engine.visibility && (

@@ -1,5 +1,6 @@
 import { runVisibilityQueries, hostnameOf, isSameSite, type VisibilityAnswer } from './geo-brand-visibility';
 import { SITE_URL } from '@/lib/site';
+import type { ContentMatch } from './geo-content-match';
 
 // ── GEO：推薦題自動查詢 ──────────────────────────────────
 // 品牌能見度（geo-brand-visibility.ts）問的是「AI 認不認得你」；關鍵字能見度
@@ -42,6 +43,11 @@ export interface RecommendVisibility {
   totalAnswers: number;
   citedSelfCount: number;  // 引用清單裡出現你的網址的次數（寬鬆）
   namedSelfCount: number;  // 回答正文真的點名你的次數（嚴格，畫面上的標題用這個）
+  // 「AI 為什麼沒推薦你」第 2 關：每題你網站上最接近的一頁（見 geo-content-match.ts）。
+  // 要等爬蟲跑完才算得出來，所以是後補的；null／undefined 代表沒算出來，畫面上第 2 關就不給判斷。
+  contentMatch?: ContentMatch[] | null;
+  // 題目是使用者自己改過的，不是 AI 猜的——畫面上的說明文字要跟著換
+  customQuestions?: boolean;
 }
 
 export interface RecommendInput {
@@ -58,7 +64,7 @@ export interface RecommendInput {
 const MODEL = 'openai/gpt-4.1-mini';
 const QUESTION_COUNT = 3;
 
-async function askJson(prompt: string, apiKey: string, maxTokens: number): Promise<string> {
+export async function askJson(prompt: string, apiKey: string, maxTokens: number): Promise<string> {
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -81,7 +87,7 @@ async function askJson(prompt: string, apiKey: string, maxTokens: number): Promi
   return data.choices?.[0]?.message?.content ?? '';
 }
 
-function parseJson<T>(text: string): T | null {
+export function parseJson<T>(text: string): T | null {
   const m = text.match(/\{[\s\S]*\}/);
   if (!m) return null;
   try {
@@ -279,15 +285,34 @@ function mentionsSelf(
   return citations.some((c, i) => c.isSelf && new RegExp(`\\[${i + 1}\\]`).test(answer));
 }
 
-export async function runRecommendVisibility(input: RecommendInput, origin: string): Promise<RecommendVisibility | null> {
+// 使用者自己改的題目：長度跟品牌名的規則跟 AI 生的題目一樣。含品牌名就變成「AI 認不認得你」，不是「推不推你」。
+export function sanitizeCustomQuestions(raw: unknown[], brandName: string): string[] {
+  const brand = brandName.toLowerCase();
+  return raw
+    .filter((q): q is string => typeof q === 'string')
+    .map((q) => q.trim())
+    .filter((q) => q.length >= 8 && q.length <= 80)
+    .filter((q) => !brand || !q.toLowerCase().includes(brand))
+    .slice(0, QUESTION_COUNT);
+}
+
+export async function runRecommendVisibility(
+  input: RecommendInput,
+  origin: string,
+  customQuestions?: string[],
+): Promise<RecommendVisibility | null> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey || !input.brandName) return null;
 
   let questions: string[];
-  try {
-    questions = await generateRecommendQuestions(input, apiKey);
-  } catch {
-    return null;
+  if (customQuestions && customQuestions.length > 0) {
+    questions = customQuestions;
+  } else {
+    try {
+      questions = await generateRecommendQuestions(input, apiKey);
+    } catch {
+      return null;
+    }
   }
   if (questions.length === 0) return null;
 
@@ -324,5 +349,6 @@ export async function runRecommendVisibility(input: RecommendInput, origin: stri
     totalAnswers: flat.length,
     citedSelfCount: questionsWithAnswers.reduce((n, q) => n + q.results.filter((r) => r.citedSelf).length, 0),
     namedSelfCount: questionsWithAnswers.reduce((n, q) => n + q.results.filter((r) => r.namedSelf).length, 0),
+    customQuestions: !!customQuestions && customQuestions.length > 0,
   };
 }

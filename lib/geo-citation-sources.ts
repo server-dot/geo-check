@@ -1,66 +1,14 @@
-// ── GEO：AI 引用來源分類（行銷部門看的那一區） ──────────────────
-// tallyCitedDomains() 告訴使用者「AI 引了誰、引幾次」，但那份名單對行銷部門沒有動作可接：
-// robots.txt、schema 是工程師的事，行銷主管拿到名單只能乾瞪眼。
-// 這裡把同一批引用來源依「行銷能不能自己動手」分類——清單文可以去爭取被列進去、
-// 論壇可以經營口碑、百科／資料庫可以更新資料、媒體可以投稿——然後直接列出那些網址。
+// ── GEO：AI 引用來源分類 ──────────────────────────────
+// 「AI 為什麼沒推薦你」三關判斷要用到兩種分法：
+// - 第 2 關拿「AI 引了哪些同業頁面」當對照組——平台、清單文、論壇、海外站都不是同業，要濾掉。
+// - 第 3 關講「AI 偏好第三方推薦」——平台、清單文、論壇、媒體被引了幾次。
 //
 // 分類只看網域跟標題，純規則，不問 AI：分錯一個網域的代價是一列標籤不對，
-// 但多打一次 API 的代價是每份報告都變慢，而且分類本來就只是「大概是哪一類」。
-//
-// 這裡刻意不講「他被引用是因為他有 X」那種因果（見 memory：geo-check-visibility-no-tech-causation），
-// 只講「AI 引了哪一類、你在不在裡面」。
+// 但多打一次 API 的代價是每份報告都變慢。
 //
 // 純函式、零 import，前端 client component 可以直接引用。
 
 export type SourceKind = 'self' | 'listicle' | 'forum' | 'reference' | 'media' | 'gov' | 'other';
-
-export interface SourceKindMeta {
-  label: string;
-  // 行銷部門對這一類來源能做的事，一句話。用陳述句，不用「建議」「應該」（報告文案規範）。
-  action: string;
-}
-
-export const SOURCE_KIND_META: Record<SourceKind, SourceKindMeta> = {
-  self: { label: '你的網站', action: 'AI 已經直接引用你的頁面' },
-  listicle: { label: '清單／評比文', action: '這類文章是行銷不用動程式碼就能爭取被列進去的位置' },
-  forum: { label: '論壇／社群', action: '這些平台上關於你的討論，行銷可以直接參與或經營' },
-  reference: { label: '百科／資料庫', action: '這些頁面的資料是行銷可以自己去更新的' },
-  media: { label: '媒體／部落格', action: '投稿、受訪、發新聞稿都能進到這一類' },
-  gov: { label: '政府／學術', action: '公家資料，通常改不了，看看就好' },
-  other: { label: '同業／一般公司網站', action: 'AI 直接拿這些公司自己的頁面當答案；這一類靠的是你站上有沒有同樣的頁面，不是去別人那裡佈局' },
-};
-
-// 畫面上的顯示順序：對行銷最有動作可接的排前面
-export const SOURCE_KIND_ORDER: SourceKind[] = ['listicle', 'forum', 'media', 'reference', 'other', 'gov', 'self'];
-
-export interface SourceCitation {
-  keyword: string;
-  url: string;
-  title: string;
-  isSelf: boolean;
-}
-
-export interface SourceTarget {
-  url: string;
-  title: string;
-  domain: string;
-  count: number;      // 這個網址被引用幾次
-  keywords: string[]; // 在哪些題目底下被引
-}
-
-export interface SourceKindSummary {
-  kind: SourceKind;
-  count: number;          // 這一類總共被引用幾次（同網址重複引用會累加）
-  share: number;          // 佔全部引用的比例 0–1
-  domains: number;        // 幾個不同網域
-  targets: SourceTarget[]; // 依次數排序的網址清單（同網址合併）
-}
-
-export interface SourceBreakdown {
-  total: number;
-  kinds: SourceKindSummary[];  // 依 SOURCE_KIND_ORDER，count 為 0 的不列
-  selfCount: number;
-}
 
 const FORUM_HOSTS = [
   'ptt.cc', 'dcard.tw', 'mobile01.com', 'facebook.com', 'fb.com', 'threads.net', 'threads.com',
@@ -68,18 +16,20 @@ const FORUM_HOSTS = [
   'tiktok.com', 'plurk.com', 'line.me', 'quora.com', 'bahamut.com.tw', 'gamer.com.tw',
 ];
 
-// 不列進這一區的來源（2026-09-23 小積木：不是同業的就不要放進來）：
-// 接案／媒合平台（出任務、Pro360…）上面是一堆接案者的個人頁，不是行銷能動手的位置；
-// 大陸、日本、韓國站是查詢沒限定地區時混進來的雜訊（查詢端已經加了台灣限定，這裡再擋一層）。
-const EXCLUDED_HOSTS = [
+// 接案／媒合平台：不是同業，但對「推薦誰」這種題目，AI 很常引（09-23 實測出任務一家就被引十幾次），
+// 所以第 3 關算「第三方」。
+const PLATFORM_HOSTS = [
   'tasker.com.tw', 'pro360.com.tw', 'nabi.104.com.tw', 'case.1111.com.tw', 'clutch.co', 'fiverr.com', 'upwork.com',
+];
+
+// 大陸、日本、韓國站是查詢沒限定地區時混進來的雜訊（查詢端已經加了台灣限定，這裡再擋一層）。
+const FOREIGN_HOSTS = [
   '163.com', 'sohu.com', 'sina.com.cn', 'qq.com', 'baidu.com', 'csdn.net', 'zhihu.com', 'bilibili.com', 'toutiao.com',
 ];
 const EXCLUDED_TLD = /\.(cn|jp|kr)$/;
 
-export function isExcludedSource(url: string): boolean {
-  const host = hostnameOf(url);
-  return !!host && (EXCLUDED_TLD.test(host) || hostMatches(host, EXCLUDED_HOSTS));
+function isForeign(host: string): boolean {
+  return EXCLUDED_TLD.test(host) || hostMatches(host, FOREIGN_HOSTS);
 }
 
 const REFERENCE_HOSTS = [
@@ -129,61 +79,20 @@ export function classifyCitation(c: { url: string; title: string; isSelf: boolea
   return 'other';
 }
 
-export function summarizeSources(citations: SourceCitation[]): SourceBreakdown {
-  // 先依網址合併再分類：同一個網址在不同回答裡標題可能一個有、一個空（Perplexity 常這樣），
-  // 逐筆分類會把同一頁一半算清單文、一半算其他。
-  const targets = new Map<string, SourceTarget & { isSelf: boolean }>();
-  for (const c of citations) {
-    if (!c.isSelf && isExcludedSource(c.url)) continue;
-    const key = c.url.replace(/[?#].*$/, '').replace(/\/$/, '');
-    const existing = targets.get(key);
-    if (existing) {
-      existing.count += 1;
-      if (!existing.keywords.includes(c.keyword)) existing.keywords.push(c.keyword);
-      if (!existing.title && c.title) existing.title = c.title;
-    } else {
-      targets.set(key, { url: c.url, title: c.title, domain: hostnameOf(c.url), count: 1, keywords: [c.keyword], isSelf: c.isSelf });
-    }
-  }
-
-  const byKind = new Map<SourceKind, SourceTarget[]>();
-  let total = 0;
-  let selfCount = 0;
-  for (const t of targets.values()) {
-    const kind = classifyCitation(t);
-    total += t.count;
-    if (kind === 'self') selfCount += t.count;
-    const { isSelf: _drop, ...target } = t;
-    void _drop;
-    const list = byKind.get(kind) ?? [];
-    list.push(target);
-    byKind.set(kind, list);
-  }
-
-  const kinds: SourceKindSummary[] = [];
-  for (const kind of SOURCE_KIND_ORDER) {
-    const list = byKind.get(kind);
-    if (!list || list.length === 0) continue;
-    list.sort((a, b) => b.count - a.count || b.keywords.length - a.keywords.length || a.domain.localeCompare(b.domain));
-    const count = list.reduce((n, t) => n + t.count, 0);
-    kinds.push({
-      kind,
-      count,
-      share: total > 0 ? count / total : 0,
-      domains: new Set(list.map((t) => t.domain)).size,
-      targets: list,
-    });
-  }
-
-  return { total, kinds, selfCount };
+// 同業：不是自己、不是平台／清單文／論壇／媒體／百科／政府、也不是海外站。
+// 剩下的多半是做同一件事的公司或個人顧問（darrelltw 這種個人顧問站也算）。
+export function isPeerSource(c: { url: string; title: string; isSelf: boolean }): boolean {
+  const host = hostnameOf(c.url);
+  if (!host || isForeign(host) || hostMatches(host, PLATFORM_HOSTS)) return false;
+  return classifyCitation(c) === 'other';
 }
 
-// 一句話總結給行銷主管看：AI 這些回答的引用裡，最大宗是哪一類、你在不在裡面。
-export function sourceHeadline(b: SourceBreakdown): string {
-  if (b.total === 0) return '';
-  const top = b.kinds.filter((k) => k.kind !== 'self').sort((a, b) => b.count - a.count)[0];
-  if (!top) return `AI 這 ${b.total} 次引用全部來自你自己的網站。`;
-  const pct = Math.round(top.share * 100);
-  const selfPart = b.selfCount > 0 ? `你的網站佔 ${b.selfCount} 次` : '你的網站一次都沒被引到';
-  return `AI 這 ${b.total} 次引用裡，${pct}% 來自${SOURCE_KIND_META[top.kind].label}（${top.count} 次、${top.domains} 個網域）；${selfPart}。`;
+// 第三方推薦：別人寫的「推薦誰」——平台、清單文、論壇、媒體。
+export function isThirdPartySource(c: { url: string; title: string; isSelf: boolean }): boolean {
+  if (c.isSelf) return false;
+  const host = hostnameOf(c.url);
+  if (!host || isForeign(host)) return false;
+  if (hostMatches(host, PLATFORM_HOSTS)) return true;
+  const kind = classifyCitation(c);
+  return kind === 'listicle' || kind === 'forum' || kind === 'media';
 }

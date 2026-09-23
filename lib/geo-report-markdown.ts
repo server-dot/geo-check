@@ -1,7 +1,7 @@
 import type { AuditJob } from './geo-audit-jobs';
 import { buildCategories5, computeOverallScore } from './geo-score';
 import { tallyCitedDomains } from './geo-cited-domains';
-import { summarizeSources, sourceHeadline, SOURCE_KIND_META } from './geo-citation-sources';
+import { buildDiagnosis, GATE_SYMBOL, VERDICT_LABEL } from './geo-diagnosis';
 import { sortByOrder } from './geo-audit-rules';
 import { SITE_NAME } from '@/lib/site';
 
@@ -154,6 +154,24 @@ export function buildReportMarkdown(job: AuditJob): string {
   if (rec) {
     out.push('## AI 推不推薦你（自動問的推薦題）');
     out.push('');
+
+    // 三關判斷，跟網頁版同一套（lib/geo-diagnosis.ts）
+    const d = buildDiagnosis(job.engine?.brandVisibility ?? [], rec);
+    out.push(`### AI 為什麼沒推薦你：${d.conclusion}`);
+    out.push('');
+    out.push(`1. ${GATE_SYMBOL[d.gate1.state]} AI 認得你嗎：${d.gate1.line}`);
+    out.push(`2. ${GATE_SYMBOL[d.gate2.state]} 有沒有一頁在回答：${d.gate2.line}`);
+    out.push(`3. ${GATE_SYMBOL[d.gate3.state]} 別人有沒有推薦你：${d.gate3.line}`);
+    out.push('');
+    for (const m of d.gate2.matches) {
+      out.push(`- 「${esc(m.question)}」${VERDICT_LABEL[m.verdict]}`);
+      out.push(`  - 你最接近的頁面：${m.pageUrl ? `${esc(m.pageTitle)} ${m.pageUrl}` : '（沒有）'}`);
+      if (m.missing.length > 0) out.push(`  - 你頁面上沒有的字：${m.missing.join('、')}`);
+      if (m.peerPages.length > 0) out.push(`  - AI 引的同業頁面：${m.peerPages.map((p) => `${esc(p.title)} ${p.url}`).join('；')}`);
+    }
+    if (d.gate2.matches.length > 0) out.push('');
+    out.push(d.recencyNote);
+    out.push('');
     out.push(
       `這 ${rec.questions.length} 題是 AI 讀過首頁後猜「一般人找這類服務時會怎麼問」寫出來的，題目裡沒有品牌名。` +
         `題目是推估，不是真實搜尋量。提問時間：${rec.askedAt}。`,
@@ -200,26 +218,6 @@ export function buildReportMarkdown(job: AuditJob): string {
       out.push('| --- | --- | --- | --- |');
       for (const d of cited.slice(0, 20)) out.push(`| ${d.domain} | ${d.count} | ${d.keywords.length} | ${d.isSelf ? '是' : ''} |`);
       out.push('');
-    }
-
-    // 行銷部門那一區：同一批引用來源，依「行銷能不能自己動手」分類
-    const breakdown = summarizeSources(
-      rec.questions.flatMap((q) =>
-        q.results.flatMap((r) => r.citations.map((c) => ({ keyword: q.question, url: c.url, title: c.title, isSelf: c.isSelf }))),
-      ),
-    );
-    if (breakdown.total > 0) {
-      out.push('### 行銷部門自己能做的：AI 引用的來源裡，哪些不用工程師也能去佈局');
-      out.push('');
-      out.push(sourceHeadline(breakdown));
-      out.push('');
-      for (const k of breakdown.kinds) {
-        const meta = SOURCE_KIND_META[k.kind];
-        out.push(`**${meta.label}**：${k.count} 次、${k.domains} 個網域、${Math.round(k.share * 100)}%——${meta.action}`);
-        for (const t of k.targets.slice(0, 5)) out.push(`- ${t.title ? esc(t.title) + ' ' : ''}${t.url}（${t.count} 次）`);
-        if (k.targets.length > 5) out.push(`- …另外 ${k.targets.length - 5} 個`);
-        out.push('');
-      }
     }
   }
 

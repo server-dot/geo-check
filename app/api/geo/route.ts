@@ -11,8 +11,9 @@ import { detectWaf, type WafHint } from '@/lib/geo-waf-fingerprint';
 import { probeBotAccess, type ProbeResult } from '@/lib/geo-bot-probe';
 import { checkBrandVisibility, guessBrandName } from '@/lib/geo-brand-visibility';
 import { runRecommendVisibility } from '@/lib/geo-recommend-visibility';
+import { matchQuestionsToPages } from '@/lib/geo-content-match';
 import { analyzeLlmsTxt } from '@/lib/geo-llms-txt';
-import { createAuditJob, updateAuditJob, type EngineResult } from '@/lib/geo-audit-jobs';
+import { createAuditJob, updateAuditJob, setAuditJobContext, type EngineResult } from '@/lib/geo-audit-jobs';
 import { readTextCapped, crawlSite } from '@/lib/geo-audit-crawler';
 import { aggregateAuditChecks } from '@/lib/geo-audit-aggregate';
 import { buildSchemaTypeCards } from '@/lib/geo-schema-check';
@@ -252,18 +253,18 @@ export async function POST(req: NextRequest) {
     // 推薦題查詢跟爬蟲互不相依，先開跑；要等結果時再 await。
     // 這段自己吞錯（回 null），不能讓它把整個深度健檢弄成 failed。
     const vis = engine.visibility;
-    const recommendPromise = vis
-      ? runRecommendVisibility(
-          {
-            brandName: guessBrandName(vis.title, vis.orgName),
-            title: vis.title,
-            description: vis.description,
-            h1: vis.h1,
-            leadParagraphs: vis.leadParagraphs,
-            preview: vis.preview,
-          },
-          origin,
-        ).catch(() => null)
+    const recommendInput = vis
+      ? {
+          brandName: guessBrandName(vis.title, vis.orgName),
+          title: vis.title,
+          description: vis.description,
+          h1: vis.h1,
+          leadParagraphs: vis.leadParagraphs,
+          preview: vis.preview,
+        }
+      : null;
+    const recommendPromise = recommendInput
+      ? runRecommendVisibility(recommendInput, origin).catch(() => null)
       : Promise.resolve(null);
     try {
       const crawl = await crawlSite(origin, {
@@ -283,7 +284,17 @@ export async function POST(req: NextRequest) {
         crawl.pages.map((p) => ({ url: p.url, mainText: p.mainText })),
       );
       updateAuditJob(job.id, { status: 'analyzing', message: '等 AI 回答推薦題…' });
-      const recommendVisibility = await recommendPromise;
+      let recommendVisibility = await recommendPromise;
+      const matchPages = crawl.pages
+        .filter((p) => p.ok && !p.nonHtml)
+        .map((p) => ({ url: p.url, title: p.title, text: p.mainText }));
+      if (recommendInput) setAuditJobContext(job.id, { origin, recommendInput, pages: matchPages });
+      const apiKey = process.env.OPENROUTER_API_KEY;
+      if (recommendVisibility && apiKey) {
+        updateAuditJob(job.id, { status: 'analyzing', message: '比對你的頁面有沒有在回答這些題目…' });
+        const contentMatch = await matchQuestionsToPages(recommendVisibility.questions, matchPages, apiKey).catch(() => null);
+        recommendVisibility = { ...recommendVisibility, contentMatch };
+      }
       updateAuditJob(job.id, {
         status: 'completed',
         result: audit,
