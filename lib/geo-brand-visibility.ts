@@ -44,6 +44,11 @@ const ENGINES: { engine: string; model: string }[] = [
   { engine: 'ChatGPT（GPT-4o＋即時搜尋）', model: 'openai/gpt-4o:online' },
 ];
 
+// 題目沒寫「台灣」時，兩家引擎的搜尋會抓進簡中、日本網站（2026-09-23 實測 Perplexity 引到
+// persol-group.co.jp、genee.jp）。system prompt 跟 web_search_options.user_location 對 Perplexity
+// 的搜尋都沒效——它只拿使用者訊息去搜——所以直接接在題目後面。報告上顯示的題目不含這句。
+const LOCALE_SUFFIX = '（我在台灣，請找台灣的資料，用繁體中文回答）';
+
 async function askModel(
   model: string,
   query: string,
@@ -60,7 +65,7 @@ async function askModel(
     },
     body: JSON.stringify({
       model,
-      messages: [{ role: 'user', content: query }],
+      messages: [{ role: 'user', content: query + LOCALE_SUFFIX }],
       max_tokens: maxTokens,
       temperature: 0.2,
     }),

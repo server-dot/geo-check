@@ -65,11 +65,25 @@ export interface SourceBreakdown {
 const FORUM_HOSTS = [
   'ptt.cc', 'dcard.tw', 'mobile01.com', 'facebook.com', 'fb.com', 'threads.net', 'threads.com',
   'instagram.com', 'youtube.com', 'youtu.be', 'linkedin.com', 'x.com', 'twitter.com', 'reddit.com',
-  'tiktok.com', 'plurk.com', 'line.me', 'quora.com', 'zhihu.com', 'bahamut.com.tw', 'gamer.com.tw',
+  'tiktok.com', 'plurk.com', 'line.me', 'quora.com', 'bahamut.com.tw', 'gamer.com.tw',
 ];
 
+// 不列進這一區的來源（2026-09-23 小積木：不是同業的就不要放進來）：
+// 接案／媒合平台（出任務、Pro360…）上面是一堆接案者的個人頁，不是行銷能動手的位置；
+// 大陸、日本、韓國站是查詢沒限定地區時混進來的雜訊（查詢端已經加了台灣限定，這裡再擋一層）。
+const EXCLUDED_HOSTS = [
+  'tasker.com.tw', 'pro360.com.tw', 'nabi.104.com.tw', 'case.1111.com.tw', 'clutch.co', 'fiverr.com', 'upwork.com',
+  '163.com', 'sohu.com', 'sina.com.cn', 'qq.com', 'baidu.com', 'csdn.net', 'zhihu.com', 'bilibili.com', 'toutiao.com',
+];
+const EXCLUDED_TLD = /\.(cn|jp|kr)$/;
+
+export function isExcludedSource(url: string): boolean {
+  const host = hostnameOf(url);
+  return !!host && (EXCLUDED_TLD.test(host) || hostMatches(host, EXCLUDED_HOSTS));
+}
+
 const REFERENCE_HOSTS = [
-  'wikipedia.org', 'wikiwand.com', 'baike.baidu.com', 'wikidata.org',
+  'wikipedia.org', 'wikiwand.com', 'wikidata.org',
   '104.com.tw', '1111.com.tw', '518.com.tw', 'yes123.com.tw', 'cakeresume.com', 'cake.me',
   'findbiz.nat.gov.tw', 'gcis.nat.gov.tw', 'twincn.com', 'opengovtw.com', 'findcompany.com.tw',
   'google.com', 'goo.gl', 'crunchbase.com', 'glassdoor.com', 'trustpilot.com', 'g2.com', 'capterra.com',
@@ -120,6 +134,7 @@ export function summarizeSources(citations: SourceCitation[]): SourceBreakdown {
   // 逐筆分類會把同一頁一半算清單文、一半算其他。
   const targets = new Map<string, SourceTarget & { isSelf: boolean }>();
   for (const c of citations) {
+    if (!c.isSelf && isExcludedSource(c.url)) continue;
     const key = c.url.replace(/[?#].*$/, '').replace(/\/$/, '');
     const existing = targets.get(key);
     if (existing) {
