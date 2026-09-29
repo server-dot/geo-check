@@ -1490,7 +1490,7 @@ function ReportBoard({
                           {r.citedSelf ? "🟢 有提到你" : "🔴 沒有引用你"}
                         </span>
                       </div>
-                      <div style={{ fontSize: 12.5, lineHeight: 1.65, color: "var(--rb-ink2)" }}>{r.advice}</div>
+                      {r.advice && <div style={{ fontSize: 12.5, lineHeight: 1.65, color: "var(--rb-ink2)" }}>{r.advice}</div>}
                       {cite && (
                         <div
                           className="mono rb-clip"
@@ -1698,7 +1698,7 @@ function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData 
                         {scored(r) ? "🟢 有提到你" : r.citedSelf ? "🟡 查過你沒推你" : "🔴 沒有提到你"}
                       </span>
                     </div>
-                    <div style={{ fontSize: 12.5, lineHeight: 1.65, color: "var(--rb-ink2)" }}>{r.advice}</div>
+                    {r.advice && <div style={{ fontSize: 12.5, lineHeight: 1.65, color: "var(--rb-ink2)" }}>{r.advice}</div>}
                     {cite && (
                       <div className="mono rb-clip" style={{ fontSize: 11.5, color: cite.isSelf ? "var(--rb-gold)" : "var(--rb-ink3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {cite.isSelf ? "★ " : ""}
@@ -2963,8 +2963,8 @@ function DiagnosisBlock({ d }: { d: Diagnosis }) {
         </GateRow>
         <GateRow n={3} state={d.gate3.state} line={d.gate3.line}>
           <p className="mt-2 max-w-[38em] border-l-2 border-line pl-3 text-[13px] leading-relaxed text-ink2">
-            問「推薦誰」的時候，AI 比較相信別人寫的推薦（接案平台、推薦文、論壇），不太信公司自己說自己好。
-            這一關這個工具量不到，只在前兩關都過了之後，才會說差距在這裡。
+            問「推薦誰」的時候，AI 比較信別人寫的推薦（接案平台、推薦文、論壇），比較不信公司自己說自己好。
+            這一關查不到，所以要前兩關都沒問題，才會把原因算到這裡。
           </p>
         </GateRow>
       </div>
@@ -3153,7 +3153,7 @@ function BrandVisibilityCard({ result }: { result: VisibilityCardData }) {
               ? "🟡 查過你，但答案裡沒推薦你"
               : "🔴 沒有推薦你"}
       </p>
-      <p className="mt-2 text-sm leading-relaxed text-ink2">{result.advice}</p>
+      {result.advice && <p className="mt-2 text-sm leading-relaxed text-ink2">{result.advice}</p>}
 
       <div className="quote-block mt-4 border-l-[3px] border-lime pl-4">
         <p className="text-xs font-medium text-ink3">我們實際問的問題：</p>

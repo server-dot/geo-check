@@ -244,11 +244,11 @@ export async function extractRecommendedNames(
 }
 
 // 三態，不是兩態：「引用清單有你」跟「答案裡推薦你」差很多，混在一起講會變成報喜不報憂。
-function adviceFor(a: VisibilityAnswer, question: string, namedSelf: boolean): string {
-  if (namedSelf) return `${a.engine} 在回答「${question}」時直接把你寫進答案裡——這題你進得了 AI 的推薦名單。`;
-  if (a.citedSelf)
-    return `${a.engine} 查過你的網站（你的網址出現在它的引用清單裡），但回答「${question}」時沒有把你寫進推薦名單——它讀到了你，只是沒拿你當答案。`;
-  return `${a.engine} 回答「${question}」時沒有引用也沒有提到你——這題 AI 推的是別人。`;
+// 卡片標題已經寫了燈號、下面也貼了實際問題跟回答，這裡不再把題目跟結論重講一遍
+// （09-29 小積木：「下面不是有實際回答了嗎」）。只有🟡要補一句，因為光看標題看不出「查過你」是什麼意思。
+function adviceFor(a: VisibilityAnswer, namedSelf: boolean): string {
+  if (!namedSelf && a.citedSelf) return '你的網址在它的引用來源裡，但答案沒有推薦你。';
+  return '';
 }
 
 // 回答正文有沒有真的推薦你。三種證據，任一成立就算：
@@ -323,7 +323,7 @@ export async function runRecommendVisibility(
       const answers = await runVisibilityQueries(`${question} 請具體推薦幾個，並附上來源網址。`, origin, 900);
       const results: RecommendAnswer[] = (answers ?? []).map((a) => {
         const named = mentionsSelf(a.answer, input.brandName, domain, a.citations);
-        return { ...a, query: question, namedSelf: named, advice: adviceFor(a, question, named) };
+        return { ...a, query: question, namedSelf: named, advice: adviceFor(a, named) };
       });
       return { question, results };
     }),

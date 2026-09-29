@@ -48,10 +48,10 @@ export function buildDiagnosis(brand: { citedSelf: boolean }[], rec: DiagnosisIn
   const found = brand.filter((b) => b.citedSelf).length;
   const gate1: Gate =
     brand.length === 0
-      ? { state: 'unknown', line: '這次沒有用你的名字去問 AI' }
+      ? { state: 'unknown', line: '這次沒用你的名字問 AI' }
       : found > 0
-        ? { state: 'pass', line: `用你的名字問，${found}/${brand.length} 家 AI 找得到你的網站` }
-        : { state: 'fail', line: `用你的名字問，${brand.length} 家 AI 都沒引用你的網站` };
+        ? { state: 'pass', line: `用你的名字問，${found}/${brand.length} 家 AI 找得到你` }
+        : { state: 'fail', line: `用你的名字問，${brand.length} 家 AI 都找不到你` };
 
   // ② 內容比對
   const matches = rec.contentMatch ?? [];
@@ -62,12 +62,12 @@ export function buildDiagnosis(brand: { citedSelf: boolean }[], rec: DiagnosisIn
     n === 0
       ? { state: 'unknown', line: '這次沒比對出來', matches }
       : yes === n
-        ? { state: 'pass', line: `${n} 題都有一頁在正面回答`, matches }
+        ? { state: 'pass', line: `${n} 題都有`, matches }
         : yes + partial === 0
-          ? { state: 'fail', line: `${n} 題都沒有一頁在回答`, matches }
+          ? { state: 'fail', line: `${n} 題都沒有`, matches }
           : {
               state: 'partial',
-              line: [yes > 0 ? `${yes} 題有` : '', partial > 0 ? `${partial} 題只沾到邊` : '', n - yes - partial > 0 ? `${n - yes - partial} 題沒有` : '']
+              line: [yes > 0 ? `${yes} 題有` : '', partial > 0 ? `${partial} 題只有沾到邊` : '', n - yes - partial > 0 ? `${n - yes - partial} 題沒有` : '']
                 .filter(Boolean)
                 .join('、'),
               matches,
@@ -82,28 +82,28 @@ export function buildDiagnosis(brand: { citedSelf: boolean }[], rec: DiagnosisIn
     state: 'unknown',
     line:
       thirdParty > 0
-        ? `AI 在這些題目引了 ${thirdParty} 次平台、推薦文、論壇或媒體；你的網站權重這個工具量不到`
-        : '你的網站權重、有沒有被別人推薦，這個工具量不到',
+        ? `AI 回答時引了 ${thirdParty} 次平台、論壇、媒體或別人的推薦文。這些地方有沒有提到你，這裡查不到`
+        : '別的網站有沒有提到你，這裡查不到',
     thirdParty,
   };
 
   let conclusion: string;
   if (rec.namedSelfCount > 0) {
-    conclusion = `AI 有 ${rec.namedSelfCount} 次把你寫進答案，下面三關看還有哪裡能補`;
+    conclusion = `AI 推薦了你 ${rec.namedSelfCount} 次，其他沒推薦的原因看下面三項`;
   } else if (gate1.state === 'fail') {
-    conclusion = '卡在第 1 關：用名字問 AI 都找不到你，先看下面的技術檢測，後面兩關先不用看';
+    conclusion = '用名字問，AI 都找不到你。先看下面的技術檢測';
   } else if (gate2.state === 'fail') {
-    conclusion = '卡在第 2 關：客戶問的問題，你網站上沒有一頁在回答';
+    conclusion = '客戶會問的問題，你網站上沒有一頁在回答';
   } else if (gate2.state === 'partial' && yes === 0) {
-    conclusion = '卡在第 2 關：你的頁面只沾到邊，沒有一頁正面回答客戶的問題';
+    conclusion = '你的頁面只沾到邊，沒有一頁正面回答客戶的問題';
   } else if (gate2.state === 'partial' && gate1.state === 'pass') {
     // 有頁面在回答卻還是沒被推薦的那幾題，前兩關都過了，差距只剩第 3 關——不能整份報告都講成卡在第 2 關
     // （09-23 aiqkangber 實測：2 題 yes、1 題 partial，原本的結論把 2 題講成沒回答）
-    conclusion = `${yes} 題你有一頁在回答卻沒被推薦，差距在第 3 關；另外 ${n - yes} 題卡在第 2 關`;
+    conclusion = `${yes} 題你有頁面在回答，AI 還是推了別人。另外 ${n - yes} 題，你沒有一頁正面回答`;
   } else if (gate1.state === 'pass' && gate2.state === 'pass') {
-    conclusion = '前兩關都過了，差距在第 3 關：AI 比較信別人推薦的，或你的網站權重不夠';
+    conclusion = 'AI 找得到你，你也有頁面在回答，但它推了別人';
   } else {
-    conclusion = '這次資料不夠，判斷不出卡在哪一關';
+    conclusion = '這次資料不夠，看不出問題在哪';
   }
 
   return {
@@ -111,6 +111,6 @@ export function buildDiagnosis(brand: { citedSelf: boolean }[], rec: DiagnosisIn
     gate1,
     gate2,
     gate3,
-    recencyNote: '頁面如果是最近一個月內才改的，AI 可能還沒看到新版，3～4 週後再測一次比較準。',
+    recencyNote: '最近一個月才改過的頁面，AI 可能還沒讀到，過 3～4 週再測一次。',
   };
 }

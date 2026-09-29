@@ -167,11 +167,8 @@ export async function checkBrandVisibility(title: string, origin: string, orgNam
 
   return answers.map((a) => {
     const mentionsBrand = a.answer.includes(brandName);
-    const advice = a.citedSelf
-      ? `${a.engine} 回答時直接引用了你自己的網站，代表它找得到你、也願意拿你的內容當答案來源。`
-      : mentionsBrand
-        ? `${a.engine} 認得這個名字，但回答時引用的是別的網站，不是你自己的——內容可能是從別處轉述來的，不是第一手引用你。`
-        : `${a.engine} 沒有把這次搜尋跟你的品牌連在一起，代表你目前不在它找得到的範圍內。`;
+    // 卡片標題已經寫了有沒有引用你、下面也貼了實際回答，只補標題看不出來的那種情況
+    const advice = !a.citedSelf && mentionsBrand ? '它認得這個名字，但引用的是別的網站，不是你的。' : '';
     return { ...a, brandName, advice };
   });
 }
