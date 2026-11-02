@@ -149,22 +149,22 @@ export async function generateRecommendQuestions(input: RecommendInput, apiKey: 
 // 是客觀的，但 youtube.com、vocus.cc 這種平台網域看不出 AI 到底推了誰——
 // 回答正文裡寫的「AI 說人話」「雷蒙」才是客戶會記得的名字，這一步就是抓那個。
 // 主觀判斷，所以畫面上要保留回答原文讓人核對。
-function buildNamePrompt(answers: { engine: string; question: string; answer: string }[]): string {
+function buildNamePrompt(answers: { engine: string; question: string; answer: string }[], brandName: string, domain: string): string {
   const blocks = answers
     .map((a, i) => `[${i}] 引擎：${a.engine}\n問題：${a.question}\n回答：\n${a.answer.slice(0, 2500)}`)
     .join('\n\n---\n\n');
-  return `下面是幾個 AI 搜尋引擎對「推薦類問題」的回答。請從每個回答裡，抽出「被具體推薦或點名的對象」，並標出它是哪一種。
+  return `我們在幫「${brandName}」（${domain}）做檢測：拿推薦類問題去問 AI，看 AI 推了誰。下面是幾個 AI 搜尋引擎的回答。請從每個回答裡，抽出「被具體推薦或點名的對象」，並標出它是哪一種。
 
 兩種類型：
-- "brand"：提問者最後會選的「那一家」，也就是在跟提問者搶同一群客人的對手。例如：品牌、商品的牌子、公司、工作室、診所、顧問、講師、課程、YouTube 頻道、部落客。
-- "channel"：去哪裡買、去哪裡找的管道，本身不是對手。例如：電商平台（蝦皮、momo、PChome）、連鎖通路或藥妝店（屈臣氏、康是美、寶雅）、百貨、評論或比價網站（@cosme、mybest）、媒體、論壇、社群平台、接案平台。
+- "brand"：跟「${brandName}」賣同一類東西、提供同一類服務，客人會「選它而不選 ${brandName}」的對手。可能是品牌、商品的牌子、公司、工作室、診所、顧問、講師、課程、YouTube 頻道——但前提是它跟 ${brandName} 做的是同一件事。
+- "channel"：不是對手的其他對象。例如：電商平台（蝦皮、momo、PChome）、連鎖通路或藥妝店（屈臣氏、康是美、寶雅）、百貨、評論或比價網站（@cosme、mybest）、媒體、論壇、社群平台、接案平台，以及被當成「可以去問」的醫師、專家、網紅（除非 ${brandName} 自己就是做這一行）。
 
 規則：
 - 絕對不要抽：軟體／工具／技術名稱（n8n、OpenAI、Claude、Zapier 這類）、成分或原料名、泛稱（「線上課程平台」「藥妝店」「官方文件」）、文章標題。
 - 抽的是「誰」，不是「哪篇文章」：回答寫「TheAI學院的 n8n 完整教學」就抽「TheAI學院」；寫「【n8n 中文教學】從零打造…」這種標題，要抽發這篇的網站或作者，抽不出來就跳過。
 - 同一個對象的不同寫法（「屈臣氏 Watsons」「屈臣氏台灣（Watsons）Blog」）只算一個，用最短、最常見的那個名字。
 - 名字照回答裡的寫法，不要翻譯；同一回答重複出現只列一次。
-- 分不清是品牌還是通路時，看提問者會不會「選它而不選你」：會就是 brand。
+- 分不清時，看客人會不會「選它而不選 ${brandName}」：會就是 brand，不會就是 channel。
 - 沒有具體點名就給空陣列。
 
 ${blocks}
@@ -188,7 +188,7 @@ export async function extractRecommendedNames(
 ): Promise<RecommendedName[]> {
   if (answers.length === 0) return [];
   // 三個引擎 × 3 題＝9 份回答，每個名字又多帶 type，800 會被截斷、JSON 解析失敗、整份名單變空
-  const raw = await askJson(buildNamePrompt(answers), apiKey, 1600);
+  const raw = await askJson(buildNamePrompt(answers, brandName, domain), apiKey, 1600);
   const parsed = parseJson<{ answers?: { index?: number; names?: unknown }[] }>(raw);
   const rows = Array.isArray(parsed?.answers) ? parsed!.answers : [];
 

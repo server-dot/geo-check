@@ -49,30 +49,34 @@ function selfTokens(brandName: string): string[] {
   return [...out];
 }
 
-function spellingKey(name: string): string {
+function spellingTokens(name: string): string[] {
   const parts = name.toLowerCase().match(/[a-z0-9]+|[\u4e00-\u9fff]+/g) ?? [];
-  return [...new Set(parts)].sort().join("|");
+  return [...new Set(parts)].filter((t) => t.length >= 2);
 }
 
+// 同一個品牌的不同寫法併成一列：「賽吉兒Saugella」＝「SAUGELLA 賽吉兒」（組成一樣、順序不同），
+// 「婦潔」⊂「婦潔 (VIGILL)」⊂「Vigill 婦潔」、「HH」⊂「HH 草本新淨界」（一個被另一個完全包含）。
+// 次數取聯集（同一個回答不重複算），名字用最短的寫法。
 function mergeSpellings(names: NameLike[]): NameLike[] {
-  const byKey = new Map<string, NameLike>();
-  const out: NameLike[] = [];
-  for (const n of names) {
-    const key = spellingKey(n.name);
-    const host = key ? byKey.get(key) : undefined;
+  const out: (NameLike & { toks: string[] })[] = [];
+  const sorted = [...names].sort((x, y) => spellingTokens(x.name).length - spellingTokens(y.name).length);
+  for (const n of sorted) {
+    const toks = spellingTokens(n.name);
+    const host = toks.length
+      ? out.find((h) => (n.kind ?? "brand") === (h.kind ?? "brand") && (h.toks.every((t) => toks.includes(t)) || toks.every((t) => h.toks.includes(t))))
+      : undefined;
     if (!host) {
-      const copy = { ...n, answers: n.answers ? [...n.answers] : undefined };
-      if (key) byKey.set(key, copy);
-      out.push(copy);
+      out.push({ ...n, answers: n.answers ? [...n.answers] : undefined, toks });
       continue;
     }
     if (host.answers && n.answers) host.answers = [...new Set([...host.answers, ...n.answers])].sort((a, b) => a - b);
     host.count = host.answers ? host.answers.length : Math.max(host.count, n.count);
     host.engines = [...new Set([...host.engines, ...n.engines])];
     host.isSelf = host.isSelf || n.isSelf;
+    host.toks = [...new Set([...host.toks, ...toks])];
     if (n.name.length < host.name.length) host.name = n.name;
   }
-  return out;
+  return out.map((n) => { const { toks, ...rest } = n; void toks; return rest; });
 }
 
 export interface BrandRow {
@@ -570,13 +574,13 @@ export function CitationTable({ domains, max = 10 }: { domains: DomainLike[]; ma
   );
 }
 
-// 通路一行帶過：不是對手，但「AI 叫客人去哪裡買」本身有參考價值
+// 非對手一行帶過：通路、媒體、被建議去問的專家，不算進排名，但列出來有參考價值
 export function ChannelList({ table }: { table: BrandTable }) {
   if (table.channels.length === 0) return null;
   return (
     <div className="rounded-[10px] border border-line bg-card px-4 py-3 text-[13px]">
-      <span className="font-medium text-ink2">AI 叫客人去哪裡買</span>
-      <span className="ml-2 text-xs text-ink3">（通路，不是對手，不算進排名）</span>
+      <span className="font-medium text-ink2">AI 也提到的</span>
+      <span className="ml-2 text-xs text-ink3">（通路、媒體、專家，不是對手，不算進排名）</span>
       <p className="mt-1.5 leading-relaxed text-ink2">
         {table.channels.map((c, i) => (
           <span key={c.name}>
