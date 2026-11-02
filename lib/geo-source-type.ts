@@ -40,11 +40,18 @@ const endsWithAny = (host: string, list: string[]) => list.some((d) => host === 
 
 // 對手官網：網域裡有對手品牌名的英文字（saugella.com.tw、vigill.com.tw）。
 // 中文品牌名比不了網域，比不到就落到「其他」——寧可漏，不要把媒體錯標成對手。
+// 品牌名裡的通用英文字（HH Herb & Health 的 health）會對到 healthnews.com.tw 這種無關網站
+const GENERIC_WORDS = new Set([
+  'the', 'and', 'care', 'tw', 'taiwan', 'official', 'shop', 'store', 'beauty', 'health', 'herb', 'life', 'skin',
+  'body', 'home', 'news', 'blog', 'online', 'mall', 'club', 'lab', 'labs', 'pro', 'plus', 'daily', 'love', 'dr',
+  'intimate', 'organic', 'natural', 'clinic', 'group', 'world', 'best', 'top', 'new',
+]);
+
 export function brandSlugs(names: string[]): string[] {
   const out = new Set<string>();
   for (const n of names) {
     for (const w of n.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []) {
-      if (!['the', 'care', 'tw', 'taiwan', 'official', 'shop', 'store', 'beauty'].includes(w)) out.add(w);
+      if (!GENERIC_WORDS.has(w)) out.add(w);
     }
   }
   return [...out];

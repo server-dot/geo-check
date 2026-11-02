@@ -799,3 +799,66 @@ export function CitedPagesSection({ pages, selfLabel, max = 10 }: { pages: Cited
     </div>
   );
 }
+
+// ── AI 怎麼評價你（輿情）───────────────────────────────────
+
+interface SentimentThemeLike {
+  theme: string;
+  polarity: "positive" | "negative";
+  count: number;
+  engines: string[];
+  quote: string;
+  quoteEngine: string;
+}
+
+export function SentimentSection({ themes, answerCount }: { themes: SentimentThemeLike[]; answerCount: number }) {
+  const pos = themes.filter((t) => t.polarity === "positive").length;
+  const neg = themes.length - pos;
+  return (
+    <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
+      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-line px-4 py-3">
+        <p className="text-sm text-ink">
+          <span className="font-bold text-ok">✓ 正面 {pos} 條</span>
+          <span className="mx-2 text-ink3">·</span>
+          <span className={`font-bold ${neg > 0 ? "text-fail" : "text-ink3"}`}>✗ 負面 {neg} 條</span>
+        </p>
+        <p className="text-xs text-ink3">從 {answerCount} 段提到你的回答整理{neg === 0 && themes.length > 0 ? "，這次 AI 沒有講到你的缺點" : ""}</p>
+      </div>
+      {themes.length === 0 ? (
+        <p className="px-4 py-4 text-sm text-ink3">這次 AI 提到你時只講事實（官網、產品），沒有評價。</p>
+      ) : (
+        <table className="w-full min-w-[620px] text-sm">
+          <thead>
+            <tr className="border-b border-line bg-inset/60 text-left text-xs text-ink3">
+              <th className="px-4 py-2.5 font-medium">AI 怎麼說你</th>
+              <th className="w-[90px] px-3 py-2.5 font-medium">正／負</th>
+              <th className="w-[100px] px-3 py-2.5 text-right font-medium">出現在幾段</th>
+              <th className="w-[200px] px-3 py-2.5 font-medium">哪家 AI 說的</th>
+            </tr>
+          </thead>
+          <tbody>
+            {themes.map((t) => (
+              <tr key={t.theme} className="border-b border-line align-top last:border-0">
+                <td className="px-4 py-2.5">
+                  <p className="font-medium text-ink">{t.theme}</p>
+                  {t.quote && (
+                    <p className="mt-1 text-xs leading-relaxed text-ink3">
+                      {t.quoteEngine}：「{t.quote}」
+                    </p>
+                  )}
+                </td>
+                <td className="px-3 py-2.5 text-[13px]">
+                  {t.polarity === "positive" ? <span className="font-semibold text-ok">✓ 正面</span> : <span className="font-semibold text-fail">✗ 負面</span>}
+                </td>
+                <td className="mono px-3 py-2.5 text-right text-xs text-ink2">
+                  {t.count}/{answerCount}
+                </td>
+                <td className="px-3 py-2.5 text-[13px] text-ink2">{t.engines.join("、")}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}

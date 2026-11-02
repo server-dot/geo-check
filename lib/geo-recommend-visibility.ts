@@ -2,6 +2,7 @@ import { runVisibilityQueries, hostnameOf, isSameSite, type VisibilityAnswer } f
 import { SITE_URL } from '@/lib/site';
 import type { ContentMatch } from './geo-content-match';
 import { fetchGoogleAio } from './geo-google-aio';
+import type { SentimentResult } from './geo-sentiment';
 
 // ── GEO：推薦題自動查詢 ──────────────────────────────────
 // 品牌能見度（geo-brand-visibility.ts）問的是「AI 認不認得你」；關鍵字能見度
@@ -55,6 +56,8 @@ export interface RecommendVisibility {
   contentMatch?: ContentMatch[] | null;
   // 題目是使用者自己改過的，不是 AI 猜的——畫面上的說明文字要跟著換
   customQuestions?: boolean;
+  // AI 怎麼評價你（見 geo-sentiment.ts）；跟 contentMatch 一樣是後補的
+  sentiment?: SentimentResult | null;
 }
 
 export interface RecommendInput {

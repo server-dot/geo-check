@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuditJob, getAuditJobContext, updateAuditJob } from '@/lib/geo-audit-jobs';
 import { runRecommendVisibility, sanitizeCustomQuestions } from '@/lib/geo-recommend-visibility';
 import { matchQuestionsToPages } from '@/lib/geo-content-match';
+import { extractSentiment, sentimentInputs } from '@/lib/geo-sentiment';
 import { LIMITS, clientIp, hoursLeft, takeDaily } from '@/lib/rate-limit';
 
 // 使用者自己改推薦題再問一次。AI 猜的題目可能根本不是客戶會問的、或跟你主推的東西對不上，
@@ -41,8 +42,13 @@ export async function POST(req: NextRequest) {
   if (!rec) return NextResponse.json({ error: '問 AI 的時候出錯了，請稍後再試。' }, { status: 502 });
 
   const apiKey = process.env.OPENROUTER_API_KEY;
-  const contentMatch = apiKey ? await matchQuestionsToPages(rec.questions, ctx.pages, apiKey).catch(() => null) : null;
-  const recommendVisibility = { ...rec, contentMatch };
+  const [contentMatch, sentiment] = apiKey
+    ? await Promise.all([
+        matchQuestionsToPages(rec.questions, ctx.pages, apiKey).catch(() => null),
+        extractSentiment(rec.brandName, sentimentInputs(rec, job.engine?.brandVisibility ?? []), apiKey).catch(() => null),
+      ])
+    : [null, null];
+  const recommendVisibility = { ...rec, contentMatch, sentiment };
   // 存回 job，Markdown 版跟之後的輪詢拿到的才會是新題目的結果
   updateAuditJob(jobId, { recommendVisibility });
 

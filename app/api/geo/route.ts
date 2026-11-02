@@ -12,6 +12,7 @@ import { probeBotAccess, type ProbeResult } from '@/lib/geo-bot-probe';
 import { checkBrandVisibility, guessBrandName } from '@/lib/geo-brand-visibility';
 import { runRecommendVisibility } from '@/lib/geo-recommend-visibility';
 import { matchQuestionsToPages } from '@/lib/geo-content-match';
+import { extractSentiment, sentimentInputs } from '@/lib/geo-sentiment';
 import { analyzeLlmsTxt } from '@/lib/geo-llms-txt';
 import { createAuditJob, updateAuditJob, setAuditJobContext, type EngineResult } from '@/lib/geo-audit-jobs';
 import { readTextCapped, crawlSite } from '@/lib/geo-audit-crawler';
@@ -292,8 +293,12 @@ export async function POST(req: NextRequest) {
       const apiKey = process.env.OPENROUTER_API_KEY;
       if (recommendVisibility && apiKey) {
         updateAuditJob(job.id, { status: 'analyzing', message: '比對你的頁面有沒有在回答這些題目…' });
-        const contentMatch = await matchQuestionsToPages(recommendVisibility.questions, matchPages, apiKey).catch(() => null);
-        recommendVisibility = { ...recommendVisibility, contentMatch };
+        const rv = recommendVisibility;
+        const [contentMatch, sentiment] = await Promise.all([
+          matchQuestionsToPages(rv.questions, matchPages, apiKey).catch(() => null),
+          extractSentiment(rv.brandName, sentimentInputs(rv, engine.brandVisibility), apiKey).catch(() => null),
+        ]);
+        recommendVisibility = { ...rv, contentMatch, sentiment };
       }
       updateAuditJob(job.id, {
         status: 'completed',

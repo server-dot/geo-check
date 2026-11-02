@@ -15,7 +15,7 @@ import { SITE_NAME } from "@/lib/site";
 // 第一版報告先不給技術內容跟改善建議（見報告區塊那段註解）
 const SHOW_TECH_SECTIONS = false;
 
-import { BrandRankTable, buildBrandTable, buildCitedPages, ChannelList, CitationTable, CitedPagesSection, DashSection, OverviewKpis, QuestionTable, ReportNav, ShareDonut, shortEngine } from "@/components/report/ReportOverview";
+import { BrandRankTable, buildBrandTable, buildCitedPages, ChannelList, CitationTable, CitedPagesSection, DashSection, OverviewKpis, QuestionTable, ReportNav, SentimentSection, ShareDonut, shortEngine } from "@/components/report/ReportOverview";
 
 // 首頁 hero 下面的三格數字帶，掛載時跑一次 1100ms 的 ease-out-cubic count-up
 // （跟設計稿 dc-runtime 的 componentDidMount 那段動畫邏輯一致）。
@@ -185,6 +185,10 @@ interface RecommendVisibility {
   namedSelfCount: number;
   contentMatch?: ContentMatch[] | null;
   customQuestions?: boolean;
+  sentiment?: {
+    themes: { theme: string; polarity: "positive" | "negative"; count: number; engines: string[]; quote: string; quoteEngine: string }[];
+    answerCount: number;
+  } | null;
 }
 
 interface LlmsTxtLink {
@@ -3604,6 +3608,7 @@ export default function HomeClient({
               items={[
                 { id: "overview", label: "總覽" },
                 ...(brandTable ? [{ id: "brands", label: "AI 推薦了誰" }] : []),
+                ...(recommend?.sentiment ? [{ id: "sentiment", label: "AI 怎麼評價你" }] : []),
                 ...(recommend ? [{ id: "questions", label: "每一題的結果" }] : []),
                 ...(diagnosis ? [{ id: "why", label: "AI 為什麼沒推薦你" }] : []),
                 ...(citedDomains.length > 0 ? [{ id: "citations", label: "AI 引用了誰的網站" }] : []),
@@ -3643,6 +3648,14 @@ export default function HomeClient({
                     </div>
                     <ShareDonut table={brandTable} />
                   </div>
+                </DashSection>
+              </div>
+            )}
+
+            {recommend?.sentiment && (
+              <div className="mt-12">
+                <DashSection id="sentiment" title="AI 怎麼評價你" desc="AI 在回答裡講到你的時候，說了哪些好話、哪些缺點">
+                  <SentimentSection themes={recommend.sentiment.themes} answerCount={recommend.sentiment.answerCount} />
                 </DashSection>
               </div>
             )}
