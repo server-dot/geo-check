@@ -1,4 +1,6 @@
 import { askJson, parseJson } from './geo-recommend-visibility';
+import { runVisibilityQueries, type VisibilityAnswer } from './geo-brand-visibility';
+import { fetchGoogleAio } from './geo-google-aio';
 
 // ── AI 怎麼評價你（輿情）──────────────────────────────────
 // 參考 WorkDuo 的「情緒」頁：把 AI 回答裡講到你的句子，整理成一條一條正面／負面的說法。
@@ -18,6 +20,7 @@ export interface SentimentTheme {
 export interface SentimentResult {
   themes: SentimentTheme[];
   answerCount: number; // 拿來歸納的回答段數
+  reviewQuery?: string; // 另外直接問的評價題（例如「Relove 評價」）
 }
 
 export interface SentimentInput {
@@ -96,4 +99,22 @@ export function sentimentInputs(
     ...rec.questions.flatMap((q) => q.results.filter((r) => r.namedSelf).map((r) => ({ engine: r.engine, answer: r.answer }))),
     ...brandChecks.map((b) => ({ engine: b.engine, answer: b.answer })),
   ];
+}
+
+// 推薦題只會問出賣點：AI 列推薦名單時不會主動講缺點。2026-11-02 實測 Relove：推薦題歸納出
+// 「正面 5、負面 0」，但 Google 搜「Relove 評價」的 AI 摘要第一句就是「評價兩極化」，
+// 列了除毛膏刺激、效果有限等負評。所以輿情要另外直接問一題評價，三家各問一次。
+export function reviewQueryFor(brandName: string): string {
+  const latin = brandName.match(/^[A-Za-z0-9][A-Za-z0-9\-]{2,}/)?.[0];
+  const head = brandName.split(/[\s|｜\-–—:：]/)[0]?.trim();
+  return `${latin ?? head ?? brandName} 評價`;
+}
+
+export async function fetchReviewAnswers(brandName: string, origin: string): Promise<{ query: string; answers: VisibilityAnswer[] }> {
+  const query = reviewQueryFor(brandName);
+  const [llm, google] = await Promise.all([
+    runVisibilityQueries(`${query}如何？有什麼優點跟缺點？請具體說明，並附上來源網址。`, origin, 900).catch(() => null),
+    fetchGoogleAio(query, origin).catch(() => null),
+  ]);
+  return { query, answers: [...(llm ?? []), ...(google?.status === 'present' ? [google.answer] : [])] };
 }

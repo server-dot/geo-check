@@ -188,6 +188,7 @@ interface RecommendVisibility {
   sentiment?: {
     themes: { theme: string; polarity: "positive" | "negative"; count: number; engines: string[]; quote: string; quoteEngine: string }[];
     answerCount: number;
+    reviewQuery?: string;
   } | null;
 }
 
@@ -3655,7 +3656,7 @@ export default function HomeClient({
             {recommend?.sentiment && (
               <div className="mt-12">
                 <DashSection id="sentiment" title="AI 怎麼評價你" desc="AI 在回答裡講到你的時候，說了哪些好話、哪些缺點">
-                  <SentimentSection themes={recommend.sentiment.themes} answerCount={recommend.sentiment.answerCount} />
+                  <SentimentSection themes={recommend.sentiment.themes} answerCount={recommend.sentiment.answerCount} reviewQuery={recommend.sentiment.reviewQuery} />
                 </DashSection>
               </div>
             )}

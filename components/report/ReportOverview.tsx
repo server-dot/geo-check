@@ -811,7 +811,7 @@ interface SentimentThemeLike {
   quoteEngine: string;
 }
 
-export function SentimentSection({ themes, answerCount }: { themes: SentimentThemeLike[]; answerCount: number }) {
+export function SentimentSection({ themes, answerCount, reviewQuery }: { themes: SentimentThemeLike[]; answerCount: number; reviewQuery?: string }) {
   const pos = themes.filter((t) => t.polarity === "positive").length;
   const neg = themes.length - pos;
   return (
@@ -822,7 +822,10 @@ export function SentimentSection({ themes, answerCount }: { themes: SentimentThe
           <span className="mx-2 text-ink3">·</span>
           <span className={`font-bold ${neg > 0 ? "text-fail" : "text-ink3"}`}>✗ 負面 {neg} 條</span>
         </p>
-        <p className="text-xs text-ink3">從 {answerCount} 段提到你的回答整理{neg === 0 && themes.length > 0 ? "，這次 AI 沒有講到你的缺點" : ""}</p>
+        <p className="text-xs text-ink3">
+          從 {answerCount} 段提到你的回答整理{reviewQuery ? `（含另外直接問三家 AI「${reviewQuery}」）` : ""}
+          {neg === 0 && themes.length > 0 ? "，這次 AI 沒有講到你的缺點" : ""}
+        </p>
       </div>
       {themes.length === 0 ? (
         <p className="px-4 py-4 text-sm text-ink3">這次 AI 提到你時只講事實（官網、產品），沒有評價。</p>

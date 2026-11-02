@@ -12,7 +12,7 @@ import { probeBotAccess, type ProbeResult } from '@/lib/geo-bot-probe';
 import { checkBrandVisibility, guessBrandName } from '@/lib/geo-brand-visibility';
 import { runRecommendVisibility } from '@/lib/geo-recommend-visibility';
 import { matchQuestionsToPages } from '@/lib/geo-content-match';
-import { extractSentiment, sentimentInputs } from '@/lib/geo-sentiment';
+import { extractSentiment, fetchReviewAnswers, sentimentInputs } from '@/lib/geo-sentiment';
 import { analyzeLlmsTxt } from '@/lib/geo-llms-txt';
 import { createAuditJob, updateAuditJob, setAuditJobContext, type EngineResult } from '@/lib/geo-audit-jobs';
 import { readTextCapped, crawlSite } from '@/lib/geo-audit-crawler';
@@ -296,7 +296,11 @@ export async function POST(req: NextRequest) {
         const rv = recommendVisibility;
         const [contentMatch, sentiment] = await Promise.all([
           matchQuestionsToPages(rv.questions, matchPages, apiKey).catch(() => null),
-          extractSentiment(rv.brandName, sentimentInputs(rv, engine.brandVisibility), apiKey).catch(() => null),
+          (async () => {
+            const review = await fetchReviewAnswers(rv.brandName, origin);
+            const s = await extractSentiment(rv.brandName, [...sentimentInputs(rv, engine.brandVisibility), ...review.answers], apiKey);
+            return s ? { ...s, reviewQuery: review.query } : null;
+          })().catch(() => null),
         ]);
         recommendVisibility = { ...rv, contentMatch, sentiment };
       }
