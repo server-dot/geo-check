@@ -12,7 +12,8 @@ import { probeBotAccess, type ProbeResult } from '@/lib/geo-bot-probe';
 import { checkBrandVisibility, guessBrandName } from '@/lib/geo-brand-visibility';
 import { runRecommendVisibility } from '@/lib/geo-recommend-visibility';
 import { matchQuestionsToPages } from '@/lib/geo-content-match';
-import { extractSentiment, fetchReviewAnswers, sentimentInputs } from '@/lib/geo-sentiment';
+import { extractSentiment, fetchReviewAnswers, selfShortName, sentimentInputs } from '@/lib/geo-sentiment';
+import { extractPositioning, topRivals } from '@/lib/geo-positioning';
 import { analyzeLlmsTxt } from '@/lib/geo-llms-txt';
 import { createAuditJob, updateAuditJob, setAuditJobContext, type EngineResult } from '@/lib/geo-audit-jobs';
 import { readTextCapped, crawlSite } from '@/lib/geo-audit-crawler';
@@ -294,15 +295,19 @@ export async function POST(req: NextRequest) {
       if (recommendVisibility && apiKey) {
         updateAuditJob(job.id, { status: 'analyzing', message: '比對你的頁面有沒有在回答這些題目…' });
         const rv = recommendVisibility;
-        const [contentMatch, sentiment] = await Promise.all([
+        const [contentMatch, extras] = await Promise.all([
           matchQuestionsToPages(rv.questions, matchPages, apiKey).catch(() => null),
           (async () => {
             const review = await fetchReviewAnswers(rv.brandName, origin);
-            const s = await extractSentiment(rv.brandName, [...sentimentInputs(rv, engine.brandVisibility), ...review.answers], apiKey);
-            return s ? { ...s, reviewQuery: review.query } : null;
-          })().catch(() => null),
+            const all = rv.questions.flatMap((q) => q.results.map((r) => ({ engine: r.engine, answer: r.answer })));
+            const [s, positioning] = await Promise.all([
+              extractSentiment(rv.brandName, [...sentimentInputs(rv, engine.brandVisibility), ...review.answers], apiKey).catch(() => null),
+              extractPositioning(selfShortName(rv.brandName), topRivals(rv.names), [...all, ...review.answers], apiKey).catch(() => null),
+            ]);
+            return { sentiment: s ? { ...s, reviewQuery: review.query } : null, positioning };
+          })().catch(() => ({ sentiment: null, positioning: null })),
         ]);
-        recommendVisibility = { ...rv, contentMatch, sentiment };
+        recommendVisibility = { ...rv, contentMatch, ...extras };
       }
       updateAuditJob(job.id, {
         status: 'completed',

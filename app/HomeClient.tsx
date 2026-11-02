@@ -191,6 +191,7 @@ interface RecommendVisibility {
     answerCount: number;
     reviewQuery?: string;
   } | null;
+  positioning?: { brand: string; isSelf: boolean; traits: { text: string; quote: string; engine: string }[] }[] | null;
 }
 
 interface LlmsTxtLink {
@@ -3658,7 +3659,7 @@ export default function HomeClient({
             {recommend && brandTable && brandTable.rows.some((r) => !r.isSelf && r.count > 0) && (
               <div className="mt-12">
                 <DashSection id="competitors" title="競爭對手分析" desc="挑一個對手，每一題比比看誰被 AI 推得多">
-                  <CompetitorCompare table={brandTable} questions={recommend.questions} />
+                  <CompetitorCompare table={brandTable} questions={recommend.questions} positioning={recommend.positioning} />
                 </DashSection>
               </div>
             )}

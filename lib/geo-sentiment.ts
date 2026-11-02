@@ -104,10 +104,15 @@ export function sentimentInputs(
 // 推薦題只會問出賣點：AI 列推薦名單時不會主動講缺點。2026-11-02 實測 Relove：推薦題歸納出
 // 「正面 5、負面 0」，但 Google 搜「Relove 評價」的 AI 摘要第一句就是「評價兩極化」，
 // 列了除毛膏刺激、效果有限等負評。所以輿情要另外直接問一題評價，三家各問一次。
-export function reviewQueryFor(brandName: string): string {
+// 「Relove私密及全身保養 官方網站」→「Relove」：一般人問 AI 只會打品牌名
+export function selfShortName(brandName: string): string {
   const latin = brandName.match(/^[A-Za-z0-9][A-Za-z0-9\-]{2,}/)?.[0];
   const head = brandName.split(/[\s|｜\-–—:：]/)[0]?.trim();
-  return `${latin ?? head ?? brandName} 評價`;
+  return latin ?? head ?? brandName;
+}
+
+export function reviewQueryFor(brandName: string): string {
+  return `${selfShortName(brandName)} 評價`;
 }
 
 export async function fetchReviewAnswers(brandName: string, origin: string): Promise<{ query: string; answers: VisibilityAnswer[] }> {
