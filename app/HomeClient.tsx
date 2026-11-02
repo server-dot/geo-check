@@ -2901,9 +2901,9 @@ function GateRow({ n, state, line, children }: { n: number; state: GateState; li
   const head = (
     <>
       <span className="mono text-[20px] font-bold leading-none" style={{ color: GATE_COLOR[state] }}>{GATE_SYMBOL[state]}</span>
-      <span className="text-[14px] font-bold text-ink">{n}. {GATE_TITLES[n - 1]}</span>
-      <span className="text-[14px] text-ink2">{line}</span>
-      <span className="text-right text-[13px] text-ink3">{expandable ? (open ? "▾" : "▸") : ""}</span>
+      <span className="text-[15px] font-bold text-ink">{n}. {GATE_TITLES[n - 1]}</span>
+      <span className="text-[15px] text-ink2">{line}</span>
+      <span className="text-right text-[14px] text-ink3">{expandable ? (open ? "▾" : "▸") : ""}</span>
     </>
   );
   const grid = { gridTemplateColumns: "1.4em 9.5em 1fr 1.2em" };
@@ -2924,8 +2924,8 @@ function GateRow({ n, state, line, children }: { n: number; state: GateState; li
 function MatchDetail({ m }: { m: ContentMatch }) {
   return (
     <div className="mt-3 border-l-2 border-line pl-3">
-      <p className="text-[13px] font-semibold text-ink">「{m.question}」</p>
-      <table className="mt-1.5 w-full text-[13px] leading-snug">
+      <p className="text-[14px] font-semibold text-ink">「{m.question}」</p>
+      <table className="mt-1.5 w-full text-[14px] leading-snug">
         <tbody>
           <tr>
             <td className="w-[6.5em] py-1 align-top text-ink3">你最接近的</td>
@@ -2942,7 +2942,7 @@ function MatchDetail({ m }: { m: ContentMatch }) {
               <td className="py-1">
                 <span className="flex flex-wrap gap-1.5">
                   {m.missing.map((w) => (
-                    <span key={w} className="rounded-full border border-line px-2 py-0.5 text-[12px] text-ink">{w}</span>
+                    <span key={w} className="rounded-full border border-line px-2 py-0.5 text-[14px] text-ink">{w}</span>
                   ))}
                 </span>
               </td>
@@ -2980,13 +2980,13 @@ function DiagnosisBlock({ d }: { d: Diagnosis }) {
           ) : undefined}
         </GateRow>
         <GateRow n={3} state={d.gate3.state} line={d.gate3.line}>
-          <p className="mt-2 max-w-[38em] border-l-2 border-line pl-3 text-[13px] leading-relaxed text-ink2">
+          <p className="mt-2 max-w-[38em] border-l-2 border-line pl-3 text-[14px] leading-relaxed text-ink2">
             問「推薦誰」的時候，AI 比較信別人寫的推薦（接案平台、推薦文、論壇），比較不信公司自己說自己好。
             這一關查不到，所以要前兩關都沒問題，才會把原因算到這裡。
           </p>
         </GateRow>
       </div>
-      <p className="mt-3 text-xs text-ink3">{d.recencyNote}</p>
+      <p className="mt-3 text-[14px] text-ink3">{d.recencyNote}</p>
     </div>
   );
 }
@@ -3020,7 +3020,7 @@ function EditQuestions({ jobId, current, onDone }: { jobId: string | null; curre
   }
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="mt-2 text-sm font-semibold text-ink underline underline-offset-2">
+      <button type="button" onClick={() => setOpen(true)} className="mt-2 text-[15px] font-semibold text-ink underline underline-offset-2">
         題目不對？改成客戶真的會問的
       </button>
     );
@@ -3033,18 +3033,18 @@ function EditQuestions({ jobId, current, onDone }: { jobId: string | null; curre
           value={q}
           onChange={(e) => setDrafts((prev) => prev.map((p, j) => (j === i ? e.target.value : p)))}
           placeholder={`第 ${i + 1} 題（8～80 字，不要寫你的品牌名）`}
-          className="w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink"
+          className="w-full rounded-lg border border-line bg-paper px-3 py-2 text-[15px] text-ink"
           maxLength={80}
           disabled={busy}
         />
       ))}
       <div className="flex items-center gap-3">
-        <button type="button" onClick={submit} disabled={busy} className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-paper disabled:opacity-50">
+        <button type="button" onClick={submit} disabled={busy} className="rounded-lg bg-ink px-4 py-2 text-[15px] font-semibold text-paper disabled:opacity-50">
           {busy ? "問 AI 中，約 30～60 秒…" : "用這幾題重問"}
         </button>
-        <button type="button" onClick={() => setOpen(false)} disabled={busy} className="text-sm text-ink3">取消</button>
+        <button type="button" onClick={() => setOpen(false)} disabled={busy} className="text-[15px] text-ink3">取消</button>
       </div>
-      {err && <p className="text-sm" style={{ color: STATUS_COLOR.fail }}>✗ {err}</p>}
+      {err && <p className="text-[15px]" style={{ color: STATUS_COLOR.fail }}>✗ {err}</p>}
     </div>
   );
 }
@@ -3055,22 +3055,22 @@ function CompactAnswerCard({ result }: { result: VisibilityCardData }) {
   return (
     <div className="flex flex-col rounded-[10px] border border-line bg-card p-5">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[13px] font-medium text-ink2">{shortEngine(result.engine)}</p>
+        <p className="text-[14px] font-medium text-ink2">{shortEngine(result.engine)}</p>
         {result.citedSelf ? (
-          <span className="text-[13px] font-semibold text-ok">✓ 找得到你的官網</span>
+          <span className="text-[14px] font-semibold text-ok">✓ 找得到你的官網</span>
         ) : (
-          <span className="text-[13px] font-semibold text-fail">✗ 沒找到你的官網</span>
+          <span className="text-[14px] font-semibold text-fail">✗ 沒找到你的官網</span>
         )}
       </div>
-      <div className={`mt-3 text-[14px] leading-relaxed text-ink2 ${open ? "" : "line-clamp-4"}`}>
+      <div className={`mt-3 text-[15px] leading-relaxed text-ink2 ${open ? "" : "line-clamp-4"}`}>
         {renderAnswerMarkdown(result.answer, result.citations)}
       </div>
       {open && result.citations.length > 0 && (
         <div className="mt-3 border-t border-line pt-3">
-          <p className="text-xs text-ink3">引用來源（{result.citations.length}）</p>
+          <p className="text-[14px] text-ink3">引用來源（{result.citations.length}）</p>
           <ul className="mt-1.5 space-y-1">
             {result.citations.map((c, i) => (
-              <li key={i} className="text-[13px]">
+              <li key={i} className="text-[14px]">
                 <a href={c.url} target="_blank" rel="noopener noreferrer" className={`report-table-link break-all ${c.isSelf ? "font-semibold" : ""}`}>
                   {c.isSelf ? "★ " : ""}
                   {c.title || c.url}
@@ -3080,7 +3080,7 @@ function CompactAnswerCard({ result }: { result: VisibilityCardData }) {
           </ul>
         </div>
       )}
-      <button type="button" onClick={() => setOpen((v) => !v)} className="mt-3 self-start text-xs text-ink3 hover:text-ink">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="mt-3 self-start text-[14px] text-ink3 hover:text-ink">
         {open ? "▾ 收起" : `▸ 看完整回答${result.citations.length > 0 ? `與 ${result.citations.length} 個引用來源` : ""}`}
       </button>
     </div>
@@ -3090,7 +3090,7 @@ function CompactAnswerCard({ result }: { result: VisibilityCardData }) {
 function BrandVisibilityCard({ result }: { result: VisibilityCardData }) {
   return (
     <div className="rounded-[10px] border border-line bg-card p-6">
-      <p className="mono text-[11px] font-medium tracking-wide text-ink3 uppercase">{result.engine}</p>
+      <p className="mono text-[14px] font-medium tracking-wide text-ink3 uppercase">{result.engine}</p>
       <p className="mt-1 text-lg font-bold text-ink">
         {result.namedSelf === undefined
           ? result.citedSelf
@@ -3102,26 +3102,26 @@ function BrandVisibilityCard({ result }: { result: VisibilityCardData }) {
               ? "🟡 查過你，但答案裡沒推薦你"
               : "🔴 沒有推薦你"}
       </p>
-      {result.advice && <p className="mt-2 text-sm leading-relaxed text-ink2">{result.advice}</p>}
+      {result.advice && <p className="mt-2 text-[15px] leading-relaxed text-ink2">{result.advice}</p>}
 
       <div className="quote-block mt-4 border-l-[3px] border-lime pl-4">
-        <p className="text-xs font-medium text-ink3">我們實際問的問題：</p>
-        <p className="mt-1 text-sm text-ink">「{result.query}」</p>
+        <p className="text-[14px] font-medium text-ink3">我們實際問的問題：</p>
+        <p className="mt-1 text-[15px] text-ink">「{result.query}」</p>
       </div>
 
       <div className="mt-4">
-        <p className="text-xs font-medium text-ink3">{result.engine} 的實際回答：</p>
-        <div className="mt-1 overflow-hidden break-words rounded-lg border border-line bg-paper p-3 text-[14.5px] leading-relaxed text-ink2">
+        <p className="text-[14px] font-medium text-ink3">{result.engine} 的實際回答：</p>
+        <div className="mt-1 overflow-hidden break-words rounded-lg border border-line bg-paper p-3 text-[15.5px] leading-relaxed text-ink2">
           {renderAnswerMarkdown(result.answer, result.citations)}
         </div>
       </div>
 
       {result.citations.length > 0 && (
         <div className="mt-4">
-          <p className="text-xs font-medium text-ink3">引用來源：</p>
+          <p className="text-[14px] font-medium text-ink3">引用來源：</p>
           <ul className="mt-1 space-y-1">
             {result.citations.map((c, i) => (
-              <li key={i} className="text-[13.5px]">
+              <li key={i} className="text-[14.5px]">
                 <a
                   href={c.url}
                   target="_blank"
@@ -3702,7 +3702,7 @@ export default function HomeClient({
                     questions={recommend.questions}
                     renderDetail={(qi) => recommend.questions[qi].results.map((r) => <BrandVisibilityCard key={r.engine} result={r} />)}
                   />
-                  <p className="mt-2 text-xs text-ink3">AI 的回答每次問都會變，這是當下的快照，不是趨勢。</p>
+                  <p className="mt-2 text-[14px] text-ink3">AI 的回答每次問都會變，這是當下的快照，不是趨勢。</p>
                 </DashSection>
               </div>
             )}
@@ -3748,14 +3748,14 @@ export default function HomeClient({
                 <div className="rounded-[10px] border border-line bg-card p-6">
                 {suggestedKeywords.length > 0 && (
                   <div className="mb-3">
-                    <p className="mb-1.5 text-xs text-ink3">建議關鍵字（點一下加入查詢）</p>
+                    <p className="mb-1.5 text-[14px] text-ink3">建議關鍵字（點一下加入查詢）</p>
                     <div className="flex flex-wrap gap-2">
                       {suggestedKeywords.map((k) => (
                         <button
                           key={k}
                           type="button"
                           onClick={() => addSuggestedKeyword(k)}
-                          className="inline-flex items-center gap-1 rounded-full border border-dashed border-line px-3 py-1 text-sm text-ink3 hover:border-lime-dark hover:text-ink"
+                          className="inline-flex items-center gap-1 rounded-full border border-dashed border-line px-3 py-1 text-[15px] text-ink3 hover:border-lime-dark hover:text-ink"
                         >
                           + {k}
                         </button>
@@ -3763,12 +3763,12 @@ export default function HomeClient({
                     </div>
                   </div>
                 )}
-                <p className="mb-1.5 text-xs text-ink3">要查詢的關鍵字</p>
+                <p className="mb-1.5 text-[14px] text-ink3">要查詢的關鍵字</p>
                 <div className="flex flex-wrap gap-2">
                   {activeKeywords.map((k) => (
                     <span
                       key={k}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-line bg-inset px-3 py-1 text-sm text-ink2"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-line bg-inset px-3 py-1 text-[15px] text-ink2"
                     >
                       {k}
                       <button
@@ -3782,7 +3782,7 @@ export default function HomeClient({
                     </span>
                   ))}
                   {activeKeywords.length === 0 && (
-                    <span className="text-sm text-ink3">
+                    <span className="text-[15px] text-ink3">
                       {suggestedKeywords.length > 0 ? "（還沒加入任何關鍵字，點上面的建議或自己輸入）" : "（沒有抓到候選關鍵字，自己加一個試試）"}
                     </span>
                   )}
@@ -3812,7 +3812,7 @@ export default function HomeClient({
                     {keywordLoading ? "查詢中…" : `查詢（${activeKeywords.length} 個關鍵字 × 2 引擎）`}
                   </button>
                 </div>
-                {keywordError && <p className="mt-2 text-sm text-fail">{keywordError}</p>}
+                {keywordError && <p className="mt-2 text-[15px] text-fail">{keywordError}</p>}
               </div>
 
               {Object.keys(keywordResults).length > 0 && (
@@ -3821,10 +3821,10 @@ export default function HomeClient({
                     .filter((k) => keywordResults[k])
                     .map((k) => (
                       <div key={k}>
-                        <p className="mb-2 text-sm font-semibold text-ink2">「{k}」</p>
+                        <p className="mb-2 text-[15px] font-semibold text-ink2">「{k}」</p>
                         <div className="space-y-3">
                           {keywordResults[k].length === 0 ? (
-                            <p className="text-sm text-ink3">
+                            <p className="text-[15px] text-ink3">
                               這個關鍵字沒有查到結果（可能沒設 API key 或呼叫失敗）
                             </p>
                           ) : (
@@ -3867,7 +3867,7 @@ export default function HomeClient({
               </p>
 
               {unknownCount > 0 && (
-                <div className="mt-3 space-y-2 text-sm text-ink2">
+                <div className="mt-3 space-y-2 text-[15px] text-ink2">
                   <p>{engine.robotsNote}</p>
                   <p>
                     這<strong>不代表</strong>你的網站對 AI 開放——很可能有 robots.txt
@@ -3879,8 +3879,8 @@ export default function HomeClient({
                   </p>
                   {engine.wafHint && (
                     <div className="mt-3 rounded-lg border border-line bg-paper p-3 text-left">
-                      <p className="text-xs font-semibold text-ink3">偵測到可能的原因：{engine.wafHint.vendor}</p>
-                      <div className="mt-2 text-sm text-ink2">
+                      <p className="text-[14px] font-semibold text-ink3">偵測到可能的原因：{engine.wafHint.vendor}</p>
+                      <div className="mt-2 text-[15px] text-ink2">
                         <CheckBody
                           c={{
                             key: "waf",
@@ -3902,10 +3902,10 @@ export default function HomeClient({
               )}
 
               {engine.robotsStatus === "none" && (
-                <p className="mt-2 text-sm text-ink3">（這個網站沒有 robots.txt，依規範預設所有爬蟲都能存取）</p>
+                <p className="mt-2 text-[15px] text-ink3">（這個網站沒有 robots.txt，依規範預設所有爬蟲都能存取）</p>
               )}
               {engine.robotsStatus === "found" && (
-                <p className="mono mt-2 text-xs text-ink3">規則來源：{engine.robotsUrl}</p>
+                <p className="mono mt-2 text-[14px] text-ink3">規則來源：{engine.robotsUrl}</p>
               )}
             </div>
 
@@ -3936,7 +3936,7 @@ export default function HomeClient({
                 <h2 className="eyebrow mb-3">AI 眼中的你</h2>
                 <div className={`rounded-[10px] border p-6 ${VISIBILITY[engine.visibility.status].className}`}>
                   <p className="text-lg font-bold text-ink">{VISIBILITY[engine.visibility.status].label}</p>
-                  <p className="mt-2 text-sm font-medium leading-relaxed text-ink">{engine.visibility.summary}</p>
+                  <p className="mt-2 text-[15px] font-medium leading-relaxed text-ink">{engine.visibility.summary}</p>
                   <ContentMixBar
                     total={engine.visibility.textLength}
                     substantive={engine.visibility.substantiveChars}
@@ -3944,26 +3944,26 @@ export default function HomeClient({
                   />
 
                   <div className="mt-4 rounded-lg border border-line bg-paper p-4">
-                    <p className="text-xs font-medium text-ink3">AI 從這幾項判斷你網站是做什麼的：</p>
-                    <p className="mt-2 text-sm font-semibold text-ink">
+                    <p className="text-[14px] font-medium text-ink3">AI 從這幾項判斷你網站是做什麼的：</p>
+                    <p className="mt-2 text-[15px] font-semibold text-ink">
                       {engine.visibility.title || "（沒有寫標題）"}
                     </p>
                     {engine.visibility.description ? (
-                      <p className="mt-1 text-sm leading-relaxed text-ink2">{engine.visibility.description}</p>
+                      <p className="mt-1 text-[15px] leading-relaxed text-ink2">{engine.visibility.description}</p>
                     ) : (
-                      <p className="mt-1 text-sm text-warn">
+                      <p className="mt-1 text-[15px] text-warn">
                         （這頁沒有寫摘要，AI 只能自己從標題和正文猜你這頁在講什麼）
                       </p>
                     )}
                     {engine.visibility.h1.length > 0 && (
-                      <p className="mt-2 text-xs text-ink3">H1：{engine.visibility.h1.join("、")}</p>
+                      <p className="mt-2 text-[14px] text-ink3">H1：{engine.visibility.h1.join("、")}</p>
                     )}
                     {engine.visibility.leadParagraphs.length > 0 && (
                       <div className="mt-3 border-t border-line2 pt-3">
-                        <p className="text-xs text-ink3">頁面內容摘錄：</p>
+                        <p className="text-[14px] text-ink3">頁面內容摘錄：</p>
                         <div className="mt-1 space-y-2">
                           {engine.visibility.leadParagraphs.map((p, i) => (
-                            <p key={i} className="text-sm leading-relaxed text-ink2">
+                            <p key={i} className="text-[15px] leading-relaxed text-ink2">
                               {p}
                             </p>
                           ))}
@@ -3975,7 +3975,7 @@ export default function HomeClient({
                   <button
                     type="button"
                     onClick={() => setShowRawContent((v) => !v)}
-                    className="mono mt-3 text-xs text-ink3 underline decoration-limeDark decoration-2 underline-offset-2 hover:text-ink"
+                    className="mono mt-3 text-[14px] text-ink3 underline decoration-limeDark decoration-2 underline-offset-2 hover:text-ink"
                   >
                     {showRawContent ? "收起" : "查看"} AI 實際讀到的原始文字片段（技術細節，一般不用看）
                   </button>
@@ -3984,14 +3984,14 @@ export default function HomeClient({
                       const blocks = engine.visibility.previewBlocks;
                       return (
                         <div className="mt-2 space-y-3 rounded-lg border border-line bg-paper p-4">
-                          {blocks.length === 0 && <p className="text-sm text-ink3">（完全沒有可讀的文字）</p>}
+                          {blocks.length === 0 && <p className="text-[15px] text-ink3">（完全沒有可讀的文字）</p>}
                           {blocks.map((block, i) =>
                             block.kind === "tags" ? (
-                              <p key={i} className="border-l-2 border-line2 pl-2 text-xs leading-relaxed text-ink3">
+                              <p key={i} className="border-l-2 border-line2 pl-2 text-[14px] leading-relaxed text-ink3">
                                 {block.items.join("、")}
                               </p>
                             ) : (
-                              <p key={i} className="text-sm leading-relaxed text-ink2">
+                              <p key={i} className="text-[15px] leading-relaxed text-ink2">
                                 {block.text}
                               </p>
                             )
@@ -4004,7 +4004,7 @@ export default function HomeClient({
               </div>
             )}
 
-            {engine.visibilityNote && <p className="mt-4 text-center text-sm text-ink3">{engine.visibilityNote}</p>}
+            {engine.visibilityNote && <p className="mt-4 text-center text-[15px] text-ink3">{engine.visibilityNote}</p>}
 
             {status?.audit && status.schemaCards && (
               <SchemaSection audit={status.audit} schemaCards={status.schemaCards} origin={engine.origin} />

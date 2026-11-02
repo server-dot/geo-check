@@ -35,15 +35,15 @@ function sameBrand(a: string, b: string): boolean {
 function TraitList({ title, traits, highlight }: { title: string; traits: PositioningLike["traits"]; highlight?: boolean }) {
   return (
     <div className={`rounded-[10px] border p-4 ${highlight ? "border-lime/60 bg-lime/[.06]" : "border-line bg-card"}`}>
-      <p className="text-[13px] font-bold text-ink">{title}</p>
+      <p className="text-[14px] font-bold text-ink">{title}</p>
       {traits.length === 0 ? (
-        <p className="mt-2 text-sm text-ink3">AI 這次沒有具體描述</p>
+        <p className="mt-2 text-[15px] text-ink3">AI 這次沒有具體描述</p>
       ) : (
         <ul className="mt-2 space-y-2.5">
           {traits.map((t) => (
             <li key={t.text}>
-              <p className="text-sm font-medium text-ink">{t.text}</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-ink3">
+              <p className="text-[15px] font-medium text-ink">{t.text}</p>
+              <p className="mt-0.5 text-[14px] leading-relaxed text-ink3">
                 {t.engine}：「{t.quote}」
               </p>
             </li>
@@ -60,20 +60,20 @@ function Butterfly({ label, me, them, max, sub }: { label: string; me: number; t
   return (
     <div className="grid grid-cols-[1fr_minmax(0,1.3fr)_1fr] items-center gap-3 py-1.5">
       <div className="flex items-center justify-end gap-2">
-        <span className={`mono text-xs tabular-nums ${me > them ? "font-bold text-ink" : "text-ink2"}`}>{me}</span>
+        <span className={`mono text-[14px] tabular-nums ${me > them ? "font-bold text-ink" : "text-ink2"}`}>{me}</span>
         <div className="flex h-3 w-full justify-end overflow-hidden rounded-l-full bg-inset">
           <div className="rounded-l-full bg-lime" style={{ width: w(me) }} />
         </div>
       </div>
       <div className="min-w-0 text-center">
-        <p className="truncate text-[13px] text-ink">{label}</p>
-        {sub && <p className="text-[11px] text-ink3">{sub}</p>}
+        <p className="truncate text-[14px] text-ink">{label}</p>
+        {sub && <p className="text-[14px] text-ink3">{sub}</p>}
       </div>
       <div className="flex items-center gap-2">
         <div className="flex h-3 w-full overflow-hidden rounded-r-full bg-inset">
           <div className="rounded-r-full bg-ink/70" style={{ width: w(them) }} />
         </div>
-        <span className={`mono text-xs tabular-nums ${them > me ? "font-bold text-ink" : "text-ink2"}`}>{them}</span>
+        <span className={`mono text-[14px] tabular-nums ${them > me ? "font-bold text-ink" : "text-ink2"}`}>{them}</span>
       </div>
     </div>
   );
@@ -92,24 +92,24 @@ export function HeadToHead({ selfName, cmp }: { selfName: string; cmp: CompareLi
     f === "self" ? { t: `偏向你`, cls: "bg-lime text-ink" } : f === "rival" ? { t: `偏向${cmp.rival}`, cls: "bg-ink text-paper" } : { t: "看需求，不分高下", cls: "bg-inset text-ink2" };
   return (
     <div className="rounded-[10px] border border-line bg-card p-5">
-      <p className="text-sm font-bold text-ink">直接問 AI：「{cmp.query}？」</p>
+      <p className="text-[15px] font-bold text-ink">直接問 AI：「{cmp.query}？」</p>
       <div className="mt-3 grid gap-2 md:grid-cols-3">
         {cmp.verdicts.map((v) => {
           const f = favor(v.favors);
           return (
             <div key={v.engine} className="rounded-lg border border-line p-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[13px] text-ink2">{v.engine}</span>
-                <span className={`rounded-full px-2 py-0.5 text-[11.5px] font-semibold ${f.cls}`}>{f.t}</span>
+                <span className="text-[14px] text-ink2">{v.engine}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[14px] font-semibold ${f.cls}`}>{f.t}</span>
               </div>
-              <p className="mt-1.5 text-[13px] text-ink">{v.reason}</p>
+              <p className="mt-1.5 text-[14px] text-ink">{v.reason}</p>
             </div>
           );
         })}
       </div>
       {cmp.dimensions.length > 0 && (
         <div className="mt-4">
-          <div className="mb-1 grid grid-cols-[1fr_auto_1fr] text-xs text-ink3">
+          <div className="mb-1 grid grid-cols-[1fr_auto_1fr] text-[14px] text-ink3">
             <span className="font-semibold text-ink">← {selfName} 較好</span>
             <span>比較標準</span>
             <span className="text-right font-semibold text-ink">{cmp.rival} 較好 →</span>
@@ -120,7 +120,7 @@ export function HeadToHead({ selfName, cmp }: { selfName: string; cmp: CompareLi
                 {d.winner === "self" && <div className="w-full rounded-l-full bg-lime" />}
                 {d.winner === "tie" && <div className="w-1/2 bg-ink3/30" />}
               </div>
-              <span className="w-[84px] text-center text-[13px] font-medium text-ink" title={`${d.engine}：「${d.quote}」`}>
+              <span className="w-[84px] text-center text-[14px] font-medium text-ink" title={`${d.engine}：「${d.quote}」`}>
                 {d.name}
               </span>
               <div className="flex h-3 overflow-hidden rounded-r-full bg-inset">
@@ -129,7 +129,7 @@ export function HeadToHead({ selfName, cmp }: { selfName: string; cmp: CompareLi
               </div>
             </div>
           ))}
-          <p className="mt-1 text-xs text-ink3">滑鼠移到標準上可以看 AI 的原句。</p>
+          <p className="mt-1 text-[14px] text-ink3">滑鼠移到標準上可以看 AI 的原句。</p>
         </div>
       )}
     </div>
@@ -152,7 +152,7 @@ export function CompetitorCompare({
   const initial = (defaultRival && rivals.find((r) => sameBrand(r.name, defaultRival))?.name) || rivals[0]?.name || "";
   const [pick, setPick] = useState(initial);
   const rival = rivals.find((r) => r.name === pick) ?? rivals[0];
-  if (!self || !rival) return <p className="text-sm text-ink3">這次 AI 沒有點名其他品牌，沒有對手可以比。</p>;
+  if (!self || !rival) return <p className="text-[15px] text-ink3">這次 AI 沒有點名其他品牌，沒有對手可以比。</p>;
 
   const flatResults = questions.flatMap((q) => q.results);
   const selfHits = new Set(self.hits ?? []);
@@ -195,13 +195,13 @@ export function CompetitorCompare({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-ink2">跟誰比：</span>
+        <span className="text-[15px] text-ink2">跟誰比：</span>
         {rivals.map((r) => (
           <button
             key={r.name}
             type="button"
             onClick={() => setPick(r.name)}
-            className={`rounded-full border px-3 py-1 text-[13px] ${
+            className={`rounded-full border px-3 py-1 text-[14px] ${
               r.name === rival.name ? "border-ink bg-ink font-semibold text-paper" : "border-line bg-card text-ink2 hover:border-ink3"
             }`}
           >
@@ -210,7 +210,7 @@ export function CompetitorCompare({
         ))}
       </div>
 
-      <p className="flex items-center gap-4 text-xs text-ink3">
+      <p className="flex items-center gap-4 text-[14px] text-ink3">
         <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-lime" />你</span>
         <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-ink/70" />{rival.name}</span>
       </p>
@@ -218,26 +218,26 @@ export function CompetitorCompare({
       {/* 1. 次數 */}
       <div className="grid gap-3 md:grid-cols-3">
         <div className="rounded-[10px] border border-line bg-card px-5 py-4">
-          <p className="text-[13px] text-ink2">被 AI 推薦的次數</p>
+          <p className="text-[14px] text-ink2">被 AI 推薦的次數</p>
           <p className="mt-1.5 text-[26px] font-bold leading-none text-ink tabular-nums">
             {self.count}
             <span className="mx-2 text-base font-normal text-ink3">vs</span>
             {rival.count}
           </p>
-          <p className="mt-1.5 text-xs text-ink3">
+          <p className="mt-1.5 text-[14px] text-ink3">
             你 vs {rival.name}（{table.total} 次回答中）
           </p>
         </div>
         <div className="rounded-[10px] border border-line bg-card px-5 py-4">
-          <p className="text-[13px] text-ink2">推了 {rival.name}、沒推你</p>
+          <p className="text-[14px] text-ink2">推了 {rival.name}、沒推你</p>
           <p className={`mt-1.5 text-[26px] font-bold leading-none tabular-nums ${rivalOnly.length > 0 ? "text-fail" : "text-ink"}`}>
             {rivalOnly.length}
             <span className="ml-1.5 text-base font-normal text-ink3">次回答</span>
           </p>
-          <p className="mt-1.5 text-xs text-ink3">這幾次 AI 看的網頁列在下面</p>
+          <p className="mt-1.5 text-[14px] text-ink3">這幾次 AI 看的網頁列在下面</p>
         </div>
         <div className="rounded-[10px] border border-line bg-card px-4 py-3">
-          <p className="mb-1 text-[13px] text-ink2">各家 AI 推薦次數</p>
+          <p className="mb-1 text-[14px] text-ink2">各家 AI 推薦次數</p>
           {table.engines.map((e) => (
             <Butterfly key={e} label={e} me={self.byEngine?.[e] ?? 0} them={rival.byEngine?.[e] ?? 0} max={table.engineTotals[e] ?? 3} />
           ))}
@@ -247,7 +247,7 @@ export function CompetitorCompare({
       {/* 2. 定位 */}
       {positioning && (
         <div>
-          <p className="mb-2 text-sm font-bold text-ink">AI 怎麼形容你們</p>
+          <p className="mb-2 text-[15px] font-bold text-ink">AI 怎麼形容你們</p>
           <div className="grid gap-3 md:grid-cols-2">
             <TraitList title={`你（${self.name}）`} traits={selfPos?.traits ?? []} highlight />
             <TraitList title={rival.name} traits={rivalPos?.traits ?? []} />
@@ -257,15 +257,15 @@ export function CompetitorCompare({
 
       {/* 3. 缺席的地方 */}
       <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
-        <p className="border-b border-line px-4 py-2.5 text-sm font-bold text-ink">
+        <p className="border-b border-line px-4 py-2.5 text-[15px] font-bold text-ink">
           AI 推 {rival.name} 沒推你的時候，看的是這些網頁
         </p>
         {gapPages.length === 0 ? (
-          <p className="px-4 py-3 text-sm text-ink3">
+          <p className="px-4 py-3 text-[15px] text-ink3">
             {rivalOnly.length === 0 ? `每次推 ${rival.name} 的回答也都有推你。` : "這幾次回答沒有附引用網址。"}
           </p>
         ) : (
-          <table className="w-full min-w-[560px] text-sm">
+          <table className="w-full min-w-[560px] text-[15px]">
             <tbody>
               {gapPages.map((p) => (
                 <tr key={p.url} className="border-b border-line align-top last:border-0">
@@ -273,10 +273,10 @@ export function CompetitorCompare({
                     <a href={p.url} target="_blank" rel="noopener noreferrer" className="report-table-link line-clamp-1 font-medium">
                       {p.title || p.host}
                     </a>
-                    <p className="mono mt-0.5 text-[11.5px] text-ink3">{p.host}</p>
+                    <p className="mono mt-0.5 text-[14px] text-ink3">{p.host}</p>
                   </td>
-                  <td className="w-[100px] px-3 py-2.5 text-xs text-ink2">{SOURCE_LABEL[classifySource(p.host, false, rivalSlugs)]}</td>
-                  <td className="mono w-[70px] px-3 py-2.5 text-right text-xs text-ink2">{p.n} 次</td>
+                  <td className="w-[100px] px-3 py-2.5 text-[14px] text-ink2">{SOURCE_LABEL[classifySource(p.host, false, rivalSlugs)]}</td>
+                  <td className="mono w-[70px] px-3 py-2.5 text-right text-[14px] text-ink2">{p.n} 次</td>
                 </tr>
               ))}
             </tbody>
@@ -286,7 +286,7 @@ export function CompetitorCompare({
 
       {/* 逐題：蝴蝶圖，不判輸贏 */}
       <div className="rounded-[10px] border border-line bg-card px-4 py-3">
-        <div className="mb-1 grid grid-cols-[1fr_minmax(0,1.3fr)_1fr] text-xs text-ink3">
+        <div className="mb-1 grid grid-cols-[1fr_minmax(0,1.3fr)_1fr] text-[14px] text-ink3">
           <span className="text-right font-semibold text-ink">你</span>
           <span className="text-center">每一題</span>
           <span className="font-semibold text-ink">{rival.name}</span>
@@ -294,7 +294,7 @@ export function CompetitorCompare({
         {rows.map((r, i) => (
           <Butterfly key={r.q} label={`第 ${i + 1} 題`} sub={r.q} me={r.me} them={r.them} max={r.total} />
         ))}
-        <p className="mt-1 border-t border-line pt-2 text-xs text-ink3">一題只問 3 家 AI 各一次，差 1 次可能只是這次運氣。</p>
+        <p className="mt-1 border-t border-line pt-2 text-[14px] text-ink3">一題只問 3 家 AI 各一次，差 1 次可能只是這次運氣。</p>
       </div>
     </div>
   );

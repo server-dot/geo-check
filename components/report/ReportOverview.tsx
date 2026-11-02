@@ -186,8 +186,8 @@ export function DashSection({
     <section id={id} className="scroll-mt-24">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
         <div>
-          <h2 className="text-[19px] font-bold text-ink">{title}</h2>
-          {desc && <p className="mt-0.5 text-sm text-ink3">{desc}</p>}
+          <h2 className="text-[21px] font-bold text-ink">{title}</h2>
+          {desc && <p className="mt-0.5 text-[15px] text-ink3">{desc}</p>}
         </div>
         {right}
       </div>
@@ -215,15 +215,15 @@ function Kpi({
   return (
     <div className="flex items-center justify-between gap-3 rounded-[10px] border border-line bg-card px-5 py-4">
       <div className="min-w-0">
-        <p className="flex items-center gap-1.5 text-[13px] font-medium text-ink2">
+        <p className="flex items-center gap-1.5 text-[14px] font-medium text-ink2">
           {t.glyph && <span className={`font-bold ${t.cls}`}>{t.glyph}</span>}
           {label}
         </p>
         <p className="mt-2 flex items-baseline gap-1.5">
           <span className="text-[34px] font-bold leading-none tracking-tight text-ink tabular-nums">{value}</span>
-          {unit && <span className="text-sm text-ink3">{unit}</span>}
+          {unit && <span className="text-[15px] text-ink3">{unit}</span>}
         </p>
-        <p className="mt-2 text-xs text-ink3">{note}</p>
+        <p className="mt-2 text-[14px] text-ink3">{note}</p>
       </div>
       {visual && <div className="shrink-0">{visual}</div>}
     </div>
@@ -248,7 +248,7 @@ function EngineDots({ items }: { items: { label: string; ok: boolean }[] }) {
   return (
     <ul className="space-y-1">
       {items.map((it) => (
-        <li key={it.label} className="flex items-center gap-1.5 text-[11.5px] text-ink3">
+        <li key={it.label} className="flex items-center gap-1.5 text-[14px] text-ink3">
           <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${it.ok ? "bg-ok text-white" : "bg-inset text-ink3"}`}>
             {it.ok ? "✓" : "✗"}
           </span>
@@ -268,7 +268,7 @@ function PosNegBar({ pos, neg }: { pos: number; neg: number }) {
         <div className="bg-ok" style={{ width: `${(pos / total) * 100}%` }} />
         <div className="bg-fail" style={{ width: `${(neg / total) * 100}%` }} />
       </div>
-      <div className="mt-1 flex justify-between text-[11px] tabular-nums">
+      <div className="mt-1 flex justify-between text-[14px] tabular-nums">
         <span className="text-ok">✓{pos}</span>
         <span className="text-fail">✗{neg}</span>
       </div>
@@ -365,9 +365,9 @@ export function BrandRankTable({ table }: { table: BrandTable }) {
 
   return (
     <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
-      <table className="w-full min-w-[560px] text-sm">
+      <table className="w-full min-w-[560px] text-[15px]">
         <thead>
-          <tr className="border-b border-line bg-inset/60 text-left text-xs font-medium text-ink3">
+          <tr className="border-b border-line bg-inset/60 text-left text-[14px] font-medium text-ink3">
             <th className="w-10 px-4 py-2.5 text-right font-medium">#</th>
             <th className="px-3 py-2.5 font-medium">品牌</th>
             <th className="px-3 py-2.5 font-medium">被點名（{table.total} 次回答中）</th>
@@ -383,11 +383,11 @@ export function BrandRankTable({ table }: { table: BrandTable }) {
             const rank = table.rows.filter((o) => o.count > r.count).length + 1;
             return (
               <tr key={(r.isSelf ? "self:" : "") + r.name} className={`border-b border-line last:border-0 ${r.isSelf ? "bg-lime/[.08]" : ""}`}>
-                <td className="mono px-4 py-2.5 text-right text-xs text-ink3">{r.count > 0 ? rank : "—"}</td>
+                <td className="mono px-4 py-2.5 text-right text-[14px] text-ink3">{r.count > 0 ? rank : "—"}</td>
                 <td className="px-3 py-2.5">
                   <span className={r.isSelf ? "font-bold text-ink" : "text-ink"}>{r.name}</span>
                   {r.isSelf && (
-                    <span className="ml-2 rounded-full bg-lime px-2 py-0.5 text-[11px] font-bold text-ink">你</span>
+                    <span className="ml-2 rounded-full bg-lime px-2 py-0.5 text-[14px] font-bold text-ink">你</span>
                   )}
                 </td>
                 <td className="px-3 py-2.5">
@@ -398,13 +398,13 @@ export function BrandRankTable({ table }: { table: BrandTable }) {
                         style={{ width: `${(r.count / max) * 100}%` }}
                       />
                     </div>
-                    <span className="mono w-10 shrink-0 text-xs text-ink2 tabular-nums">
+                    <span className="mono w-10 shrink-0 text-[14px] text-ink2 tabular-nums">
                       {r.count}/{table.total}
                     </span>
                   </div>
                 </td>
                 {table.engines.map((e) => (
-                  <td key={e} className="mono px-3 py-2.5 text-right text-xs text-ink2 tabular-nums">
+                  <td key={e} className="mono px-3 py-2.5 text-right text-[14px] text-ink2 tabular-nums">
                     {r.byEngine ? `${r.byEngine[e]}/${table.engineTotals[e]}` : "—"}
                   </td>
                 ))}
@@ -414,7 +414,7 @@ export function BrandRankTable({ table }: { table: BrandTable }) {
         </tbody>
       </table>
       {hidden > 0 && (
-        <p className="border-t border-line px-4 py-2.5 text-xs text-ink3">另外 {hidden} 個品牌被點名的次數更少，不列。</p>
+        <p className="border-t border-line px-4 py-2.5 text-[14px] text-ink3">另外 {hidden} 個品牌被點名的次數更少，不列。</p>
       )}
     </div>
   );
@@ -460,8 +460,8 @@ export function ShareDonut({ table }: { table: BrandTable }) {
   let offset = 0;
   return (
     <div className="self-start rounded-[10px] border border-line bg-card p-5">
-      <p className="text-[13px] font-medium text-ink2">聲量佔比</p>
-      <p className="mt-0.5 text-xs text-ink3">所有被點名的 {sum} 次裡，各品牌佔幾次</p>
+      <p className="text-[14px] font-medium text-ink2">聲量佔比</p>
+      <p className="mt-0.5 text-[14px] text-ink3">所有被點名的 {sum} 次裡，各品牌佔幾次</p>
       <div className="mt-4 flex items-center gap-5">
         <svg viewBox="0 0 140 140" className="h-[124px] w-[124px] shrink-0 -rotate-90" aria-hidden="true">
           {segs.map((s) => {
@@ -486,17 +486,17 @@ export function ShareDonut({ table }: { table: BrandTable }) {
         <div className="min-w-0">
           <p className="text-[28px] font-bold leading-none text-ink tabular-nums">
             {self ? self.count : 0}
-            <span className="ml-1 text-sm font-normal text-ink3">/ {sum} 次</span>
+            <span className="ml-1 text-[15px] font-normal text-ink3">/ {sum} 次</span>
           </p>
-          <p className="mt-1 text-xs text-ink3">是在點名你</p>
+          <p className="mt-1 text-[14px] text-ink3">是在點名你</p>
         </div>
       </div>
       <ul className="mt-4 space-y-1.5">
         {segs.map((s) => (
-          <li key={s.label} className="flex items-center gap-2 text-[13px]">
+          <li key={s.label} className="flex items-center gap-2 text-[14px]">
             <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: s.color }} />
             <span className={`min-w-0 flex-1 truncate ${s.isSelf ? "font-bold text-ink" : "text-ink2"}`}>{s.label}</span>
-            <span className="mono text-xs text-ink3 tabular-nums">{s.value}</span>
+            <span className="mono text-[14px] text-ink3 tabular-nums">{s.value}</span>
           </li>
         ))}
       </ul>
@@ -513,7 +513,7 @@ interface QuestionLike {
 
 function Verdict({ named, cited }: { named: boolean; cited: boolean }) {
   const cls = named ? "bg-ok text-white" : cited ? "bg-warn/15 text-warn" : "bg-fail/10 text-fail";
-  return <span className={`inline-flex w-full justify-center rounded-md px-2 py-1.5 text-[12.5px] font-semibold ${cls}`}>{named ? "✓ 推薦你" : cited ? "△ 查過你" : "✗ 沒有你"}</span>;
+  return <span className={`inline-flex w-full justify-center rounded-md px-2 py-1.5 text-[14px] font-semibold ${cls}`}>{named ? "✓ 推薦你" : cited ? "△ 查過你" : "✗ 沒有你"}</span>;
 }
 
 export function QuestionTable({
@@ -535,9 +535,9 @@ export function QuestionTable({
 
   return (
     <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
-      <table className="w-full min-w-[720px] text-sm">
+      <table className="w-full min-w-[720px] text-[15px]">
         <thead>
-          <tr className="border-b border-line bg-inset/60 text-left text-xs text-ink3">
+          <tr className="border-b border-line bg-inset/60 text-left text-[14px] text-ink3">
             <th className="px-4 py-2.5 font-medium">題目</th>
             {table.engines.map((e) => (
               <th key={e} className="w-[110px] px-3 py-2.5 font-medium">
@@ -556,12 +556,12 @@ export function QuestionTable({
                 {table.engines.map((e) => {
                   const r = q.results.find((x) => shortEngine(x.engine) === e);
                   return (
-                    <td key={e} className="px-3 pt-3 pb-1 align-top text-[13px]">
+                    <td key={e} className="px-3 pt-3 pb-1 align-top text-[14px]">
                       {r ? <Verdict named={!!r.namedSelf} cited={r.citedSelf} /> : <span className="text-ink3">—</span>}
                     </td>
                   );
                 })}
-                <td className="px-3 pt-3 pb-1 align-top text-[13px] text-ink2">
+                <td className="px-3 pt-3 pb-1 align-top text-[14px] text-ink2">
                   {others.length === 0
                     ? <span className="text-ink3">沒有點名別人</span>
                     : others.slice(0, 4).map((o) => o.name).join("、") + (others.length > 4 ? ` 等 ${others.length} 個` : "")}
@@ -570,7 +570,7 @@ export function QuestionTable({
               <tr>
                 <td colSpan={table.engines.length + 2} className="px-4 pb-3">
                   <details className="group">
-                    <summary className="cursor-pointer list-none text-xs text-ink3 hover:text-ink">
+                    <summary className="cursor-pointer list-none text-[14px] text-ink3 hover:text-ink">
                       <span className="group-open:hidden">▸ 看 AI 的完整回答</span>
                       <span className="hidden group-open:inline">▾ 收起</span>
                     </summary>
@@ -604,9 +604,9 @@ export function CitationTable({ domains, max = 10 }: { domains: DomainLike[]; ma
   const rows = extraSelf ? [...top.map((d, i) => ({ d, rank: i + 1 })), { d: extraSelf, rank: selfIdx + 1 }] : top.map((d, i) => ({ d, rank: i + 1 }));
   return (
     <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
-      <table className="w-full min-w-[520px] text-sm">
+      <table className="w-full min-w-[520px] text-[15px]">
         <thead>
-          <tr className="border-b border-line bg-inset/60 text-left text-xs text-ink3">
+          <tr className="border-b border-line bg-inset/60 text-left text-[14px] text-ink3">
             <th className="w-10 px-4 py-2.5 text-right font-medium">#</th>
             <th className="px-3 py-2.5 font-medium">網站</th>
             <th className="px-3 py-2.5 font-medium">被引用次數</th>
@@ -616,34 +616,34 @@ export function CitationTable({ domains, max = 10 }: { domains: DomainLike[]; ma
         <tbody>
           {rows.map(({ d, rank }) => (
             <tr key={d.domain} className={`border-b border-line last:border-0 ${d.isSelf ? "bg-lime/[.08]" : ""}`}>
-              <td className="mono px-4 py-2.5 text-right text-xs text-ink3">{rank}</td>
+              <td className="mono px-4 py-2.5 text-right text-[14px] text-ink3">{rank}</td>
               <td className="px-3 py-2.5">
                 <a href={d.sampleUrl} target="_blank" rel="noopener noreferrer" className="report-table-link mono">
                   {d.domain}
                 </a>
-                {d.isSelf && <span className="ml-2 rounded-full bg-lime px-2 py-0.5 text-[11px] font-bold text-ink">你</span>}
+                {d.isSelf && <span className="ml-2 rounded-full bg-lime px-2 py-0.5 text-[14px] font-bold text-ink">你</span>}
               </td>
               <td className="px-3 py-2.5">
                 <div className="flex items-center gap-2.5">
                   <div className="h-2 w-full max-w-[200px] overflow-hidden rounded-full bg-inset">
                     <div className={`h-full rounded-full ${d.isSelf ? "bg-lime" : "bg-ink3/45"}`} style={{ width: `${(d.count / peak) * 100}%` }} />
                   </div>
-                  <span className="mono w-8 shrink-0 text-xs text-ink2 tabular-nums">{d.count}</span>
+                  <span className="mono w-8 shrink-0 text-[14px] text-ink2 tabular-nums">{d.count}</span>
                 </div>
               </td>
-              <td className="mono px-3 py-2.5 text-right text-xs text-ink2">{d.keywords.length}</td>
+              <td className="mono px-3 py-2.5 text-right text-[14px] text-ink2">{d.keywords.length}</td>
             </tr>
           ))}
         </tbody>
       </table>
       {domains.length > rows.length && (
-        <p className="border-t border-line px-4 py-2.5 text-xs text-ink3">
+        <p className="border-t border-line px-4 py-2.5 text-[14px] text-ink3">
           另外 {domains.length - rows.length} 個網站被引用的次數更少，不列。
           {selfIdx === -1 && " 你的網站不在 AI 引用的名單裡。"}
         </p>
       )}
       {domains.length <= rows.length && selfIdx === -1 && (
-        <p className="border-t border-line px-4 py-2.5 text-xs text-ink3">你的網站不在 AI 引用的名單裡。</p>
+        <p className="border-t border-line px-4 py-2.5 text-[14px] text-ink3">你的網站不在 AI 引用的名單裡。</p>
       )}
     </div>
   );
@@ -653,15 +653,15 @@ export function CitationTable({ domains, max = 10 }: { domains: DomainLike[]; ma
 export function ChannelList({ table }: { table: BrandTable }) {
   if (table.channels.length === 0) return null;
   return (
-    <div className="rounded-[10px] border border-line bg-card px-4 py-3 text-[13px]">
+    <div className="rounded-[10px] border border-line bg-card px-4 py-3 text-[14px]">
       <span className="font-medium text-ink2">AI 也提到的</span>
-      <span className="ml-2 text-xs text-ink3">（通路、媒體、專家，不是對手，不算進排名）</span>
+      <span className="ml-2 text-[14px] text-ink3">（通路、媒體、專家，不是對手，不算進排名）</span>
       <p className="mt-1.5 leading-relaxed text-ink2">
         {table.channels.map((c, i) => (
           <span key={c.name}>
             {i > 0 && "、"}
             {c.name}
-            <span className="mono ml-0.5 text-xs text-ink3">×{c.count}</span>
+            <span className="mono ml-0.5 text-[14px] text-ink3">×{c.count}</span>
           </span>
         ))}
       </p>
@@ -796,7 +796,7 @@ export function CitedPagesSection({ pages, selfLabel, max = 10 }: { pages: Cited
   return (
     <div className="space-y-3">
       <div className="rounded-[10px] border border-line bg-card p-5">
-        <p className="text-sm text-ink">
+        <p className="text-[15px] text-ink">
           AI 回答時一共引用了 <strong>{total}</strong> 次網頁
           {top && (
             <>
@@ -814,25 +814,25 @@ export function CitedPagesSection({ pages, selfLabel, max = 10 }: { pages: Cited
             <div key={x.t} style={{ width: `${(x.n / total) * 100}%`, background: TYPE_COLOR[x.t] }} title={`${SOURCE_LABEL[x.t]} ${x.n}`} />
           ))}
         </div>
-        <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-[13px]">
+        <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-[14px]">
           {byType.map((x) => (
             <li key={x.t} className="flex items-center gap-1.5 text-ink2">
               <span className="h-2.5 w-2.5 rounded-sm" style={{ background: TYPE_COLOR[x.t] }} />
               {SOURCE_LABEL[x.t]}
-              <span className="mono text-xs text-ink3">{x.n}</span>
+              <span className="mono text-[14px] text-ink3">{x.n}</span>
             </li>
           ))}
         </ul>
       </div>
 
       <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
-        <p className="border-b border-line px-4 py-2.5 text-[13px] font-medium text-ink2">你跟對手的網站，各被 AI 引用幾次</p>
+        <p className="border-b border-line px-4 py-2.5 text-[14px] font-medium text-ink2">你跟對手的網站，各被 AI 引用幾次</p>
         {sites.length === 0 ? (
-          <p className="px-4 py-4 text-sm text-ink3">這次 AI 沒有引用任何品牌的官網，引用的都是電商、媒體跟社群。</p>
+          <p className="px-4 py-4 text-[15px] text-ink3">這次 AI 沒有引用任何品牌的官網，引用的都是電商、媒體跟社群。</p>
         ) : (
-          <table className="w-full min-w-[680px] text-sm">
+          <table className="w-full min-w-[680px] text-[15px]">
             <thead>
-              <tr className="border-b border-line bg-inset/60 text-left text-xs text-ink3">
+              <tr className="border-b border-line bg-inset/60 text-left text-[14px] text-ink3">
                 <th className="w-10 px-4 py-2.5 text-right font-medium">#</th>
                 <th className="px-3 py-2.5 font-medium">品牌</th>
                 <th className="px-3 py-2.5 font-medium">被引用次數</th>
@@ -842,21 +842,21 @@ export function CitedPagesSection({ pages, selfLabel, max = 10 }: { pages: Cited
             <tbody>
               {sites.map((x, i) => (
                 <tr key={x.brand} className={`border-b border-line last:border-0 ${x.isSelf ? "bg-lime/[.08]" : ""}`}>
-                  <td className="mono px-4 py-2.5 text-right align-top text-xs text-ink3">{x.count > 0 ? i + 1 : "—"}</td>
+                  <td className="mono px-4 py-2.5 text-right align-top text-[14px] text-ink3">{x.count > 0 ? i + 1 : "—"}</td>
                   <td className="px-3 py-2.5 align-top">
                     <span className={x.isSelf ? "font-bold text-ink" : "text-ink"}>{x.brand}</span>
-                    {x.isSelf && <span className="ml-2 rounded-full bg-lime px-2 py-0.5 text-[11px] font-bold text-ink">你</span>}
-                    {x.host && <p className="mono mt-0.5 text-[11.5px] text-ink3">{x.host}</p>}
+                    {x.isSelf && <span className="ml-2 rounded-full bg-lime px-2 py-0.5 text-[14px] font-bold text-ink">你</span>}
+                    {x.host && <p className="mono mt-0.5 text-[14px] text-ink3">{x.host}</p>}
                   </td>
                   <td className="px-3 py-2.5 align-top">
                     <div className="flex items-center gap-2.5">
                       <div className="h-2 w-full max-w-[160px] overflow-hidden rounded-full bg-inset">
                         <div className={`h-full rounded-full ${x.isSelf ? "bg-lime" : "bg-ink3/45"}`} style={{ width: `${(x.count / peak) * 100}%` }} />
                       </div>
-                      <span className="mono shrink-0 text-xs text-ink2 tabular-nums">{x.count} 次</span>
+                      <span className="mono shrink-0 text-[14px] text-ink2 tabular-nums">{x.count} 次</span>
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 align-top text-[13px]">
+                  <td className="px-3 py-2.5 align-top text-[14px]">
                     {x.top ? (
                       <a href={x.top.url} target="_blank" rel="noopener noreferrer" className="report-table-link line-clamp-1">
                         {x.top.title || x.top.url}
@@ -893,23 +893,23 @@ export function SentimentSection({ themes, answerCount, reviewQuery }: { themes:
   return (
     <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
       <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-line px-4 py-3">
-        <p className="text-sm text-ink">
+        <p className="text-[15px] text-ink">
           <span className="font-bold text-ok">✓ 正面 {pos} 條</span>
           <span className="mx-2 text-ink3">·</span>
           <span className={`font-bold ${neg > 0 ? "text-fail" : "text-ink3"}`}>✗ 負面 {neg} 條</span>
         </p>
         <PosNegBar pos={pos} neg={neg} />
-        <p className="text-xs text-ink3">
+        <p className="text-[14px] text-ink3">
           從 {answerCount} 段提到你的回答整理{reviewQuery ? `（含另外直接問三家 AI「${reviewQuery}」）` : ""}
           {neg === 0 && themes.length > 0 ? "，這次 AI 沒有講到你的缺點" : ""}
         </p>
       </div>
       {themes.length === 0 ? (
-        <p className="px-4 py-4 text-sm text-ink3">這次 AI 提到你時只講事實（官網、產品），沒有評價。</p>
+        <p className="px-4 py-4 text-[15px] text-ink3">這次 AI 提到你時只講事實（官網、產品），沒有評價。</p>
       ) : (
-        <table className="w-full min-w-[620px] text-sm">
+        <table className="w-full min-w-[620px] text-[15px]">
           <thead>
-            <tr className="border-b border-line bg-inset/60 text-left text-xs text-ink3">
+            <tr className="border-b border-line bg-inset/60 text-left text-[14px] text-ink3">
               <th className="px-4 py-2.5 font-medium">AI 怎麼說你</th>
               <th className="w-[90px] px-3 py-2.5 font-medium">正／負</th>
               <th className="w-[180px] px-3 py-2.5 font-medium">出現在幾段</th>
@@ -922,12 +922,12 @@ export function SentimentSection({ themes, answerCount, reviewQuery }: { themes:
                 <td className="px-4 py-2.5">
                   <p className="font-medium text-ink">{t.theme}</p>
                   {t.quote && (
-                    <p className="mt-1 text-xs leading-relaxed text-ink3">
+                    <p className="mt-1 text-[14px] leading-relaxed text-ink3">
                       {t.quoteEngine}：「{t.quote}」
                     </p>
                   )}
                 </td>
-                <td className="px-3 py-2.5 text-[13px]">
+                <td className="px-3 py-2.5 text-[14px]">
                   {t.polarity === "positive" ? <span className="font-semibold text-ok">✓ 正面</span> : <span className="font-semibold text-fail">✗ 負面</span>}
                 </td>
                 <td className="px-3 py-2.5">
@@ -935,10 +935,10 @@ export function SentimentSection({ themes, answerCount, reviewQuery }: { themes:
                     <div className="flex h-2.5 w-[120px] overflow-hidden rounded-full bg-inset">
                       <div className={t.polarity === "positive" ? "bg-ok" : "bg-fail"} style={{ width: `${(t.count / maxCount) * 100}%` }} />
                     </div>
-                    <span className="mono text-xs text-ink2 tabular-nums">{t.count}/{answerCount}</span>
+                    <span className="mono text-[14px] text-ink2 tabular-nums">{t.count}/{answerCount}</span>
                   </div>
                 </td>
-                <td className="px-3 py-2.5 text-[13px] text-ink2">{t.engines.join("、")}</td>
+                <td className="px-3 py-2.5 text-[14px] text-ink2">{t.engines.join("、")}</td>
               </tr>
             ))}
           </tbody>

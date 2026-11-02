@@ -643,7 +643,7 @@ html[data-reveal] .marketing .reveal.is-in {
   margin-left: -1px;
   border-left: 2px solid transparent;
   padding: 6px 0 6px 12px;
-  font-size: 13.5px;
+  font-size: 15px;
   color: var(--ink2);
   text-decoration: none;
 }
