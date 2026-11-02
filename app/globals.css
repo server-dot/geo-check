@@ -636,3 +636,30 @@ html[data-reveal] .marketing .reveal.is-in {
   .marketing .nav-scroll { scrollbar-width: none; }
   .marketing .nav-scroll::-webkit-scrollbar { display: none; }
 }
+
+/* 報告左側目錄。<a> 的全域底線規則沒包 @layer，utility 蓋不掉，所以用具名 class */
+.report-nav-link {
+  display: block;
+  margin-left: -1px;
+  border-left: 2px solid transparent;
+  padding: 6px 0 6px 12px;
+  font-size: 13.5px;
+  color: var(--ink2);
+  text-decoration: none;
+}
+.report-nav-link:hover {
+  color: var(--ink);
+  border-left-color: var(--lime);
+  text-decoration: none;
+}
+
+/* 報告表格裡的連結：表格本身已經很密，全域的金色粗底線會讓整欄變成一片黃線 */
+.report-table-link {
+  color: var(--ink);
+  text-decoration: none;
+}
+.report-table-link:hover {
+  color: #000;
+  text-decoration: underline;
+  text-decoration-color: var(--goldInk);
+}

@@ -12,6 +12,10 @@ import type { ContentMatch } from "@/lib/geo-content-match";
 import { buildCategories5, computeOverallScore, CATEGORY5_KEY_MAP, CATEGORY5_ORDER, type Category5 } from "@/lib/geo-score";
 import { track } from "@/lib/ga";
 import { SITE_NAME } from "@/lib/site";
+// 第一版報告先不給技術內容跟改善建議（見報告區塊那段註解）
+const SHOW_TECH_SECTIONS = false;
+
+import { BrandRankTable, buildBrandTable, buildCitedPages, ChannelList, CitationTable, CitedPagesSection, DashSection, OverviewKpis, QuestionTable, ReportNav, ShareDonut, shortEngine } from "@/components/report/ReportOverview";
 
 // 首頁 hero 下面的三格數字帶，掛載時跑一次 1100ms 的 ease-out-cubic count-up
 // （跟設計稿 dc-runtime 的 componentDidMount 那段動畫邏輯一致）。
@@ -168,6 +172,8 @@ interface RecommendedName {
   count: number;
   engines: string[];
   isSelf: boolean;
+  kind?: "brand" | "channel";
+  answers?: number[];
 }
 interface RecommendVisibility {
   brandName: string;
@@ -2951,9 +2957,8 @@ function MatchDetail({ m }: { m: ContentMatch }) {
 
 function DiagnosisBlock({ d }: { d: Diagnosis }) {
   return (
-    <div className="mb-4 rounded-[10px] border border-line bg-card p-6">
-      <p className="mono text-[11px] font-medium tracking-wide text-ink3 uppercase">AI 為什麼沒推薦你</p>
-      <p className="mt-1 text-lg font-bold text-ink">{d.conclusion}</p>
+    <div className="rounded-[10px] border border-line bg-card p-6">
+      <p className="text-lg font-bold text-ink">{d.conclusion}</p>
       <div className="mt-3">
         <GateRow n={1} state={d.gate1.state} line={d.gate1.line} />
         <GateRow n={2} state={d.gate2.state} line={d.gate2.line}>
@@ -3031,109 +3036,40 @@ function EditQuestions({ jobId, current, onDone }: { jobId: string | null; curre
   );
 }
 
-function RecommendBlock({ data, jobId, onReplace }: { data: RecommendVisibility; jobId: string | null; onReplace: (r: RecommendVisibility) => void }) {
-  const [open, setOpen] = useState<Record<string, boolean>>({});
-  // 標題用「答案裡真的點名你」的次數，不是「引用清單裡有你」——後者只代表 AI 查過你，
-  // Perplexity 一個回答就列二十筆來源，把那個講成「AI 引用了你」是報喜不報憂。
-  const hit = data.namedSelfCount;
-  const total = data.totalAnswers;
-  const citedOnly = data.citedSelfCount - data.namedSelfCount;
-  const askedAt = new Date(data.askedAt);
-  const askedLabel = `${askedAt.getMonth() + 1}/${askedAt.getDate()} ${String(askedAt.getHours()).padStart(2, "0")}:${String(askedAt.getMinutes()).padStart(2, "0")}`;
-  const selfNamed = data.names.some((n) => n.isSelf);
-  const others = data.names.filter((n) => !n.isSelf).slice(0, 12);
-
+// 「AI 認不認得你」的精簡版：先給結論跟回答前幾行，原文全文跟引用來源收進展開
+function CompactAnswerCard({ result }: { result: VisibilityCardData }) {
+  const [open, setOpen] = useState(false);
   return (
-    <div className="mb-3">
-      <div className="rounded-[10px] border border-line bg-card p-6">
-        <p className="mono text-[11px] font-medium tracking-wide text-ink3 uppercase">{data.customQuestions ? `用你的 ${data.questions.length} 題重問` : `我們先幫你問了 ${data.questions.length} 題`}</p>
-        <p className="mt-1 text-lg font-bold text-ink">
-          {/* 三態要真的是三態：綠＝答案裡有你、黃＝它查過你但沒寫進答案、紅＝完全沒有。
-              兩個黃燈等於燈號沒作用（2026-09-15 小積木回報）。這一層不計入總分，
-              紅燈是「目前在名單外」的現況，不是「你做錯了什麼要修」。 */}
-          {hit > 0
-            ? hit === total
-              ? `🟢 ${total} 次回答全部把你寫進答案`
-              : `🟢 ${total} 次回答裡有 ${hit} 次把你寫進答案`
-            : citedOnly > 0
-              ? `🟡 ${total} 次回答都沒把你寫進答案，但它查過你`
-              : `🔴 ${total} 次回答，沒有一次提到你`}
-        </p>
-        {citedOnly > 0 && (
-          <p className="mt-1 text-sm font-medium text-ink2">
-            另外有 {citedOnly} 次，你的網址出現在它的引用清單裡、但答案沒提到你——它讀到了你，只是沒拿你當答案。
-          </p>
+    <div className="flex flex-col rounded-[10px] border border-line bg-card p-5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[13px] font-medium text-ink2">{shortEngine(result.engine)}</p>
+        {result.citedSelf ? (
+          <span className="text-[13px] font-semibold text-ok">✓ 找得到你的官網</span>
+        ) : (
+          <span className="text-[13px] font-semibold text-fail">✗ 沒找到你的官網</span>
         )}
-        <p className="mt-2 max-w-[38em] text-sm leading-relaxed text-ink2">
-          {data.customQuestions
-            ? `這 ${data.questions.length} 題是你自己改的題目。`
-            : `這 ${data.questions.length} 題是 AI 讀了你的首頁後猜的，不是真實搜尋量。題目跟客戶真的會問的對不上，上面的判斷就不準。`}
-        </p>
-        <EditQuestions jobId={jobId} current={data.questions.map((q) => q.question)} onDone={onReplace} />
-
-        {data.names.length > 0 && (
-          <div className="mt-5">
-            <p className="text-sm font-semibold text-ink">AI 在回答裡點名推薦的：</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {data.names.filter((n) => n.isSelf).map((n) => (
-                <span key={n.name} className="inline-flex items-center gap-1.5 rounded-full border border-lime bg-inset px-3 py-1 text-sm font-semibold text-ink">
-                  {n.name}
-                  <span className="mono text-xs text-ink3">{n.count} 次</span>
-                </span>
-              ))}
-              {others.map((n) => (
-                <span key={n.name} className="inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-sm text-ink2">
-                  {n.name}
-                  <span className="mono text-xs text-ink3">{n.count} 次</span>
-                </span>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-ink3">
-              {selfNamed
-                ? "名單裡有你。其他名字是同一批問題底下 AI 也會推的對象。"
-                : "名單裡沒有你。這些名字才是客戶問 AI 時真的會看到的答案。"}
-              {data.names.length > others.length + (selfNamed ? 1 : 0) && ` 另有 ${data.names.length - others.length - (selfNamed ? 1 : 0)} 個只被點名一次的沒列。`}
-            </p>
-          </div>
-        )}
-
-        <p className="mt-4 text-xs text-ink3">
-          {askedLabel} 問的，Perplexity 與 ChatGPT（GPT-4o＋即時搜尋）各問一次。AI 的回答會隨時間、問法變動，這是當下的快照，不是趨勢。
-        </p>
       </div>
-
-      <div className="mt-4 space-y-3">
-        {data.questions.map((q) => {
-          const isOpen = !!open[q.question];
-          const qHit = q.results.filter((r) => r.namedSelf).length;
-          return (
-            <div key={q.question} className="rounded-[10px] border border-line bg-card">
-              <button
-                type="button"
-                onClick={() => setOpen((prev) => ({ ...prev, [q.question]: !isOpen }))}
-                className="flex w-full items-start justify-between gap-3 p-4 text-left"
-              >
-                <span className="text-sm font-semibold text-ink">「{q.question}」</span>
-                <span className="mono shrink-0 text-xs text-ink3">
-                  {qHit > 0
-                    ? `🟢 ${qHit}/${q.results.length} 推薦你`
-                    : q.results.some((r) => r.citedSelf)
-                      ? "🟡 查過你沒推你"
-                      : "🔴 沒推薦你"}{" "}
-                  {isOpen ? "▲" : "▼"}
-                </span>
-              </button>
-              {isOpen && (
-                <div className="space-y-3 border-t border-line p-4">
-                  {q.results.map((r) => (
-                    <BrandVisibilityCard key={r.engine} result={r} />
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+      <div className={`mt-3 text-[14px] leading-relaxed text-ink2 ${open ? "" : "line-clamp-4"}`}>
+        {renderAnswerMarkdown(result.answer, result.citations)}
       </div>
+      {open && result.citations.length > 0 && (
+        <div className="mt-3 border-t border-line pt-3">
+          <p className="text-xs text-ink3">引用來源（{result.citations.length}）</p>
+          <ul className="mt-1.5 space-y-1">
+            {result.citations.map((c, i) => (
+              <li key={i} className="text-[13px]">
+                <a href={c.url} target="_blank" rel="noopener noreferrer" className={`report-table-link break-all ${c.isSelf ? "font-semibold" : ""}`}>
+                  {c.isSelf ? "★ " : ""}
+                  {c.title || c.url}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <button type="button" onClick={() => setOpen((v) => !v)} className="mt-3 self-start text-xs text-ink3 hover:text-ink">
+        {open ? "▾ 收起" : `▸ 看完整回答${result.citations.length > 0 ? `與 ${result.citations.length} 個引用來源` : ""}`}
+      </button>
     </div>
   );
 }
@@ -3296,6 +3232,25 @@ export default function HomeClient({
   // 完成後也不再顯示，直到重新整理頁面。
   const checkStarted = loading || !!status;
 
+  // 本機開發：網址加 ?fixture=relove 就直接載入 .dev-fixtures/relove.json，不真的跑健檢（不燒 API 錢）。
+  // 正式環境這條 API 一律 404，這段等於不存在。
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    const name = new URLSearchParams(window.location.search).get("fixture");
+    if (!name) return;
+    fetch(`/api/geo/dev-fixture?name=${encodeURIComponent(name)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d) {
+          setStatus(d as StatusResponse);
+          setUrl(d.url ?? "");
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const reportReady = status?.status === "completed" && !!status.engine;
+
   async function handleCheck(e?: React.FormEvent) {
     e?.preventDefault();
     if (!url.trim() || loading) return;
@@ -3373,6 +3328,15 @@ export default function HomeClient({
   // 自動跑的推薦題跟使用者自己查的關鍵字合在一起算——對 AI 來說都是「這個主題底下推誰」。
   // 使用者改題目重問過，就用重問的結果蓋掉健檢時自動問的那份
   const recommend = recommendOverride ?? status?.recommendVisibility ?? null;
+  const brandTable = recommend ? buildBrandTable(recommend) : null;
+  const reportHost = (() => {
+    try {
+      return engine ? new URL(engine.origin).hostname.replace(/^www\./, "") : "";
+    } catch {
+      return "";
+    }
+  })();
+  const reportBrand = brandTable?.rows.find((r) => r.isSelf)?.name ?? "";
   const recommendAsKeywordResults: Record<string, KeywordVisibilityResult[]> = Object.fromEntries(
     (recommend?.questions ?? []).map((q) => [q.question, q.results.map((r) => ({ ...r, keyword: q.question }))]),
   );
@@ -3385,16 +3349,7 @@ export default function HomeClient({
   );
   // 「AI 為什麼沒推薦你」三關：品牌題（第 1 關）＋推薦題與內容比對（第 2、3 關）
   const diagnosis = recommend && engine ? buildDiagnosis(engine.brandVisibility, recommend) : null;
-  // Perplexity 一個回答就會帶 20 筆引用，兩個關鍵字查下來動輒四十個網域，
-  // 其中絕大多數只出現一次——那是長尾，不是 AI 真的在推的名單。畫面只列前十，
-  // 剩下的用一句話帶過就好，不要逼使用者自己從四十行裡找重點。
-  const TOP_DOMAINS = 10;
-  const topDomains = citedDomains.slice(0, TOP_DOMAINS);
-  const restDomainCount = citedDomains.length - topDomains.length;
-  // 自己有被引用、但排在前十以外時要單獨補一列出來——不然畫面上既看不到自己、
-  // 又不會出現「沒進名單」那句話，等於什麼都沒講。
-  const selfRank = citedDomains.findIndex((d) => d.isSelf);
-  const selfBelowTop = selfRank >= TOP_DOMAINS ? { rank: selfRank + 1, domain: citedDomains[selfRank] } : null;
+  // 前十名＋「你排在十名外」的補列、長尾帶過，都在 CitationTable 裡處理
 
   function addSuggestedKeyword(k: string) {
     setAddedSuggestions((prev) => [...prev, k]);
@@ -3441,6 +3396,25 @@ export default function HomeClient({
       <div className="marketing">
         <Masthead />
 
+        {reportReady ? (
+          <div className="border-b border-line bg-card">
+            <form onSubmit={handleCheck} className="mx-auto flex max-w-[1240px] items-center gap-2.5 px-4 py-3">
+              <span className="hidden text-sm text-ink3 sm:inline">檢測其他網站</span>
+              <input
+                type="text"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="輸入網址，例如 example.com"
+                aria-label="網址"
+                className="mono w-full max-w-[420px] rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink focus:border-ink focus:outline-none"
+              />
+              <button type="submit" disabled={loading} className="btn-lime shrink-0 px-4 py-2 text-sm">
+                {loading ? "檢測中…" : "開始檢測"}
+              </button>
+            </form>
+          </div>
+        ) : (
+          <>
         {/* Hero：深色、全幅背景。這支影片是拿小積木那張金色底圖去 Kling 的
             image-to-video 生的（Video 3.0、1080p、5s）。
 
@@ -3524,6 +3498,9 @@ export default function HomeClient({
           </div>
         </div>
 
+          </>
+        )}
+
         {!checkStarted && (
           <>
             <Section k="01" eyebrow="THE CHECK" title="健檢會看什麼">
@@ -3584,7 +3561,7 @@ export default function HomeClient({
         )}
       </div>
 
-      <div className="mx-auto max-w-3xl px-4 py-16">
+      <div className={`mx-auto px-4 ${reportReady ? "max-w-[1240px] pt-8 pb-16" : "max-w-3xl py-16"}`}>
         {error && <p className="mt-4 text-center text-fail">{error}</p>}
 
         {/* 小積木反饋：檢測過程中途只想看到單一進度動畫，不要一部分結果先跑出來、
@@ -3622,128 +3599,111 @@ export default function HomeClient({
         )}
 
         {status?.status === "completed" && engine && (
-          <div className="mt-10">
-            {/* 判定不出來時必須明講。給假綠燈比不給答案傷害更大 */}
-            <div
-              className={`rounded-[10px] border p-6 text-center ${
-                unknownCount > 0
-                  ? "border-line bg-card"
-                  : engine.results.every((r) => r.status !== "blocked")
-                    ? "border-ok/25 bg-ok/[.06]"
-                    : engine.results.filter((r) => r.status === "blocked").length >= 4
-                      ? "border-fail/25 bg-fail/[.06]"
-                      : "border-warn/25 bg-warn/[.06]"
-              }`}
+          <div className="lg:grid lg:grid-cols-[168px_minmax(0,1fr)] lg:gap-10">
+            <ReportNav
+              items={[
+                { id: "overview", label: "總覽" },
+                ...(brandTable ? [{ id: "brands", label: "AI 推薦了誰" }] : []),
+                ...(recommend ? [{ id: "questions", label: "每一題的結果" }] : []),
+                ...(diagnosis ? [{ id: "why", label: "AI 為什麼沒推薦你" }] : []),
+                ...(citedDomains.length > 0 ? [{ id: "citations", label: "AI 引用了誰的網站" }] : []),
+                ...(engine.brandVisibility.length > 0 ? [{ id: "brand-check", label: "AI 認不認得你" }] : []),
+                { id: "more", label: "想查別的主題" },
+                ...(SHOW_TECH_SECTIONS
+                  ? [{ id: "tech", label: "技術健檢" }, ...(status?.audit ? [{ id: "audit", label: "深度健檢明細" }] : [])]
+                  : []),
+              ]}
+            />
+            <div className="min-w-0">
+            <DashSection
+              id="overview"
+              title={reportBrand || reportHost}
+              desc={
+                <>
+                  <span className="mono">{reportHost}</span>
+                  {recommend && <> · {new Date(recommend.askedAt).toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })} 問的 AI</>}
+                </>
+              }
             >
-              <p className="text-2xl font-bold text-ink">
-                {unknownCount > 0
-                  ? "⚪ 無法判定"
-                  : engine.results.every((r) => r.status !== "blocked")
-                    ? "🟢 AI 引擎都能存取你的網站"
-                    : engine.results.filter((r) => r.status === "blocked").length >= 4
-                      ? "🔴 主要 AI 引擎被擋住了"
-                      : `🟡 有 ${engine.results.filter((r) => r.status === "blocked").length} 個 AI 引擎被擋住`}
-              </p>
-
-              {unknownCount > 0 && (
-                <div className="mt-3 space-y-2 text-sm text-ink2">
-                  <p>{engine.robotsNote}</p>
-                  <p>
-                    這<strong>不代表</strong>你的網站對 AI 開放——很可能有 robots.txt
-                    但我們讀不到。請直接在瀏覽器打開{" "}
-                    <a href={engine.robotsUrl} target="_blank" rel="noopener noreferrer">
-                      {engine.robotsUrl}
-                    </a>{" "}
-                    人工確認。
-                  </p>
-                  {engine.wafHint && (
-                    <div className="mt-3 rounded-lg border border-line bg-paper p-3 text-left">
-                      <p className="text-xs font-semibold text-ink3">偵測到可能的原因：{engine.wafHint.vendor}</p>
-                      <div className="mt-2 text-sm text-ink2">
-                        <CheckBody
-                          c={{
-                            key: "waf",
-                            level: "",
-                            category: "",
-                            item: "防火牆把 AI 爬蟲擋在外面",
-                            status: "fail",
-                            advice: "",
-                            impact: engine.wafHint.impact,
-                            technical: engine.wafHint.technical,
-                          }}
-                          origin={engine.origin}
-                          withAdvice={false}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {engine.robotsStatus === "none" && (
-                <p className="mt-2 text-sm text-ink3">（這個網站沒有 robots.txt，依規範預設所有爬蟲都能存取）</p>
-              )}
-              {engine.robotsStatus === "found" && (
-                <p className="mono mt-2 text-xs text-ink3">規則來源：{engine.robotsUrl}</p>
-              )}
-            </div>
-
-            {/* 健檢報告圖：整份報告的入口。原本這上面還有「五分類總覽」（總分環＋
-                雷達圖）跟「檢測總覽」（狀態色堆疊長條）兩塊，內容跟報告圖裡的雷達、
-                甜甜圈完全重複，同一組數字在同一頁講三次——報告圖本來就是設計來取代
-                它們的，所以整個拿掉，不是搬到別的地方。 */}
-            <div className="mt-6">
-              <ReportBoardSection
-                jobId={reportJobId}
-                origin={engine.origin}
-                engine={engine}
-                audit={status?.audit}
-                pageWords={status?.pageWords}
-                crawledPages={status?.progress.crawled ?? 0}
-                keywordPage={
-                  Object.keys(allKeywordResults).length > 0
-                    ? { keywords: allKeywordOrder, results: allKeywordResults, citedDomains, diagnosis }
-                    : null
-                }
+              <OverviewKpis
+                table={brandTable}
+                namedSelf={recommend?.namedSelfCount ?? 0}
+                brandChecks={engine.brandVisibility}
+                score={SHOW_TECH_SECTIONS && status?.audit ? computeOverallScore(buildCategories5(engine, status.audit)) : null}
               />
-            </div>
+            </DashSection>
 
-            {engine.brandVisibility.length > 0 && (
-              <div className="mt-6">
-                <h2 className="eyebrow mb-3">AI 認不認得你？（實際去問）</h2>
-                <div className="space-y-4">
-                  {engine.brandVisibility.map((r) => (
-                    <BrandVisibilityCard key={r.engine} result={r} />
-                  ))}
-                </div>
+            {brandTable && (
+              <div className="mt-12">
+                <DashSection id="brands" title="AI 推薦了誰" desc="同一批推薦題底下，AI 在回答裡點名的品牌">
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+                    <div className="min-w-0 space-y-3">
+                      <BrandRankTable table={brandTable} />
+                      <ChannelList table={brandTable} />
+                    </div>
+                    <ShareDonut table={brandTable} />
+                  </div>
+                </DashSection>
               </div>
             )}
 
-            <div className="mt-6">
-              <h2 className="text-[19px] font-bold text-ink">關鍵字 AI 能見度</h2>
-              <p className="mt-1 text-sm font-medium text-ink2">你想搶的主題，AI 推薦名單裡有你嗎？</p>
-              <p className="mb-3 mt-1.5 max-w-[34em] text-xs text-ink3">
-                上面看的是「AI 知不知道你」；這裡看的是「有人拿某個主題去問 AI，AI 會不會推薦到你」——這才是大部分人真正在意的問題。
-              </p>
+            {recommend && brandTable && (
+              <div className="mt-12">
+                <DashSection
+                  id="questions"
+                  title="每一題的結果"
+                  desc={`${recommend.customQuestions ? "你自己改的題目" : "AI 讀了你的首頁後猜的推薦題"}，每題各問 ${brandTable.engines.join("、")} 一次`}
+                  right={<EditQuestions key={recommend.askedAt} jobId={reportJobId} current={recommend.questions.map((q) => q.question)} onDone={setRecommendOverride} />}
+                >
+                  <QuestionTable
+                    table={brandTable}
+                    questions={recommend.questions}
+                    renderDetail={(qi) => recommend.questions[qi].results.map((r) => <BrandVisibilityCard key={r.engine} result={r} />)}
+                  />
+                  <p className="mt-2 text-xs text-ink3">AI 的回答每次問都會變，這是當下的快照，不是趨勢。</p>
+                </DashSection>
+              </div>
+            )}
 
-              {status?.status !== "completed" && status?.status !== "failed" && (
-                <p className="mb-3 text-sm text-ink3">我們正在幫你問 AI 幾個推薦題，深度健檢跑完會一起出來…</p>
-              )}
+            {diagnosis && (
+              <div className="mt-12">
+                <DashSection id="why" title="AI 為什麼沒推薦你" desc="從三個地方找原因">
+                  <DiagnosisBlock d={diagnosis} />
+                </DashSection>
+              </div>
+            )}
 
-              {diagnosis && <DiagnosisBlock d={diagnosis} />}
+            {recommend && brandTable ? (
+              <div className="mt-12">
+                <DashSection id="citations" title="AI 引用了誰的網站" desc="AI 回答這些題目時拿來當依據的網頁，你跟對手的官網各被引用幾次">
+                  <CitedPagesSection pages={buildCitedPages(recommend, brandTable)} selfLabel={reportBrand} />
+                </DashSection>
+              </div>
+            ) : (
+              citedDomains.length > 0 && (
+                <div className="mt-12">
+                  <DashSection id="citations" title="AI 引用了哪些網站" desc="AI 回答這些題目時拿來當依據的網站，依被引用次數排">
+                    <CitationTable domains={citedDomains} />
+                  </DashSection>
+                </div>
+              )
+            )}
 
-              {recommend && (
-                <RecommendBlock key={recommend.askedAt} data={recommend} jobId={reportJobId} onReplace={setRecommendOverride} />
-              )}
+            {engine.brandVisibility.length > 0 && (
+              <div className="mt-12">
+                <DashSection id="brand-check" title="AI 認不認得你" desc="直接用你的名字問 AI，它怎麼介紹你">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {engine.brandVisibility.map((r) => (
+                      <CompactAnswerCard key={r.engine} result={r} />
+                    ))}
+                  </div>
+                </DashSection>
+              </div>
+            )}
 
-              {status?.status === "completed" && !recommend && (
-                <p className="mb-3 text-sm text-ink3">這次沒有自動幫你問推薦題（AI 查詢沒開或呼叫失敗），下面可以自己加關鍵字查。</p>
-              )}
-
-              <p className="mb-3 mt-6 max-w-[34em] text-xs text-ink3">
-                想查別的主題，自己加關鍵字。以下是從標題／描述自動抓的候選字，只是建議，不會自動加入查詢，要自己點才會加進去。
-              </p>
-              <div className="rounded-[10px] border border-line bg-card p-6">
+            <div className="mt-12">
+              <DashSection id="more" title="想查別的主題" desc="輸入你想搶的關鍵字，看 AI 會推薦誰">
+                <div className="rounded-[10px] border border-line bg-card p-6">
                 {suggestedKeywords.length > 0 && (
                   <div className="mb-3">
                     <p className="mb-1.5 text-xs text-ink3">建議關鍵字（點一下加入查詢）</p>
@@ -3833,64 +3793,99 @@ export default function HomeClient({
                     ))}
                 </div>
               )}
+              </DashSection>
+            </div>
 
-              {citedDomains.length > 0 && (
-                <div className="mt-6">
-                  <h3 className="text-[17px] font-bold text-ink">這些題目底下，AI 引用了哪些網站</h3>
-                  <p className="mb-3 mt-1.5 max-w-[34em] text-xs text-ink3">
-                    把上面每個回答（自動問的推薦題＋你自己查的關鍵字）的引用來源依網域彙總起來，依被引用次數排序。名單裡通常會混進百科、社群、論壇——那是 AI 找資料的地方，不是你的同業；要看的是跟你做同一件事、卻被引用到的那幾個網域。
+            {/* 封存（2026-11-02）：第一版報告只給「看不懂技術的人」看——AI 有沒有推薦你、推了誰。
+                技術檢測（爬蟲權限、五分類分數、結構化資料、深度健檢）跟「要怎麼改」先收起來，
+                程式碼留著，要恢復把 SHOW_TECH_SECTIONS 改回 true。 */}
+            {SHOW_TECH_SECTIONS && (
+            <>
+            <div id="tech" className="mt-12 scroll-mt-24">
+            {/* 判定不出來時必須明講。給假綠燈比不給答案傷害更大 */}
+            <div
+              className={`rounded-[10px] border p-6 text-center ${
+                unknownCount > 0
+                  ? "border-line bg-card"
+                  : engine.results.every((r) => r.status !== "blocked")
+                    ? "border-ok/25 bg-ok/[.06]"
+                    : engine.results.filter((r) => r.status === "blocked").length >= 4
+                      ? "border-fail/25 bg-fail/[.06]"
+                      : "border-warn/25 bg-warn/[.06]"
+              }`}
+            >
+              <p className="text-2xl font-bold text-ink">
+                {unknownCount > 0
+                  ? "⚪ 無法判定"
+                  : engine.results.every((r) => r.status !== "blocked")
+                    ? "🟢 AI 引擎都能存取你的網站"
+                    : engine.results.filter((r) => r.status === "blocked").length >= 4
+                      ? "🔴 主要 AI 引擎被擋住了"
+                      : `🟡 有 ${engine.results.filter((r) => r.status === "blocked").length} 個 AI 引擎被擋住`}
+              </p>
+
+              {unknownCount > 0 && (
+                <div className="mt-3 space-y-2 text-sm text-ink2">
+                  <p>{engine.robotsNote}</p>
+                  <p>
+                    這<strong>不代表</strong>你的網站對 AI 開放——很可能有 robots.txt
+                    但我們讀不到。請直接在瀏覽器打開{" "}
+                    <a href={engine.robotsUrl} target="_blank" rel="noopener noreferrer">
+                      {engine.robotsUrl}
+                    </a>{" "}
+                    人工確認。
                   </p>
-                  <div className="rounded-[10px] border border-line bg-card p-6">
-                    <ol className="space-y-2.5">
-                      {topDomains.map((d, i) => (
-                        <li key={d.domain} className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-                          <span className="mono w-5 shrink-0 text-right text-xs text-ink3">{i + 1}</span>
-                          <a href={d.sampleUrl} target="_blank" rel="noopener noreferrer" className="mono break-all text-sm">
-                            {d.domain}
-                          </a>
-                          {d.isSelf && (
-                            <span className="rounded-full border border-lime px-2 py-0.5 text-[11px] font-semibold text-ink">
-                              你的網站
-                            </span>
-                          )}
-                          <span className="mono text-xs text-ink3">{d.count} 次</span>
-                          <span className="text-xs text-ink3">{citedInLabel(d.keywords)}</span>
-                        </li>
-                      ))}
-                    </ol>
-                    {selfBelowTop && (
-                      <div className="mt-3 flex flex-wrap items-baseline gap-x-2.5 gap-y-1 border-t border-line pt-3">
-                        <span className="mono w-5 shrink-0 text-right text-xs text-ink3">{selfBelowTop.rank}</span>
-                        <a
-                          href={selfBelowTop.domain.sampleUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mono break-all text-sm"
-                        >
-                          {selfBelowTop.domain.domain}
-                        </a>
-                        <span className="rounded-full border border-lime px-2 py-0.5 text-[11px] font-semibold text-ink">
-                          你的網站
-                        </span>
-                        <span className="mono text-xs text-ink3">{selfBelowTop.domain.count} 次</span>
-                        <span className="text-xs text-ink3">
-                          {selfBelowTop.domain.keywords.map((k) => `「${k}」`).join("")}
-                        </span>
+                  {engine.wafHint && (
+                    <div className="mt-3 rounded-lg border border-line bg-paper p-3 text-left">
+                      <p className="text-xs font-semibold text-ink3">偵測到可能的原因：{engine.wafHint.vendor}</p>
+                      <div className="mt-2 text-sm text-ink2">
+                        <CheckBody
+                          c={{
+                            key: "waf",
+                            level: "",
+                            category: "",
+                            item: "防火牆把 AI 爬蟲擋在外面",
+                            status: "fail",
+                            advice: "",
+                            impact: engine.wafHint.impact,
+                            technical: engine.wafHint.technical,
+                          }}
+                          origin={engine.origin}
+                          withAdvice={false}
+                        />
                       </div>
-                    )}
-                    {restDomainCount > 0 && (
-                      <p className="mt-3 text-xs text-ink3">
-                        另外還有 {restDomainCount} 個網域被引用過，多半只出現一次，屬於長尾，這裡不列。
-                      </p>
-                    )}
-                    {!citedDomains.some((d) => d.isSelf) && (
-                      <p className="mt-4 border-t border-line pt-3 text-sm text-ink2">
-                        你的網站沒有出現在這份名單裡。AI 現在拿來當答案的是上面那些網域。
-                      </p>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               )}
+
+              {engine.robotsStatus === "none" && (
+                <p className="mt-2 text-sm text-ink3">（這個網站沒有 robots.txt，依規範預設所有爬蟲都能存取）</p>
+              )}
+              {engine.robotsStatus === "found" && (
+                <p className="mono mt-2 text-xs text-ink3">規則來源：{engine.robotsUrl}</p>
+              )}
+            </div>
+
+            {/* 健檢報告圖：整份報告的入口。原本這上面還有「五分類總覽」（總分環＋
+                雷達圖）跟「檢測總覽」（狀態色堆疊長條）兩塊，內容跟報告圖裡的雷達、
+                甜甜圈完全重複，同一組數字在同一頁講三次——報告圖本來就是設計來取代
+                它們的，所以整個拿掉，不是搬到別的地方。 */}
+            <div className="mt-6">
+              <ReportBoardSection
+                jobId={reportJobId}
+                origin={engine.origin}
+                engine={engine}
+                audit={status?.audit}
+                pageWords={status?.pageWords}
+                crawledPages={status?.progress.crawled ?? 0}
+                keywordPage={
+                  Object.keys(allKeywordResults).length > 0
+                    ? { keywords: allKeywordOrder, results: allKeywordResults, citedDomains, diagnosis }
+                    : null
+                }
+              />
+            </div>
 
             </div>
 
@@ -3989,13 +3984,16 @@ export default function HomeClient({
                 <RbCheckDistribution cats={buildCategories5(engine, status.audit)} />
               </RbSoloCard>
             )}
-            <div className="mt-6">
+            <div id="audit" className="mt-6 scroll-mt-24">
               {status?.audit && (
                 <AuditTable
                   checks={status.audit.filter((c) => c.key !== "schema" && c.key !== "localbiz")}
                   origin={engine.origin}
                 />
               )}
+            </div>
+            </>
+            )}
             </div>
           </div>
         )}

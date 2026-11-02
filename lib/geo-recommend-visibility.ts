@@ -1,6 +1,7 @@
 import { runVisibilityQueries, hostnameOf, isSameSite, type VisibilityAnswer } from './geo-brand-visibility';
 import { SITE_URL } from '@/lib/site';
 import type { ContentMatch } from './geo-content-match';
+import { fetchGoogleAio } from './geo-google-aio';
 
 // ── GEO：推薦題自動查詢 ──────────────────────────────────
 // 品牌能見度（geo-brand-visibility.ts）問的是「AI 認不認得你」；關鍵字能見度
@@ -33,6 +34,12 @@ export interface RecommendedName {
   count: number;      // 幾個回答裡點名了它（同一回答重複提到只算一次）
   engines: string[];  // 哪些引擎點過名
   isSelf: boolean;
+  // brand＝跟你搶客人的那一家；channel＝去哪裡買／找的管道（電商、通路、評論網站、媒體）。
+  // 通路不是對手，報告的排名表跟聲量佔比不算它。舊的快取結果沒有這欄，當成 brand。
+  kind?: 'brand' | 'channel';
+  // 點名它的回答在「題目依序攤平」之後的位置（questions[0].results 先、再 questions[1]…）。
+  // 報告要做「每題你 vs 對手」「各引擎點名幾次」都靠這個；舊的快取結果沒有這欄。
+  answers?: number[];
 }
 
 export interface RecommendVisibility {
@@ -146,18 +153,23 @@ function buildNamePrompt(answers: { engine: string; question: string; answer: st
   const blocks = answers
     .map((a, i) => `[${i}] 引擎：${a.engine}\n問題：${a.question}\n回答：\n${a.answer.slice(0, 2500)}`)
     .join('\n\n---\n\n');
-  return `下面是幾個 AI 搜尋引擎對「推薦類問題」的回答。請從每個回答裡，抽出「被具體推薦或點名的品牌、公司、網站、頻道、課程或人名」。
+  return `下面是幾個 AI 搜尋引擎對「推薦類問題」的回答。請從每個回答裡，抽出「被具體推薦或點名的對象」，並標出它是哪一種。
+
+兩種類型：
+- "brand"：提問者最後會選的「那一家」，也就是在跟提問者搶同一群客人的對手。例如：品牌、商品的牌子、公司、工作室、診所、顧問、講師、課程、YouTube 頻道、部落客。
+- "channel"：去哪裡買、去哪裡找的管道，本身不是對手。例如：電商平台（蝦皮、momo、PChome）、連鎖通路或藥妝店（屈臣氏、康是美、寶雅）、百貨、評論或比價網站（@cosme、mybest）、媒體、論壇、社群平台、接案平台。
 
 規則：
-- 只抽「可以去找它買服務、上課、看教學」的對象：公司、工作室、顧問、講師、網站、YouTube 頻道、部落格、課程平台。這些是在跟提問者搶生意的人。
-- 絕對不要抽：軟體／工具／技術名稱（n8n、OpenAI、Claude、Pinecone、RAG、Zapier 這類）、泛稱（「線上課程平台」「官方文件」）、文章標題、新聞媒體。
+- 絕對不要抽：軟體／工具／技術名稱（n8n、OpenAI、Claude、Zapier 這類）、成分或原料名、泛稱（「線上課程平台」「藥妝店」「官方文件」）、文章標題。
 - 抽的是「誰」，不是「哪篇文章」：回答寫「TheAI學院的 n8n 完整教學」就抽「TheAI學院」；寫「【n8n 中文教學】從零打造…」這種標題，要抽發這篇的網站或作者，抽不出來就跳過。
-- 名字照回答裡的寫法，不要翻譯、不要改寫；同一回答重複出現只列一次。
+- 同一個對象的不同寫法（「屈臣氏 Watsons」「屈臣氏台灣（Watsons）Blog」）只算一個，用最短、最常見的那個名字。
+- 名字照回答裡的寫法，不要翻譯；同一回答重複出現只列一次。
+- 分不清是品牌還是通路時，看提問者會不會「選它而不選你」：會就是 brand。
 - 沒有具體點名就給空陣列。
 
 ${blocks}
 
-只回傳 JSON：{"answers":[{"index":0,"names":["…"]},{"index":1,"names":[]}]}`;
+只回傳 JSON：{"answers":[{"index":0,"names":[{"name":"…","type":"brand"},{"name":"…","type":"channel"}]},{"index":1,"names":[]}]}`;
 }
 
 // 同一個對象常被不同回答寫成不同長度的名字（「AIJOB」vs「AIJOB 企業 AI 導入顧問」、
@@ -175,13 +187,14 @@ export async function extractRecommendedNames(
   apiKey: string,
 ): Promise<RecommendedName[]> {
   if (answers.length === 0) return [];
-  const raw = await askJson(buildNamePrompt(answers), apiKey, 800);
+  // 三個引擎 × 3 題＝9 份回答，每個名字又多帶 type，800 會被截斷、JSON 解析失敗、整份名單變空
+  const raw = await askJson(buildNamePrompt(answers), apiKey, 1600);
   const parsed = parseJson<{ answers?: { index?: number; names?: unknown }[] }>(raw);
   const rows = Array.isArray(parsed?.answers) ? parsed!.answers : [];
 
   // 先逐筆收集，count 用「出現在哪幾個回答」的集合大小算，不是出現次數累加——
   // 合併同義名稱時才不會把同一個回答裡的兩種寫法算成兩次。
-  type Entry = { name: string; norm: string; answers: Set<number>; engines: Set<string>; isSelf: boolean };
+  type Entry = { name: string; norm: string; answers: Set<number>; engines: Set<string>; isSelf: boolean; kind: 'brand' | 'channel' };
   const entries: Entry[] = [];
   const byNorm = new Map<string, Entry>();
   const tokens = brandTokens(brandName);
@@ -194,8 +207,11 @@ export async function extractRecommendedNames(
     const engine = answers[idx]?.engine;
     if (!engine || !Array.isArray(row.names)) continue;
     for (const n of row.names) {
-      if (typeof n !== 'string') continue;
-      const name = n.trim();
+      // 新格式是 {name, type}；舊 prompt 回的是純字串，當成 brand
+      const rawName = typeof n === 'string' ? n : typeof n?.name === 'string' ? n.name : null;
+      if (rawName === null) continue;
+      const kind: 'brand' | 'channel' = typeof n === 'object' && n?.type === 'channel' ? 'channel' : 'brand';
+      const name = rawName.trim();
       if (!name) continue;
       const key = name.toLowerCase();
       if ([...name].length > MAX_NAME_CHARS) continue;
@@ -214,7 +230,7 @@ export async function extractRecommendedNames(
         selfMarks.some((m) => lineWithName.includes(m));
       let entry = byNorm.get(norm);
       if (!entry) {
-        entry = { name, norm, answers: new Set(), engines: new Set(), isSelf };
+        entry = { name, norm, answers: new Set(), engines: new Set(), isSelf, kind };
         byNorm.set(norm, entry);
         entries.push(entry);
       }
@@ -239,7 +255,14 @@ export async function extractRecommendedNames(
   }
 
   return merged
-    .map((e) => ({ name: e.name, count: e.answers.size, engines: [...e.engines], isSelf: e.isSelf }))
+    .map((e) => ({
+      name: e.name,
+      count: e.answers.size,
+      engines: [...e.engines],
+      isSelf: e.isSelf,
+      kind: e.kind,
+      answers: [...e.answers].sort((a, b) => a - b),
+    }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh-Hant'));
 }
 
@@ -272,7 +295,7 @@ export function brandTokens(brandName: string): string[] {
   return [...out];
 }
 
-function mentionsSelf(
+export function mentionsSelf(
   answer: string,
   brandName: string,
   domain: string,
@@ -320,8 +343,13 @@ export async function runRecommendVisibility(
   const domain = hostnameOf(origin);
   const perQuestion = await Promise.all(
     questions.map(async (question) => {
-      const answers = await runVisibilityQueries(`${question} 請具體推薦幾個，並附上來源網址。`, origin, 900);
-      const results: RecommendAnswer[] = (answers ?? []).map((a) => {
+      // Google 用原題直接搜（一般人就是這樣打進 Google 的），不加「請附來源網址」那串
+      const [answers, google] = await Promise.all([
+        runVisibilityQueries(`${question} 請具體推薦幾個，並附上來源網址。`, origin, 900),
+        fetchGoogleAio(question, origin),
+      ]);
+      const all = [...(answers ?? []), ...(google?.status === 'present' ? [google.answer] : [])];
+      const results: RecommendAnswer[] = all.map((a) => {
         const named = mentionsSelf(a.answer, input.brandName, domain, a.citations);
         return { ...a, query: question, namedSelf: named, advice: adviceFor(a, named) };
       });
