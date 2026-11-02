@@ -36,14 +36,14 @@ function buildPrompt(brandName: string, answers: SentimentInput[]): string {
 規則：
 - 只抓在講「${brandName}」的句子。講整個產品類別、講別的品牌、一般衛教知識，都不算。
 - 中性的事實（官網網址、成立年份、在哪裡買得到、產品有哪些）不算評價，不要抓。
-- 同一個意思在不同回答出現，合併成一條，列出它出現在哪幾段。
+- 同一個意思在不同回答出現，合併成一條；每一段都要附上那一段裡的原句當證據。
 - 每條說法用台灣人平常講話的方式寫，具體、短（20 字內），例如「配方溫和、適合敏感肌」「價格比開架品牌高」。不要寫「支持精緻的日常護理」這種空話。
-- quote 從原文節錄一小段（40 字內），不要改寫。
+- 證據的 quote 必須是那一段原文裡「一字不差」的連續片段（10～40 字），不要改寫、不要補字。找不到原句的段落不要列。
 - 沒有評價就給空陣列，不要硬湊。
 
 ${blocks}
 
-只回傳 JSON：{"themes":[{"theme":"…","polarity":"positive","answers":[0,2],"quote":"…","quoteFrom":0}]}`;
+只回傳 JSON：{"themes":[{"theme":"…","polarity":"positive","evidence":[{"answer":0,"quote":"…"},{"answer":2,"quote":"…"}]}]}`;
 }
 
 export async function extractSentiment(brandName: string, answers: SentimentInput[], apiKey: string): Promise<SentimentResult | null> {
@@ -54,22 +54,33 @@ export async function extractSentiment(brandName: string, answers: SentimentInpu
   } catch {
     return null;
   }
-  const parsed = parseJson<{ themes?: { theme?: unknown; polarity?: unknown; answers?: unknown; quote?: unknown; quoteFrom?: unknown }[] }>(raw);
+  const parsed = parseJson<{ themes?: { theme?: unknown; polarity?: unknown; evidence?: unknown }[] }>(raw);
   if (!parsed || !Array.isArray(parsed.themes)) return null;
+  // 次數不能信模型自己報：2026-11-02 實測它把只出現在 1 段的說法標成 3 段。
+  // 每段都要附原句，回頭到那一段原文核對得到才算。
+  const norm = (t: string) => t.replace(/[\s*_`#>|\[\]()]/g, '');
+  const texts = answers.map((a) => norm(a.answer));
   const themes: SentimentTheme[] = [];
   for (const t of parsed.themes) {
     if (typeof t.theme !== 'string' || !t.theme.trim()) continue;
     if (t.polarity !== 'positive' && t.polarity !== 'negative') continue;
-    const idx = Array.isArray(t.answers) ? [...new Set(t.answers.filter((n): n is number => typeof n === 'number' && n >= 0 && n < answers.length))] : [];
-    if (idx.length === 0) continue;
-    const from = typeof t.quoteFrom === 'number' && answers[t.quoteFrom] ? t.quoteFrom : idx[0];
+    const ev = Array.isArray(t.evidence) ? t.evidence : [];
+    const ok = new Map<number, string>();
+    for (const e of ev as { answer?: unknown; quote?: unknown }[]) {
+      if (typeof e?.answer !== 'number' || typeof e.quote !== 'string') continue;
+      const q = e.quote.trim();
+      if (norm(q).length < 4 || !texts[e.answer]?.includes(norm(q))) continue;
+      if (!ok.has(e.answer)) ok.set(e.answer, q);
+    }
+    if (ok.size === 0) continue;
+    const [first, quote] = [...ok.entries()][0];
     themes.push({
       theme: t.theme.trim(),
       polarity: t.polarity,
-      count: idx.length,
-      engines: [...new Set(idx.map((i) => shortEngine(answers[i].engine)))],
-      quote: typeof t.quote === 'string' ? t.quote.trim() : '',
-      quoteEngine: shortEngine(answers[from].engine),
+      count: ok.size,
+      engines: [...new Set([...ok.keys()].map((i) => shortEngine(answers[i].engine)))],
+      quote,
+      quoteEngine: shortEngine(answers[first].engine),
     });
   }
   themes.sort((a, b) => b.count - a.count || (a.polarity === 'positive' ? -1 : 1));
