@@ -14,6 +14,7 @@ import { runRecommendVisibility } from '@/lib/geo-recommend-visibility';
 import { matchQuestionsToPages } from '@/lib/geo-content-match';
 import { extractSentiment, fetchReviewAnswers, selfShortName, sentimentInputs } from '@/lib/geo-sentiment';
 import { extractPositioning, topRivals } from '@/lib/geo-positioning';
+import { extractCompare, fetchCompareAnswers } from '@/lib/geo-compare';
 import { analyzeLlmsTxt } from '@/lib/geo-llms-txt';
 import { createAuditJob, updateAuditJob, setAuditJobContext, type EngineResult } from '@/lib/geo-audit-jobs';
 import { readTextCapped, crawlSite } from '@/lib/geo-audit-crawler';
@@ -298,14 +299,20 @@ export async function POST(req: NextRequest) {
         const [contentMatch, extras] = await Promise.all([
           matchQuestionsToPages(rv.questions, matchPages, apiKey).catch(() => null),
           (async () => {
-            const review = await fetchReviewAnswers(rv.brandName, origin);
-            const all = rv.questions.flatMap((q) => q.results.map((r) => ({ engine: r.engine, answer: r.answer })));
-            const [s, positioning] = await Promise.all([
-              extractSentiment(rv.brandName, [...sentimentInputs(rv, engine.brandVisibility), ...review.answers], apiKey).catch(() => null),
-              extractPositioning(selfShortName(rv.brandName), topRivals(rv.names), [...all, ...review.answers], apiKey).catch(() => null),
+            const selfName = selfShortName(rv.brandName);
+            const rivals = topRivals(rv.names);
+            const [review, cmp] = await Promise.all([
+              fetchReviewAnswers(rv.brandName, origin),
+              rivals[0] ? fetchCompareAnswers(selfName, rivals[0], origin).catch(() => null) : Promise.resolve(null),
             ]);
-            return { sentiment: s ? { ...s, reviewQuery: review.query } : null, positioning };
-          })().catch(() => ({ sentiment: null, positioning: null })),
+            const all = rv.questions.flatMap((q) => q.results.map((r) => ({ engine: r.engine, answer: r.answer })));
+            const [s, positioning, compare] = await Promise.all([
+              extractSentiment(rv.brandName, [...sentimentInputs(rv, engine.brandVisibility), ...review.answers], apiKey).catch(() => null),
+              extractPositioning(selfName, rivals, [...all, ...review.answers, ...(cmp?.answers ?? [])], apiKey).catch(() => null),
+              cmp ? extractCompare(selfName, cmp.rival, cmp.query, cmp.answers, apiKey).catch(() => null) : Promise.resolve(null),
+            ]);
+            return { sentiment: s ? { ...s, reviewQuery: review.query } : null, positioning, compare };
+          })().catch(() => ({ sentiment: null, positioning: null, compare: null })),
         ]);
         recommendVisibility = { ...rv, contentMatch, ...extras };
       }

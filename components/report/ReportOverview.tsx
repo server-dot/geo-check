@@ -196,19 +196,82 @@ export function DashSection({
   );
 }
 
-function Kpi({ label, value, unit, note, tone }: { label: string; value: ReactNode; unit?: string; note: string; tone: Tone }) {
+function Kpi({
+  label,
+  value,
+  unit,
+  note,
+  tone,
+  visual,
+}: {
+  label: string;
+  value: ReactNode;
+  unit?: string;
+  note: string;
+  tone: Tone;
+  visual?: ReactNode;
+}) {
   const t = TONE[tone];
   return (
-    <div className="rounded-[10px] border border-line bg-card px-5 py-4">
-      <p className="flex items-center gap-1.5 text-[13px] font-medium text-ink2">
-        {t.glyph && <span className={`font-bold ${t.cls}`}>{t.glyph}</span>}
-        {label}
-      </p>
-      <p className="mt-2 flex items-baseline gap-1.5">
-        <span className="text-[34px] font-bold leading-none tracking-tight text-ink tabular-nums">{value}</span>
-        {unit && <span className="text-sm text-ink3">{unit}</span>}
-      </p>
-      <p className="mt-2 text-xs text-ink3">{note}</p>
+    <div className="flex items-center justify-between gap-3 rounded-[10px] border border-line bg-card px-5 py-4">
+      <div className="min-w-0">
+        <p className="flex items-center gap-1.5 text-[13px] font-medium text-ink2">
+          {t.glyph && <span className={`font-bold ${t.cls}`}>{t.glyph}</span>}
+          {label}
+        </p>
+        <p className="mt-2 flex items-baseline gap-1.5">
+          <span className="text-[34px] font-bold leading-none tracking-tight text-ink tabular-nums">{value}</span>
+          {unit && <span className="text-sm text-ink3">{unit}</span>}
+        </p>
+        <p className="mt-2 text-xs text-ink3">{note}</p>
+      </div>
+      {visual && <div className="shrink-0">{visual}</div>}
+    </div>
+  );
+}
+
+// 環形進度：part/whole
+export function Ring({ part, whole, color = "var(--lime)", size = 64 }: { part: number; whole: number; color?: string; size?: number }) {
+  const r = 26;
+  const c = 2 * Math.PI * r;
+  const frac = whole > 0 ? Math.min(1, part / whole) : 0;
+  return (
+    <svg viewBox="0 0 64 64" width={size} height={size} className="-rotate-90" aria-hidden="true">
+      <circle cx="32" cy="32" r={r} fill="none" stroke="var(--inset)" strokeWidth="8" />
+      <circle cx="32" cy="32" r={r} fill="none" stroke={color} strokeWidth="8" strokeLinecap="round" strokeDasharray={`${frac * c} ${c}`} />
+    </svg>
+  );
+}
+
+// 每家 AI 一顆點：有／沒有
+function EngineDots({ items }: { items: { label: string; ok: boolean }[] }) {
+  return (
+    <ul className="space-y-1">
+      {items.map((it) => (
+        <li key={it.label} className="flex items-center gap-1.5 text-[11.5px] text-ink3">
+          <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${it.ok ? "bg-ok text-white" : "bg-inset text-ink3"}`}>
+            {it.ok ? "✓" : "✗"}
+          </span>
+          {it.label}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// 正負兩段長條
+function PosNegBar({ pos, neg }: { pos: number; neg: number }) {
+  const total = Math.max(1, pos + neg);
+  return (
+    <div className="w-[88px]">
+      <div className="flex h-2.5 overflow-hidden rounded-full bg-inset">
+        <div className="bg-ok" style={{ width: `${(pos / total) * 100}%` }} />
+        <div className="bg-fail" style={{ width: `${(neg / total) * 100}%` }} />
+      </div>
+      <div className="mt-1 flex justify-between text-[11px] tabular-nums">
+        <span className="text-ok">✓{pos}</span>
+        <span className="text-fail">✗{neg}</span>
+      </div>
     </div>
   );
 }
@@ -220,17 +283,19 @@ export function OverviewKpis({
   namedSelf,
   brandChecks,
   score,
+  sentiment,
 }: {
   table: BrandTable | null;
   namedSelf: number;
-  brandChecks: { citedSelf: boolean }[];
+  brandChecks: { citedSelf: boolean; engine?: string }[];
   score: { score: number; grade: string; gradeLabel: string } | null;
+  sentiment?: { pos: number; neg: number } | null;
 }) {
   const total = table?.total ?? 0;
   const found = brandChecks.filter((b) => b.citedSelf).length;
   const rank = table?.selfRank ?? null;
   return (
-    <div className={`grid grid-cols-2 gap-3 ${score ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       {table ? (
         <Kpi
           label="AI 推薦你"
@@ -238,6 +303,7 @@ export function OverviewKpis({
           unit="次回答"
           note={`${table.flat.length / Math.max(1, table.engines.length)} 個推薦題 × ${table.engines.length} 家 AI`}
           tone={namedSelf === 0 ? "fail" : namedSelf * 2 >= total ? "ok" : "warn"}
+          visual={<Ring part={namedSelf} whole={total} />}
         />
       ) : (
         <Kpi label="AI 推薦你" value="—" note="這次沒問到推薦題" tone="none" />
@@ -249,6 +315,7 @@ export function OverviewKpis({
           unit="家 AI"
           note="用你的名字問，找得到你的官網"
           tone={found === 0 ? "fail" : found === brandChecks.length ? "ok" : "warn"}
+          visual={<EngineDots items={brandChecks.map((b, i) => ({ label: shortEngine(b.engine ?? `AI ${i + 1}`), ok: b.citedSelf }))} />}
         />
       ) : (
         <Kpi label="AI 認得你" value="—" note="這次沒用你的名字問" tone="none" />
@@ -262,6 +329,15 @@ export function OverviewKpis({
         />
       ) : (
         <Kpi label="推薦排名" value="—" note="這次沒問到推薦題" tone="none" />
+      )}
+      {sentiment && (
+        <Kpi
+          label="AI 評價"
+          value={`${sentiment.pos}:${sentiment.neg}`}
+          note={`好評 ${sentiment.pos} 條、缺點 ${sentiment.neg} 條`}
+          tone={sentiment.neg === 0 ? "ok" : sentiment.pos >= sentiment.neg ? "warn" : "fail"}
+          visual={<PosNegBar pos={sentiment.pos} neg={sentiment.neg} />}
+        />
       )}
       {score && (
         <Kpi
@@ -436,9 +512,8 @@ interface QuestionLike {
 }
 
 function Verdict({ named, cited }: { named: boolean; cited: boolean }) {
-  if (named) return <span className="font-semibold text-ok">✓ 推薦你</span>;
-  if (cited) return <span className="text-warn">△ 查過你</span>;
-  return <span className="text-fail">✗ 沒有你</span>;
+  const cls = named ? "bg-ok text-white" : cited ? "bg-warn/15 text-warn" : "bg-fail/10 text-fail";
+  return <span className={`inline-flex w-full justify-center rounded-md px-2 py-1.5 text-[12.5px] font-semibold ${cls}`}>{named ? "✓ 推薦你" : cited ? "△ 查過你" : "✗ 沒有你"}</span>;
 }
 
 export function QuestionTable({
@@ -814,6 +889,7 @@ interface SentimentThemeLike {
 export function SentimentSection({ themes, answerCount, reviewQuery }: { themes: SentimentThemeLike[]; answerCount: number; reviewQuery?: string }) {
   const pos = themes.filter((t) => t.polarity === "positive").length;
   const neg = themes.length - pos;
+  const maxCount = Math.max(1, ...themes.map((t) => t.count));
   return (
     <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
       <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-line px-4 py-3">
@@ -822,6 +898,7 @@ export function SentimentSection({ themes, answerCount, reviewQuery }: { themes:
           <span className="mx-2 text-ink3">·</span>
           <span className={`font-bold ${neg > 0 ? "text-fail" : "text-ink3"}`}>✗ 負面 {neg} 條</span>
         </p>
+        <PosNegBar pos={pos} neg={neg} />
         <p className="text-xs text-ink3">
           從 {answerCount} 段提到你的回答整理{reviewQuery ? `（含另外直接問三家 AI「${reviewQuery}」）` : ""}
           {neg === 0 && themes.length > 0 ? "，這次 AI 沒有講到你的缺點" : ""}
@@ -835,7 +912,7 @@ export function SentimentSection({ themes, answerCount, reviewQuery }: { themes:
             <tr className="border-b border-line bg-inset/60 text-left text-xs text-ink3">
               <th className="px-4 py-2.5 font-medium">AI 怎麼說你</th>
               <th className="w-[90px] px-3 py-2.5 font-medium">正／負</th>
-              <th className="w-[100px] px-3 py-2.5 text-right font-medium">出現在幾段</th>
+              <th className="w-[180px] px-3 py-2.5 font-medium">出現在幾段</th>
               <th className="w-[200px] px-3 py-2.5 font-medium">哪家 AI 說的</th>
             </tr>
           </thead>
@@ -853,8 +930,13 @@ export function SentimentSection({ themes, answerCount, reviewQuery }: { themes:
                 <td className="px-3 py-2.5 text-[13px]">
                   {t.polarity === "positive" ? <span className="font-semibold text-ok">✓ 正面</span> : <span className="font-semibold text-fail">✗ 負面</span>}
                 </td>
-                <td className="mono px-3 py-2.5 text-right text-xs text-ink2">
-                  {t.count}/{answerCount}
+                <td className="px-3 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-2.5 w-[120px] overflow-hidden rounded-full bg-inset">
+                      <div className={t.polarity === "positive" ? "bg-ok" : "bg-fail"} style={{ width: `${(t.count / maxCount) * 100}%` }} />
+                    </div>
+                    <span className="mono text-xs text-ink2 tabular-nums">{t.count}/{answerCount}</span>
+                  </div>
                 </td>
                 <td className="px-3 py-2.5 text-[13px] text-ink2">{t.engines.join("、")}</td>
               </tr>

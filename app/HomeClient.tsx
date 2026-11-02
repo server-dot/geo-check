@@ -15,7 +15,7 @@ import { SITE_NAME } from "@/lib/site";
 // 第一版報告先不給技術內容跟改善建議（見報告區塊那段註解）
 const SHOW_TECH_SECTIONS = false;
 
-import { CompetitorCompare } from "@/components/report/CompetitorCompare";
+import { CompetitorCompare, HeadToHead } from "@/components/report/CompetitorCompare";
 import { BrandRankTable, buildBrandTable, buildCitedPages, ChannelList, CitationTable, CitedPagesSection, DashSection, OverviewKpis, QuestionTable, ReportNav, SentimentSection, ShareDonut, shortEngine } from "@/components/report/ReportOverview";
 
 // 首頁 hero 下面的三格數字帶，掛載時跑一次 1100ms 的 ease-out-cubic count-up
@@ -192,6 +192,12 @@ interface RecommendVisibility {
     reviewQuery?: string;
   } | null;
   positioning?: { brand: string; isSelf: boolean; traits: { text: string; quote: string; engine: string }[] }[] | null;
+  compare?: {
+    rival: string;
+    query: string;
+    verdicts: { engine: string; favors: "self" | "rival" | "tie"; reason: string; quote: string }[];
+    dimensions: { name: string; winner: "self" | "rival" | "tie"; quote: string; engine: string }[];
+  } | null;
 }
 
 interface LlmsTxtLink {
@@ -3639,6 +3645,14 @@ export default function HomeClient({
                 namedSelf={recommend?.namedSelfCount ?? 0}
                 brandChecks={engine.brandVisibility}
                 score={SHOW_TECH_SECTIONS && status?.audit ? computeOverallScore(buildCategories5(engine, status.audit)) : null}
+                sentiment={
+                  recommend?.sentiment
+                    ? {
+                        pos: recommend.sentiment.themes.filter((t) => t.polarity === "positive").length,
+                        neg: recommend.sentiment.themes.filter((t) => t.polarity === "negative").length,
+                      }
+                    : null
+                }
               />
             </DashSection>
 
@@ -3659,7 +3673,10 @@ export default function HomeClient({
             {recommend && brandTable && brandTable.rows.some((r) => !r.isSelf && r.count > 0) && (
               <div className="mt-12">
                 <DashSection id="competitors" title="競爭對手分析" desc="挑一個對手，每一題比比看誰被 AI 推得多">
-                  <CompetitorCompare table={brandTable} questions={recommend.questions} positioning={recommend.positioning} />
+                  <div className="space-y-4">
+                    {recommend.compare && recommend.compare.verdicts.length > 0 && <HeadToHead selfName={reportBrand} cmp={recommend.compare} />}
+                    <CompetitorCompare table={brandTable} questions={recommend.questions} positioning={recommend.positioning} defaultRival={recommend.compare?.rival} />
+                  </div>
                 </DashSection>
               </div>
             )}
