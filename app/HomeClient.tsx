@@ -15,6 +15,7 @@ import { SITE_NAME } from "@/lib/site";
 // 第一版報告先不給技術內容跟改善建議（見報告區塊那段註解）
 const SHOW_TECH_SECTIONS = false;
 
+import { CompetitorCompare } from "@/components/report/CompetitorCompare";
 import { BrandRankTable, buildBrandTable, buildCitedPages, ChannelList, CitationTable, CitedPagesSection, DashSection, OverviewKpis, QuestionTable, ReportNav, SentimentSection, ShareDonut, shortEngine } from "@/components/report/ReportOverview";
 
 // 首頁 hero 下面的三格數字帶，掛載時跑一次 1100ms 的 ease-out-cubic count-up
@@ -3609,6 +3610,7 @@ export default function HomeClient({
               items={[
                 { id: "overview", label: "總覽" },
                 ...(brandTable ? [{ id: "brands", label: "AI 推薦了誰" }] : []),
+                ...(brandTable ? [{ id: "competitors", label: "競爭對手分析" }] : []),
                 ...(recommend?.sentiment ? [{ id: "sentiment", label: "AI 怎麼評價你" }] : []),
                 ...(recommend ? [{ id: "questions", label: "每一題的結果" }] : []),
                 ...(diagnosis ? [{ id: "why", label: "AI 為什麼沒推薦你" }] : []),
@@ -3649,6 +3651,14 @@ export default function HomeClient({
                     </div>
                     <ShareDonut table={brandTable} />
                   </div>
+                </DashSection>
+              </div>
+            )}
+
+            {recommend && brandTable && brandTable.rows.some((r) => !r.isSelf && r.count > 0) && (
+              <div className="mt-12">
+                <DashSection id="competitors" title="競爭對手分析" desc="挑一個對手，每一題比比看誰被 AI 推得多">
+                  <CompetitorCompare table={brandTable} questions={recommend.questions} />
                 </DashSection>
               </div>
             )}
