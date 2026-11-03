@@ -134,7 +134,26 @@ export function SovDonut({ rows }: { rows: { name: string; isSelf: boolean; coun
   );
 }
 
-// 每一題：你被推薦的次數，依 AI 堆疊
+// 每一題：你被推薦的次數，依 AI 堆疊。橫條，題目整句寫在左邊（小積木：不講問題是啥誰知道）
+function WrapTick(props: { x?: number; y?: number; payload?: { value: string } }) {
+  const { x = 0, y = 0, payload } = props;
+  const text = payload?.value ?? "";
+  const per = 17;
+  const lines: string[] = [];
+  for (let i = 0; i < text.length && lines.length < 3; i += per) lines.push(text.slice(i, i + per));
+  if (text.length > per * 3) lines[2] = lines[2].slice(0, per - 1) + "…";
+  const dy = -((lines.length - 1) * 18) / 2;
+  return (
+    <text x={x - 8} y={y + dy} textAnchor="end" fontSize={14} fill="#303c54">
+      {lines.map((l, i) => (
+        <tspan key={i} x={x - 8} dy={i === 0 ? 5 : 18}>
+          {l}
+        </tspan>
+      ))}
+    </text>
+  );
+}
+
 export function QuestionStacked({
   questions,
   engines,
@@ -145,19 +164,15 @@ export function QuestionStacked({
   const data = questions.map((q) => ({ name: q.label, full: q.full, ...Object.fromEntries(engines.map((e) => [e, q.byEngine[e]?.named ?? 0])) }));
   const max = Math.max(1, ...questions.map((q) => engines.reduce((n, e) => n + (q.byEngine[e]?.total ?? 0), 0)));
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-        <CartesianGrid vertical={false} stroke={GRID} />
-        <XAxis dataKey="name" tick={TICK} tickLine={false} axisLine={{ stroke: GRID }} />
-        <YAxis domain={[0, max]} ticks={intTicks(max)} allowDecimals={false} tick={TICK} tickLine={false} axisLine={false} />
-        <Tooltip
-          {...tooltipStyle}
-          labelFormatter={(_, p) => (p?.[0]?.payload as { full?: string })?.full ?? ""}
-          formatter={(v) => [`推薦你 ${v} 次`, undefined]}
-        />
+    <ResponsiveContainer width="100%" height={Math.max(240, questions.length * 78 + 50)}>
+      <BarChart data={data} layout="vertical" margin={{ top: 0, right: 16, left: 8, bottom: 0 }}>
+        <CartesianGrid horizontal={false} stroke={GRID} />
+        <XAxis type="number" domain={[0, max]} ticks={intTicks(max)} allowDecimals={false} tick={TICK} tickLine={false} axisLine={false} />
+        <YAxis type="category" dataKey="name" width={290} tick={<WrapTick />} tickLine={false} axisLine={false} interval={0} />
+        <Tooltip {...tooltipStyle} formatter={(v) => [`推薦你 ${v} 次`, undefined]} />
         <Legend {...legendProps} iconType="circle" />
         {engines.map((e, i) => (
-          <Bar key={e} dataKey={e} stackId="s" fill={engineColor(e, i)} maxBarSize={56} stroke="#fff" strokeWidth={2} radius={i === engines.length - 1 ? [4, 4, 0, 0] : 0} />
+          <Bar key={e} dataKey={e} stackId="s" fill={engineColor(e, i)} maxBarSize={26} stroke="#fff" strokeWidth={2} radius={i === engines.length - 1 ? [0, 4, 4, 0] : 0} />
         ))}
       </BarChart>
     </ResponsiveContainer>

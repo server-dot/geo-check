@@ -3872,7 +3872,7 @@ export default function HomeClient({
                 </span>
               )}
             </div>
-            <DashSection id="overview" title="總覽" desc="這份報告的重點，點右上角「看完整」到各頁">
+            <DashSection id="overview" title="總覽">
               {brandTable && recommend ? (
                 <OverviewBoard
                   table={brandTable}
@@ -3889,7 +3889,7 @@ export default function HomeClient({
 
             {brandTable && (
               <div className="mt-12">
-                <DashSection id="brands" title="AI 推薦了誰" desc="同一批推薦題底下，AI 在回答裡點名的品牌">
+                <DashSection id="brands" title="AI 推薦了誰">
                   <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-5">
                     <div className="min-w-0 space-y-3">
                       <BrandRankTable table={brandTable} />
@@ -3903,7 +3903,7 @@ export default function HomeClient({
 
             {recommend && brandTable && brandTable.rows.some((r) => !r.isSelf && r.count > 0) && (
               <div className="mt-12">
-                <DashSection id="competitors" title="競爭對手分析" desc="挑一個對手，每一題比比看誰被 AI 推得多">
+                <DashSection id="competitors" title="競爭對手分析">
                   <div className="space-y-4">
                     {recommend.compare && recommend.compare.verdicts.length > 0 && <HeadToHead selfName={reportBrand} cmp={recommend.compare} />}
                     <CompetitorCompare table={brandTable} questions={recommend.questions} positioning={recommend.positioning} defaultRival={recommend.compare?.rival} />
@@ -3914,7 +3914,7 @@ export default function HomeClient({
 
             {recommend?.sentiment && (
               <div className="mt-12">
-                <DashSection id="sentiment" title="AI 怎麼評價你" desc="AI 在回答裡講到你的時候，說了哪些好話、哪些缺點">
+                <DashSection id="sentiment" title="AI 怎麼評價你">
                   <SentimentSection themes={recommend.sentiment.themes} answerCount={recommend.sentiment.answerCount} reviewQuery={recommend.sentiment.reviewQuery} />
                 </DashSection>
               </div>
@@ -3925,7 +3925,7 @@ export default function HomeClient({
                 <DashSection
                   id="questions"
                   title="每一題的結果"
-                  desc={`${recommend.customQuestions ? "你自己改的題目" : "AI 讀了你的首頁後猜的推薦題"}，${recommend.questions.some((q) => q.altQuestion) ? "每題用兩種問法問 Perplexity、ChatGPT，Google 問一次" : `每題各問 ${brandTable.engines.join("、")} 一次`}`}
+                  desc={`${recommend.customQuestions ? "題目是你自己改的" : "題目是 AI 讀你的首頁猜的"}。${recommend.questions.some((q) => q.altQuestion) ? "Perplexity、ChatGPT 每題用兩種問法各問一次，Google 問一次" : `每題各問 ${brandTable.engines.join("、")} 一次`}`}
                   right={<EditQuestions key={recommend.askedAt} jobId={reportJobId} current={recommend.questions.map((q) => q.question)} onDone={setRecommendOverride} />}
                 >
                   <QuestionTable
@@ -3933,14 +3933,14 @@ export default function HomeClient({
                     questions={recommend.questions}
                     renderDetail={(qi) => recommend.questions[qi].results.map((r, i) => <BrandVisibilityCard key={`${r.engine}-${i}`} result={r} />)}
                   />
-                  <p className="mt-2 text-[14px] text-ink3">AI 的回答每次問都會變，這是當下的快照，不是趨勢。</p>
+                  <p className="mt-2 text-[14px] text-ink3">AI 每次回答都不太一樣，隔幾天再問，結果可能會變。</p>
                 </DashSection>
               </div>
             )}
 
             {recommend && brandTable && (
               <div className="mt-12">
-                <DashSection id="responses" title="AI 的原始回答" desc="每一則回答都在這裡，點一列看全文；你的品牌黃底、對手灰底">
+                <DashSection id="responses" title="AI 的原始回答" desc="點一列看全文。黃底是你，灰底是對手">
                   <ResponsesExplorer rec={recommend} table={brandTable} brandChecks={engine.brandVisibility} selfName={reportBrand} />
                 </DashSection>
               </div>
@@ -3948,7 +3948,7 @@ export default function HomeClient({
 
             {diagnosis && (
               <div className="mt-12">
-                <DashSection id="why" title="AI 為什麼沒推薦你" desc="從三個地方找原因">
+                <DashSection id="why" title="AI 為什麼沒推薦你">
                   <DiagnosisBlock d={diagnosis} />
                 </DashSection>
               </div>
@@ -3956,7 +3956,7 @@ export default function HomeClient({
 
             {recommend && brandTable ? (
               <div className="mt-12">
-                <DashSection id="citations" title="AI 引用了誰的網站" desc="AI 回答這些題目時拿來當依據的網頁，你跟對手的官網各被引用幾次">
+                <DashSection id="citations" title="AI 引用了誰的網站">
                   <CitedPagesSection pages={buildCitedPages(recommend, brandTable)} selfLabel={reportBrand} />
                 </DashSection>
               </div>
@@ -3972,7 +3972,7 @@ export default function HomeClient({
 
             {engine.brandVisibility.length > 0 && (
               <div className="mt-12">
-                <DashSection id="brand-check" title="AI 認不認得你" desc="直接用你的名字問 AI，它怎麼介紹你">
+                <DashSection id="brand-check" title="AI 認不認得你" desc="用你的名字直接問">
                   <div className="grid gap-4 grid-cols-2">
                     {engine.brandVisibility.map((r) => (
                       <CompactAnswerCard key={r.engine} result={r} />

@@ -234,7 +234,6 @@ export function CompetitorCompare({
             {rivalOnly.length}
             <span className="ml-1.5 text-base font-normal text-ink3">次回答</span>
           </p>
-          <p className="mt-1.5 text-[14px] text-ink3">這幾次 AI 看的網頁列在下面</p>
         </div>
         <div className="rounded-[10px] border border-line bg-card px-4 py-3">
           <p className="mb-1 text-[14px] text-ink2">各家 AI 推薦次數</p>
@@ -294,7 +293,7 @@ export function CompetitorCompare({
         {rows.map((r, i) => (
           <Butterfly key={r.q} label={`第 ${i + 1} 題`} sub={r.q} me={r.me} them={r.them} max={r.total} />
         ))}
-        <p className="mt-1 border-t border-line pt-2 text-[14px] text-ink3">一題只問 3 家 AI 各一次，差 1 次可能只是這次運氣。</p>
+        <p className="mt-1 border-t border-line pt-2 text-[14px] text-ink3">每題的回答不多，差 1 次可能只是剛好。</p>
       </div>
     </div>
   );

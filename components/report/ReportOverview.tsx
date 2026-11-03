@@ -323,7 +323,7 @@ export function OverviewKpis({
       {table ? (
         <Kpi
           label="推薦排名"
-          value={rank ? `#${rank}` : "未上榜"}
+          value={rank ? `第 ${rank} 名` : "未上榜"}
           note={`AI 點名的 ${table.rows.length} 個品牌裡`}
           tone={rank === null ? "fail" : rank <= 3 ? "ok" : "warn"}
         />
@@ -679,7 +679,7 @@ export function ChannelList({ table }: { table: BrandTable }) {
   return (
     <div className="rounded-[10px] border border-line bg-card px-4 py-3 text-[14px]">
       <span className="font-medium text-ink2">AI 也提到的</span>
-      <span className="ml-2 text-[14px] text-ink3">（通路、媒體、專家，不是對手，不算進排名）</span>
+      <span className="ml-2 text-[14px] text-ink3">（通路、媒體、專家，不算進排名）</span>
       <p className="mt-1.5 leading-relaxed text-ink2">
         {table.channels.map((c, i) => (
           <span key={c.name}>
