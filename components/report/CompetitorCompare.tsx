@@ -93,7 +93,7 @@ export function HeadToHead({ selfName, cmp }: { selfName: string; cmp: CompareLi
   return (
     <div className="rounded-[10px] border border-line bg-card p-5">
       <p className="text-[15px] font-bold text-ink">直接問 AI：「{cmp.query}？」</p>
-      <div className="mt-3 grid gap-2 md:grid-cols-3">
+      <div className="mt-3 grid gap-2 grid-cols-3">
         {cmp.verdicts.map((v) => {
           const f = favor(v.favors);
           return (
@@ -216,7 +216,7 @@ export function CompetitorCompare({
       </p>
 
       {/* 1. 次數 */}
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 grid-cols-3">
         <div className="rounded-[10px] border border-line bg-card px-5 py-4">
           <p className="text-[14px] text-ink2">被 AI 推薦的次數</p>
           <p className="mt-1.5 text-[26px] font-bold leading-none text-ink tabular-nums">
@@ -248,7 +248,7 @@ export function CompetitorCompare({
       {positioning && (
         <div>
           <p className="mb-2 text-[15px] font-bold text-ink">AI 怎麼形容你們</p>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 grid-cols-2">
             <TraitList title={`你（${self.name}）`} traits={selfPos?.traits ?? []} highlight />
             <TraitList title={rival.name} traits={rivalPos?.traits ?? []} />
           </div>

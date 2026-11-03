@@ -3407,26 +3407,9 @@ export default function HomeClient({
   return (
     <div className="min-h-screen bg-paper">
       <div className="marketing">
-        <Masthead />
+        {!reportReady && <Masthead />}
 
-        {reportReady ? (
-          <div className="border-b border-line bg-card">
-            <form onSubmit={handleCheck} className="mx-auto flex max-w-[1240px] items-center gap-2.5 px-4 py-3">
-              <span className="hidden text-sm text-ink3 sm:inline">檢測其他網站</span>
-              <input
-                type="text"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="輸入網址，例如 example.com"
-                aria-label="網址"
-                className="mono w-full max-w-[420px] rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink focus:border-ink focus:outline-none"
-              />
-              <button type="submit" disabled={loading} className="btn-lime shrink-0 px-4 py-2 text-sm">
-                {loading ? "檢測中…" : "開始檢測"}
-              </button>
-            </form>
-          </div>
-        ) : (
+        {reportReady ? null : (
           <>
         {/* Hero：深色、全幅背景。這支影片是拿小積木那張金色底圖去 Kling 的
             image-to-video 生的（Video 3.0、1080p、5s）。
@@ -3574,7 +3557,7 @@ export default function HomeClient({
         )}
       </div>
 
-      <div className={`mx-auto px-4 ${reportReady ? "max-w-[1240px] pt-8 pb-16" : "max-w-3xl py-16"}`}>
+      <div className={reportReady ? "min-w-[1280px]" : "mx-auto max-w-3xl px-4 py-16"}>
         {error && <p className="mt-4 text-center text-fail">{error}</p>}
 
         {/* 小積木反饋：檢測過程中途只想看到單一進度動畫，不要一部分結果先跑出來、
@@ -3612,7 +3595,29 @@ export default function HomeClient({
         )}
 
         {status?.status === "completed" && engine && (
-          <div className="lg:grid lg:grid-cols-[168px_minmax(0,1fr)] lg:gap-10">
+          <div>
+            {/* 2026-11-03 小積木：報告要像 WorkDuo 那樣電腦滿版、左側固定欄，不做 RWD */}
+            <aside className="fixed inset-y-0 left-0 z-30 flex w-[260px] flex-col border-r border-line bg-card">
+              <Link href="/" className="report-shell-logo flex items-center gap-2.5 border-b border-line px-5 py-4">
+                {/* eslint-disable-next-line @next/next/no-img-element -- 固定素材 */}
+                <img src="/geocheck-logo.webp" alt="" className="h-[26px] w-[38px] object-contain" />
+                <span className="text-[16px] font-bold text-ink">{SITE_NAME}</span>
+              </Link>
+              <form onSubmit={handleCheck} className="border-b border-line px-5 py-4">
+                <p className="mb-2 text-[14px] text-ink3">檢測其他網站</p>
+                <input
+                  type="text"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="輸入網址"
+                  aria-label="網址"
+                  className="mono w-full rounded-lg border border-line bg-paper px-3 py-2 text-[14px] text-ink focus:border-ink focus:outline-none"
+                />
+                <button type="submit" disabled={loading} className="btn-lime mt-2 w-full py-2 text-[14px]">
+                  {loading ? "檢測中…" : "開始檢測"}
+                </button>
+              </form>
+              <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
             <ReportNav
               items={[
                 { id: "overview", label: "總覽" },
@@ -3629,7 +3634,14 @@ export default function HomeClient({
                   : []),
               ]}
             />
-            <div className="min-w-0">
+              </div>
+              <div className="border-t border-line px-5 py-4 text-[14px]">
+                <Link href="/contact" className="report-shell-link">預約諮詢</Link>
+                <span className="mx-2 text-ink3">·</span>
+                <Link href="/" className="report-shell-link">回首頁</Link>
+              </div>
+            </aside>
+            <div className="ml-[260px] min-w-0 px-12 py-10">
             <DashSection
               id="overview"
               title={reportBrand || reportHost}
@@ -3659,7 +3671,7 @@ export default function HomeClient({
             {brandTable && (
               <div className="mt-12">
                 <DashSection id="brands" title="AI 推薦了誰" desc="同一批推薦題底下，AI 在回答裡點名的品牌">
-                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+                  <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-5">
                     <div className="min-w-0 space-y-3">
                       <BrandRankTable table={brandTable} />
                       <ChannelList table={brandTable} />
@@ -3734,7 +3746,7 @@ export default function HomeClient({
             {engine.brandVisibility.length > 0 && (
               <div className="mt-12">
                 <DashSection id="brand-check" title="AI 認不認得你" desc="直接用你的名字問 AI，它怎麼介紹你">
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-4 grid-cols-2">
                     {engine.brandVisibility.map((r) => (
                       <CompactAnswerCard key={r.engine} result={r} />
                     ))}
@@ -4041,9 +4053,11 @@ export default function HomeClient({
         )}
       </div>
 
-      <div className="marketing">
-        <Footer />
-      </div>
+      {!reportReady && (
+        <div className="marketing">
+          <Footer />
+        </div>
+      )}
     </div>
   );
 }

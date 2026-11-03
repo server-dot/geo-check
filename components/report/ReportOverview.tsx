@@ -295,7 +295,7 @@ export function OverviewKpis({
   const found = brandChecks.filter((b) => b.citedSelf).length;
   const rank = table?.selfRank ?? null;
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-4 gap-4">
       {table ? (
         <Kpi
           label="AI 推薦你"
@@ -424,9 +424,9 @@ export function BrandRankTable({ table }: { table: BrandTable }) {
 
 export function ReportNav({ items }: { items: { id: string; label: string }[] }) {
   return (
-    <nav aria-label="報告目錄" className="sticky top-24 hidden lg:block">
-      <p className="eyebrow mb-3 text-ink3">報告目錄</p>
-      <ul className="space-y-0.5 border-l border-line">
+    <nav aria-label="報告目錄">
+      <p className="eyebrow mb-2 px-3 text-ink3">報告目錄</p>
+      <ul className="space-y-0.5">
         {items.map((it) => (
           <li key={it.id}>
             <a href={`#${it.id}`} className="report-nav-link">

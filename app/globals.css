@@ -640,17 +640,30 @@ html[data-reveal] .marketing .reveal.is-in {
 /* 報告左側目錄。<a> 的全域底線規則沒包 @layer，utility 蓋不掉，所以用具名 class */
 .report-nav-link {
   display: block;
-  margin-left: -1px;
-  border-left: 2px solid transparent;
-  padding: 6px 0 6px 12px;
+  border-radius: 8px;
+  padding: 8px 12px;
   font-size: 15px;
   color: var(--ink2);
   text-decoration: none;
 }
 .report-nav-link:hover {
+  background: var(--inset);
   color: var(--ink);
-  border-left-color: var(--lime);
   text-decoration: none;
+}
+/* 報告左欄的 logo 跟底部連結：全域 <a> 底線規則沒包 @layer，utility 蓋不掉 */
+.report-shell-logo,
+.report-shell-logo:hover {
+  text-decoration: none;
+}
+.report-shell-link {
+  color: var(--ink2);
+  text-decoration: none;
+}
+.report-shell-link:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--goldInk);
 }
 
 /* 報告表格裡的連結：表格本身已經很密，全域的金色粗底線會讓整欄變成一片黃線 */
