@@ -433,7 +433,7 @@ export function ReportNav({
 }) {
   return (
     <nav aria-label="報告目錄">
-      <p className="eyebrow mb-2 px-3 text-ink3">報告目錄</p>
+      <p className="eyebrow mb-2 px-3 text-[#a7b1c2]">報告目錄</p>
       <ul className="space-y-0.5">
         {items.map((it) => (
           <li key={it.id}>

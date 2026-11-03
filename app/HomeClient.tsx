@@ -14,7 +14,7 @@ import { track } from "@/lib/ga";
 import { SITE_NAME } from "@/lib/site";
 // 報告目錄切換：每一頁要顯示哪些區塊（section id）。沒列的頁就只顯示同名那一區
 const REPORT_PAGES: Record<string, string[]> = {
-  overview: ["overview", "brands"],
+  overview: ["overview"],
   tech: ["tech", "audit"],
 };
 
@@ -22,6 +22,7 @@ const REPORT_PAGES: Record<string, string[]> = {
 const SHOW_TECH_SECTIONS = false;
 
 import { CompetitorCompare, HeadToHead } from "@/components/report/CompetitorCompare";
+import { OverviewBoard } from "@/components/report/OverviewBoard";
 import { BrandRankTable, buildBrandTable, buildCitedPages, ChannelList, CitationTable, CitedPagesSection, DashSection, OverviewKpis, QuestionTable, ReportNav, SentimentSection, ShareDonut, shortEngine } from "@/components/report/ReportOverview";
 
 // 首頁 hero 下面的三格數字帶，掛載時跑一次 1100ms 的 ease-out-cubic count-up
@@ -3357,6 +3358,19 @@ export default function HomeClient({
     }
   })();
   const reportBrand = brandTable?.rows.find((r) => r.isSelf)?.name ?? "";
+  const citedSummary = (() => {
+    if (!recommend || !brandTable) return { self: 0, topRival: null as { name: string; count: number } | null };
+    const pages = buildCitedPages(recommend, brandTable);
+    const self = pages.filter((p) => p.type === "self").reduce((n, p) => n + p.count, 0);
+    const byRival = new Map<string, number>();
+    for (const p of pages) if (p.type === "competitor") byRival.set(p.brand || p.host, (byRival.get(p.brand || p.host) ?? 0) + p.count);
+    const top = [...byRival.entries()].sort((x, y) => y[1] - x[1])[0];
+    return { self, topRival: top ? { name: top[0], count: top[1] } : null };
+  })();
+  function goPage(id: string) {
+    setReportPage(id);
+    window.scrollTo({ top: 0 });
+  }
   const recommendAsKeywordResults: Record<string, KeywordVisibilityResult[]> = Object.fromEntries(
     (recommend?.questions ?? []).map((q) => [q.question, q.results.map((r) => ({ ...r, keyword: q.question }))]),
   );
@@ -3604,21 +3618,21 @@ export default function HomeClient({
         {status?.status === "completed" && engine && (
           <div>
             {/* 2026-11-03 小積木：報告要像 WorkDuo 那樣電腦滿版、左側固定欄，不做 RWD */}
-            <aside className="fixed inset-y-0 left-0 z-30 flex w-[260px] flex-col border-r border-line bg-card">
-              <Link href="/" className="report-shell-logo flex items-center gap-2.5 border-b border-line px-5 py-4">
+            <aside className="report-aside fixed inset-y-0 left-0 z-30 flex w-[260px] flex-col bg-ink text-paper">
+              <Link href="/" className="report-shell-logo flex items-center gap-2.5 border-b border-white/10 px-5 py-4">
                 {/* eslint-disable-next-line @next/next/no-img-element -- 固定素材 */}
                 <img src="/geocheck-logo.webp" alt="" className="h-[26px] w-[38px] object-contain" />
-                <span className="text-[16px] font-bold text-ink">{SITE_NAME}</span>
+                <span className="text-[16px] font-bold text-paper">{SITE_NAME}</span>
               </Link>
-              <form onSubmit={handleCheck} className="border-b border-line px-5 py-4">
-                <p className="mb-2 text-[14px] text-ink3">檢測其他網站</p>
+              <form onSubmit={handleCheck} className="border-b border-white/10 px-5 py-4">
+                <p className="mb-2 text-[14px] text-[#a7b1c2]">檢測其他網站</p>
                 <input
                   type="text"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   placeholder="輸入網址"
                   aria-label="網址"
-                  className="mono w-full rounded-lg border border-line bg-paper px-3 py-2 text-[14px] text-ink focus:border-ink focus:outline-none"
+                  className="mono w-full rounded-lg border border-white/20 bg-white/[.06] px-3 py-2 text-[14px] text-paper placeholder:text-[#a2acbd] focus:border-lime focus:outline-none"
                 />
                 <button type="submit" disabled={loading} className="btn-lime mt-2 w-full py-2 text-[14px]">
                   {loading ? "檢測中…" : "開始檢測"}
@@ -3628,6 +3642,7 @@ export default function HomeClient({
             <ReportNav
               items={[
                 { id: "overview", label: "總覽" },
+                ...(brandTable ? [{ id: "brands", label: "AI 推薦了誰" }] : []),
                 ...(brandTable ? [{ id: "competitors", label: "競爭對手分析" }] : []),
                 ...(recommend?.sentiment ? [{ id: "sentiment", label: "AI 怎麼評價你" }] : []),
                 ...(recommend ? [{ id: "questions", label: "每一題的結果" }] : []),
@@ -3640,23 +3655,20 @@ export default function HomeClient({
                   : []),
               ]}
               active={reportPage}
-              onSelect={(id) => {
-                setReportPage(id);
-                window.scrollTo({ top: 0 });
-              }}
+              onSelect={goPage}
             />
               </div>
-              <div className="border-t border-line px-5 py-4 text-[14px]">
+              <div className="border-t border-white/10 px-5 py-4 text-[14px]">
                 <Link href="/contact" className="report-shell-link">預約諮詢</Link>
-                <span className="mx-2 text-ink3">·</span>
+                <span className="mx-2 text-[#a7b1c2]">·</span>
                 <Link href="/" className="report-shell-link">回首頁</Link>
               </div>
             </aside>
             {/* 目錄是切換頁面，不是一頁捲到底（2026-11-03 小積木：這樣才能專心讀）。
                 每一區都是 <section id>（DashSection），用 CSS 只留目前這頁的；總覽頁另外帶「AI 推薦了誰」。 */}
             <style>{`.report-main > *:not(${(REPORT_PAGES[reportPage] ?? [reportPage]).map((id) => `#${id}`).join(",")}):not(${(REPORT_PAGES[reportPage] ?? [reportPage]).map((id) => `:has(#${id})`).join(",")}):not(.report-head) { display: none; }`}</style>
-            <div className="report-main ml-[260px] flex min-w-0 flex-col gap-10 px-12 py-8 [&>*]:!mt-0">
-            <div className="report-head -mx-12 -mt-8 flex items-baseline gap-4 border-b border-line bg-card px-12 py-5">
+            <div className="report-main ml-[260px] flex min-w-0 flex-col gap-8 px-12 pb-12 [&>*]:!mt-0">
+            <div className="report-head sticky top-0 z-20 -mx-12 flex items-baseline gap-4 border-b border-line bg-card px-12 py-5">
               <h1 className="text-[24px] font-bold text-ink">{reportBrand || reportHost}</h1>
               <span className="mono text-[15px] text-ink3">{reportHost}</span>
               {recommend && (
@@ -3665,21 +3677,20 @@ export default function HomeClient({
                 </span>
               )}
             </div>
-            <DashSection id="overview" title="總覽" desc="AI 有沒有推薦你、認不認得你、怎麼評價你">
-              <OverviewKpis
-                table={brandTable}
-                namedSelf={recommend?.namedSelfCount ?? 0}
-                brandChecks={engine.brandVisibility}
-                score={SHOW_TECH_SECTIONS && status?.audit ? computeOverallScore(buildCategories5(engine, status.audit)) : null}
-                sentiment={
-                  recommend?.sentiment
-                    ? {
-                        pos: recommend.sentiment.themes.filter((t) => t.polarity === "positive").length,
-                        neg: recommend.sentiment.themes.filter((t) => t.polarity === "negative").length,
-                      }
-                    : null
-                }
-              />
+            <DashSection id="overview" title="總覽" desc="這份報告的重點，點右上角「看完整」到各頁">
+              {brandTable && recommend ? (
+                <OverviewBoard
+                  table={brandTable}
+                  questions={recommend.questions}
+                  brandChecks={engine.brandVisibility}
+                  sentiment={recommend.sentiment}
+                  selfCited={citedSummary.self}
+                  topRivalCited={citedSummary.topRival}
+                  onGo={goPage}
+                />
+              ) : (
+                <OverviewKpis table={brandTable} namedSelf={recommend?.namedSelfCount ?? 0} brandChecks={engine.brandVisibility} score={null} />
+              )}
             </DashSection>
 
             {brandTable && (
@@ -3726,7 +3737,7 @@ export default function HomeClient({
                   <QuestionTable
                     table={brandTable}
                     questions={recommend.questions}
-                    renderDetail={(qi) => recommend.questions[qi].results.map((r) => <BrandVisibilityCard key={r.engine} result={r} />)}
+                    renderDetail={(qi) => recommend.questions[qi].results.map((r, i) => <BrandVisibilityCard key={`${r.engine}-${i}`} result={r} />)}
                   />
                   <p className="mt-2 text-[14px] text-ink3">AI 的回答每次問都會變，這是當下的快照，不是趨勢。</p>
                 </DashSection>
