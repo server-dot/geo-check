@@ -16,6 +16,8 @@ import {
   SourceTreemap,
   SovDonut,
 } from "./Charts";
+import type { BrandProfile } from "@/lib/geo-brand-profile";
+import { BrandProfileTable } from "./BrandProfile";
 import { SOURCE_LABEL, type SourceType } from "@/lib/geo-source-type";
 
 interface QuestionLike {
@@ -80,6 +82,7 @@ export function OverviewBoard({
   questions,
   brandChecks,
   sentiment,
+  profile,
   citedPages,
   onGo,
 }: {
@@ -87,6 +90,7 @@ export function OverviewBoard({
   questions: QuestionLike[];
   brandChecks: { engine: string; citedSelf: boolean }[];
   sentiment?: SentimentLike | null;
+  profile?: BrandProfile | null;
   citedPages: { type: SourceType; count: number; brand: string; host: string }[];
   onGo: (page: string) => void;
 }) {
@@ -124,7 +128,7 @@ export function OverviewBoard({
       {/* KPI 列 */}
       <div className="grid grid-cols-5 gap-4">
         <Kpi label="推薦次數" value={`${self.count}/${table.total}`} unit="次回答" tone={lv.tone} foot={<span className="font-semibold">{lv.t}</span>} />
-        <Kpi label="品牌辨識" value={`${found}/${brandChecks.length}`} unit="家" tone={found === brandChecks.length ? "ok" : found > 0 ? "warn" : "fail"} foot="以品牌名詢問能找到官網的平台數" />
+        <Kpi label="官網引用" value={`${found}/${brandChecks.length}`} unit="家" tone={found === brandChecks.length ? "ok" : found > 0 ? "warn" : "fail"} foot="介紹品牌時引用官網的平台數" />
         <Kpi label="推薦排名" value={rank ? `第 ${rank}` : "未上榜"} unit={rank ? "名" : ""} tone={rank && rank <= 3 ? "ok" : rank ? "warn" : "fail"} foot={`AI 點名的 ${table.rows.length} 個品牌裡`} />
         <Kpi
           label="品牌評價"
@@ -184,7 +188,10 @@ export function OverviewBoard({
           <Card title={`競品比較：${rival.name}`} sub={`${self.name} 與推薦次數最多的競品，各平台推薦次數`} right={<GoLink onClick={() => onGo("competitors")} />} className="col-span-6">
             <SelfVsRival engines={table.engines} self={self.byEngine} rival={rival.byEngine} rivalName={rival.name} totals={table.engineTotals} />
           </Card>
-          <Card title="品牌辨識" sub="以品牌名詢問 AI 時能否找到官網" right={<GoLink onClick={() => onGo("brand-check")} />} className="col-span-6">
+          <Card title="品牌輪廓" sub={`各平台介紹 ${self.name} 時的品類與特色`} right={<GoLink onClick={() => onGo("brand-check")} />} className="col-span-6">
+            {profile ? (
+              <BrandProfileTable profile={profile} brandChecks={brandChecks} compact />
+            ) : (
             <div className="flex h-full flex-wrap content-center gap-3">
               {brandChecks.map((b) => (
                 <div key={b.engine} className={`flex-1 rounded-xl border p-5 text-center ${b.citedSelf ? "border-ok/30 bg-ok/5" : "border-fail/30 bg-fail/5"}`}>
@@ -194,6 +201,7 @@ export function OverviewBoard({
                 </div>
               ))}
             </div>
+            )}
           </Card>
         </div>
       )}

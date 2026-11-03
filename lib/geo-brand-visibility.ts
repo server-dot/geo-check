@@ -14,6 +14,9 @@
 // 結果」這件事抽成可以共用的 runVisibilityQueries()。
 
 import { SITE_URL } from "@/lib/site";
+import { fetchGoogleAio } from "@/lib/geo-google-aio";
+import { profileGoogleQuery, profileQuery } from "@/lib/geo-brand-profile";
+import { selfShortName } from "@/lib/geo-sentiment";
 export interface VisibilityAnswer {
   engine: string;
   query: string;
@@ -161,12 +164,19 @@ export async function checkBrandVisibility(title: string, origin: string, orgNam
   const brandName = guessBrandName(title, orgName);
   if (!brandName) return [];
 
-  const query = `「${brandName}」是做什麼的？請簡短介紹，如果知道的話請說明它的官方網站。`;
-  const answers = await runVisibilityQueries(query, origin);
-  if (!answers) return [];
+  // 問題改成要 AI 介紹品類、產品、特色、價格、通路（品牌輪廓用），Google 另外查一次 AI 摘要。
+  // 問的時候用短品牌名：<title> 猜出來的常帶「官方網站」之類的字，一般人不會這樣打。
+  const short = selfShortName(brandName);
+  const query = profileQuery(short);
+  const [llm, google] = await Promise.all([
+    runVisibilityQueries(query, origin, 1200),
+    fetchGoogleAio(profileGoogleQuery(short), origin).catch(() => null),
+  ]);
+  if (!llm) return [];
+  const answers = [...llm, ...(google?.status === 'present' ? [google.answer] : [])];
 
   return answers.map((a) => {
-    const mentionsBrand = a.answer.includes(brandName);
+    const mentionsBrand = a.answer.includes(short);
     // 卡片標題已經寫了有沒有引用你、下面也貼了實際回答，只補標題看不出來的那種情況
     const advice = !a.citedSelf && mentionsBrand ? '它認得這個名字，但引用的是別的網站，不是你的。' : '';
     return { ...a, brandName, advice };

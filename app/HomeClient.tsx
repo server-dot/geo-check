@@ -1,5 +1,6 @@
 "use client";
 
+import { BrandProfileTable } from "@/components/report/BrandProfile";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { StepAuditIcon, StepInputIcon, StepReportIcon } from "@/components/marketing/StepIcons";
 import Link from "next/link";
@@ -193,6 +194,7 @@ interface RecommendVisibility {
   namedSelfCount: number;
   contentMatch?: ContentMatch[] | null;
   customQuestions?: boolean;
+  profile?: import("@/lib/geo-brand-profile").BrandProfile | null;
   sentiment?: {
     themes: { theme: string; polarity: "positive" | "negative"; count: number; engines: string[]; quote: string; quoteEngine: string }[];
     answerCount: number;
@@ -3266,9 +3268,9 @@ function CompactAnswerCard({ result }: { result: VisibilityCardData }) {
       <div className="flex items-center justify-between gap-3">
         <p className="text-[14px] font-medium text-ink2">{shortEngine(result.engine)}</p>
         {result.citedSelf ? (
-          <span className="text-[14px] font-semibold text-ok">✓ 找得到你的官網</span>
+          <span className="text-[14px] font-semibold text-ok">✓ 有引用官網</span>
         ) : (
-          <span className="text-[14px] font-semibold text-fail">✗ 沒找到你的官網</span>
+          <span className="text-[14px] font-semibold text-fail">✗ 未引用官網</span>
         )}
       </div>
       <div className={`mt-3 text-[15px] leading-relaxed text-ink2 ${open ? "" : "line-clamp-4"}`}>
@@ -3843,7 +3845,7 @@ export default function HomeClient({
                 ...(recommend ? [{ id: "responses", label: "AI 回答紀錄" }] : []),
                 ...(diagnosis ? [{ id: "why", label: "未被推薦原因" }] : []),
                 ...(citedDomains.length > 0 ? [{ id: "citations", label: "引用來源" }] : []),
-                ...(engine.brandVisibility.length > 0 ? [{ id: "brand-check", label: "品牌辨識" }] : []),
+                ...(engine.brandVisibility.length > 0 ? [{ id: "brand-check", label: "品牌輪廓" }] : []),
                 { id: "more", label: "關鍵字查詢" },
                 ...(SHOW_TECH_SECTIONS
                   ? [{ id: "tech", label: "技術健檢" }, ...(status?.audit ? [{ id: "audit", label: "深度健檢明細" }] : [])]
@@ -3879,6 +3881,7 @@ export default function HomeClient({
                   questions={recommend.questions}
                   brandChecks={engine.brandVisibility}
                   sentiment={recommend.sentiment}
+                  profile={recommend.profile ?? null}
                   citedPages={citedPagesAll}
                   onGo={goPage}
                 />
@@ -3948,7 +3951,7 @@ export default function HomeClient({
 
             {diagnosis && (
               <div className="mt-12">
-                <DashSection id="why" title="未被推薦原因" desc="從品牌辨識、內容對應、第三方推薦三方面檢查">
+                <DashSection id="why" title="未被推薦原因" desc="從官網引用、內容對應、第三方推薦三方面檢查">
                   <DiagnosisBlock d={diagnosis} />
                 </DashSection>
               </div>
@@ -3972,8 +3975,14 @@ export default function HomeClient({
 
             {engine.brandVisibility.length > 0 && (
               <div className="mt-12">
-                <DashSection id="brand-check" title="品牌辨識" desc={`以「${reportBrand}」直接詢問 AI 時，能否找到官網`}>
-                  <div className="grid gap-4 grid-cols-2">
+                <DashSection id="brand-check" title="品牌輪廓" desc={`${recommend?.profile?.engines.join("、") ?? "各平台"} 介紹 ${reportBrand} 時的品類、產品、特色、價格帶與通路`}>
+                  {recommend?.profile && (
+                    <div className="mb-8">
+                      <BrandProfileTable profile={recommend.profile} brandChecks={engine.brandVisibility} />
+                    </div>
+                  )}
+                  {recommend?.profile && <p className="mb-3 text-[16px] font-semibold text-ink">各平台回答原文</p>}
+                  <div className="grid gap-4 grid-cols-3">
                     {engine.brandVisibility.map((r) => (
                       <CompactAnswerCard key={r.engine} result={r} />
                     ))}

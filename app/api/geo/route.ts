@@ -12,6 +12,7 @@ import { probeBotAccess, type ProbeResult } from '@/lib/geo-bot-probe';
 import { checkBrandVisibility, guessBrandName } from '@/lib/geo-brand-visibility';
 import { runRecommendVisibility } from '@/lib/geo-recommend-visibility';
 import { matchQuestionsToPages } from '@/lib/geo-content-match';
+import { extractProfile } from '@/lib/geo-brand-profile';
 import { extractSentiment, fetchReviewAnswers, selfShortName, sentimentInputs } from '@/lib/geo-sentiment';
 import { extractPositioning, topRivals } from '@/lib/geo-positioning';
 import { extractCompare, fetchCompareAnswers } from '@/lib/geo-compare';
@@ -306,13 +307,14 @@ export async function POST(req: NextRequest) {
               rivals[0] ? fetchCompareAnswers(selfName, rivals[0], origin).catch(() => null) : Promise.resolve(null),
             ]);
             const all = rv.questions.flatMap((q) => q.results.map((r) => ({ engine: r.engine, answer: r.answer })));
-            const [s, positioning, compare] = await Promise.all([
+            const [s, positioning, compare, profile] = await Promise.all([
               extractSentiment(rv.brandName, [...sentimentInputs(rv, engine.brandVisibility), ...review.answers], apiKey).catch(() => null),
               extractPositioning(selfName, rivals, [...all, ...review.answers, ...(cmp?.answers ?? [])], apiKey).catch(() => null),
               cmp ? extractCompare(selfName, cmp.rival, cmp.query, cmp.answers, apiKey).catch(() => null) : Promise.resolve(null),
+              extractProfile(selfName, engine.brandVisibility, apiKey).catch(() => null),
             ]);
-            return { sentiment: s ? { ...s, reviewQuery: review.query } : null, positioning, compare };
-          })().catch(() => ({ sentiment: null, positioning: null, compare: null })),
+            return { sentiment: s ? { ...s, reviewQuery: review.query } : null, positioning, compare, profile };
+          })().catch(() => ({ sentiment: null, positioning: null, compare: null, profile: null })),
         ]);
         recommendVisibility = { ...rv, contentMatch, ...extras };
       }

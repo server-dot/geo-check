@@ -5,6 +5,7 @@ import { fetchGoogleAio } from './geo-google-aio';
 import type { SentimentResult } from './geo-sentiment';
 import type { BrandPositioning } from './geo-positioning';
 import type { CompareResult } from './geo-compare';
+import type { BrandProfile } from './geo-brand-profile';
 
 // ── GEO：推薦題自動查詢 ──────────────────────────────────
 // 品牌能見度（geo-brand-visibility.ts）問的是「AI 認不認得你」；關鍵字能見度
@@ -67,6 +68,7 @@ export interface RecommendVisibility {
   positioning?: BrandPositioning[] | null;
   // 「你 跟 第一名對手 哪個好」的直接比較（見 geo-compare.ts）
   compare?: CompareResult | null;
+  profile?: BrandProfile | null;
 }
 
 export interface RecommendInput {
