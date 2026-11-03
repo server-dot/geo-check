@@ -184,7 +184,7 @@ interface RecommendedName {
 }
 interface RecommendVisibility {
   brandName: string;
-  questions: { question: string; results: VisibilityCardData[] }[];
+  questions: { question: string; altQuestion?: string; results: VisibilityCardData[] }[];
   names: RecommendedName[];
   askedAt: string;
   totalAnswers: number;
@@ -3720,7 +3720,7 @@ export default function HomeClient({
                 <DashSection
                   id="questions"
                   title="每一題的結果"
-                  desc={`${recommend.customQuestions ? "你自己改的題目" : "AI 讀了你的首頁後猜的推薦題"}，每題各問 ${brandTable.engines.join("、")} 一次`}
+                  desc={`${recommend.customQuestions ? "你自己改的題目" : "AI 讀了你的首頁後猜的推薦題"}，${recommend.questions.some((q) => q.altQuestion) ? "每題用兩種問法問 Perplexity、ChatGPT，Google 問一次" : `每題各問 ${brandTable.engines.join("、")} 一次`}`}
                   right={<EditQuestions key={recommend.askedAt} jobId={reportJobId} current={recommend.questions.map((q) => q.question)} onDone={setRecommendOverride} />}
                 >
                   <QuestionTable

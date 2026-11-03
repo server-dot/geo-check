@@ -301,7 +301,7 @@ export function OverviewKpis({
           label="AI 推薦你"
           value={`${namedSelf}/${total}`}
           unit="次回答"
-          note={`${table.flat.length / Math.max(1, table.engines.length)} 個推薦題 × ${table.engines.length} 家 AI`}
+          note={`${new Set(table.flat.map((f) => f.qi)).size} 個推薦題・${table.engines.length} 家 AI`}
           tone={namedSelf === 0 ? "fail" : namedSelf * 2 >= total ? "ok" : "warn"}
           visual={<Ring part={namedSelf} whole={total} />}
         />
@@ -521,12 +521,16 @@ export function ShareDonut({ table }: { table: BrandTable }) {
 
 interface QuestionLike {
   question: string;
+  altQuestion?: string;
   results: { engine: string; namedSelf?: boolean; citedSelf: boolean }[];
 }
 
-function Verdict({ named, cited }: { named: boolean; cited: boolean }) {
-  const cls = named ? "bg-ok text-white" : cited ? "bg-warn/15 text-warn" : "bg-fail/10 text-fail";
-  return <span className={`inline-flex w-full justify-center rounded-md px-2 py-1.5 text-[14px] font-semibold ${cls}`}>{named ? "✓ 推薦你" : cited ? "△ 查過你" : "✗ 沒有你"}</span>;
+// 一題、一家 AI：兩種問法裡推了你幾次
+function Verdict({ named, total, cited }: { named: number; total: number; cited: boolean }) {
+  const all = total > 0 && named === total;
+  const cls = all ? "bg-ok text-white" : named > 0 ? "bg-ok/15 text-ok" : cited ? "bg-warn/15 text-warn" : "bg-fail/10 text-fail";
+  const label = named > 0 ? `✓ 推薦你${total > 1 ? ` ${named}/${total}` : ""}` : cited ? "△ 查過你" : `✗ 沒有你${total > 1 ? ` 0/${total}` : ""}`;
+  return <span className={`inline-flex w-full justify-center rounded-md px-2 py-1.5 text-[14px] font-semibold ${cls}`}>{label}</span>;
 }
 
 export function QuestionTable({
@@ -565,12 +569,19 @@ export function QuestionTable({
           return (
             <tbody key={q.question} className="border-b border-line last:border-0">
               <tr>
-                <td className="px-4 pt-3 pb-1 align-top text-ink">{q.question}</td>
+                <td className="px-4 pt-3 pb-1 align-top text-ink">
+                  {q.question}
+                  {q.altQuestion && <p className="mt-1 text-[14px] text-ink3">另一種問法：{q.altQuestion}</p>}
+                </td>
                 {table.engines.map((e) => {
-                  const r = q.results.find((x) => shortEngine(x.engine) === e);
+                  const rs = q.results.filter((x) => shortEngine(x.engine) === e);
                   return (
                     <td key={e} className="px-3 pt-3 pb-1 align-top text-[14px]">
-                      {r ? <Verdict named={!!r.namedSelf} cited={r.citedSelf} /> : <span className="text-ink3">—</span>}
+                      {rs.length > 0 ? (
+                        <Verdict named={rs.filter((r) => r.namedSelf).length} total={rs.length} cited={rs.some((r) => r.citedSelf)} />
+                      ) : (
+                        <span className="text-ink3">—</span>
+                      )}
                     </td>
                   );
                 })}

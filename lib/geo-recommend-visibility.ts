@@ -21,6 +21,9 @@ import type { CompareResult } from './geo-compare';
 
 export interface RecommendQuestionResult {
   question: string;
+  // 同一個意思的另一種問法（2026-11-03 數字要穩又不想每天問：每題換兩種問法一起問，
+  // 樣本加倍，也才測得出「客戶不管怎麼問 AI 都會推你」）。舊結果沒有這欄。
+  altQuestion?: string;
   results: RecommendAnswer[];
 }
 
@@ -152,6 +155,33 @@ export async function generateRecommendQuestions(input: RecommendInput, apiKey: 
     // 模型偶爾還是會把品牌名塞進去，塞了就丟掉這題，不要拿去問
     .filter((q) => !brand || !q.toLowerCase().includes(brand))
     .slice(0, QUESTION_COUNT);
+}
+
+// 每題再生一種「意思一樣、說法不同」的問法。一次便宜呼叫；失敗就只用原本的問法。
+export async function paraphraseQuestions(questions: string[], brandName: string, apiKey: string): Promise<(string | null)[]> {
+  const prompt = `下面是幾個一般台灣消費者會拿去問 AI 的問題。請替每一題寫一個「意思一樣、但用字跟句型不同」的問法，像另一個人在問同一件事。
+
+規則：
+- 意思不能變：問的對象、條件（地區、族群、需求）都要保留。
+- 換說法：不要只換一兩個字，句型要不一樣（例如「有沒有推薦的…」改成「…哪個牌子比較好」）。
+- 不能出現「${brandName}」或任何能指向特定品牌的字。
+- 台灣口語，15 到 40 字。
+
+${questions.map((q, i) => `[${i}] ${q}`).join('\n')}
+
+只回傳 JSON：{"alts":["…","…"]}，順序跟上面一樣。`;
+  try {
+    const parsed = parseJson<{ alts?: unknown }>(await askJson(prompt, apiKey, 600));
+    const alts = Array.isArray(parsed?.alts) ? parsed!.alts : [];
+    const brand = brandName.toLowerCase();
+    return questions.map((q, i) => {
+      const a = typeof alts[i] === 'string' ? (alts[i] as string).trim() : '';
+      if (a.length < 8 || a.length > 80 || a === q || (brand && a.toLowerCase().includes(brand))) return null;
+      return a;
+    });
+  } catch {
+    return questions.map(() => null);
+  }
 }
 
 // 從回答文字抽「被具體點名推薦的名字」。引用來源的網域彙總（geo-cited-domains.ts）
@@ -350,26 +380,35 @@ export async function runRecommendVisibility(
 
   const askedAt = new Date().toISOString();
   const domain = hostnameOf(origin);
+  const alts = await paraphraseQuestions(questions, input.brandName, apiKey);
+  const ask = (q: string) => runVisibilityQueries(`${q} 請具體推薦幾個，並附上來源網址。`, origin, 900);
   const perQuestion = await Promise.all(
-    questions.map(async (question) => {
+    questions.map(async (question, qi) => {
+      const alt = alts[qi];
+      // Google 只問原本的問法：SerpApi 免費額度有限，而且 Google 同一題常有快取，換說法多問的價值低。
       // Google 用原題直接搜（一般人就是這樣打進 Google 的），不加「請附來源網址」那串
-      const [answers, google] = await Promise.all([
-        runVisibilityQueries(`${question} 請具體推薦幾個，並附上來源網址。`, origin, 900),
+      const [answers, altAnswers, google] = await Promise.all([
+        ask(question),
+        alt ? ask(alt) : Promise.resolve(null),
         fetchGoogleAio(question, origin),
       ]);
-      const all = [...(answers ?? []), ...(google?.status === 'present' ? [google.answer] : [])];
-      const results: RecommendAnswer[] = all.map((a) => {
+      const tagged = [
+        ...(answers ?? []).map((a) => ({ a, q: question })),
+        ...(altAnswers ?? []).map((a) => ({ a, q: alt as string })),
+        ...(google?.status === 'present' ? [{ a: google.answer, q: question }] : []),
+      ];
+      const results: RecommendAnswer[] = tagged.map(({ a, q }) => {
         const named = mentionsSelf(a.answer, input.brandName, domain, a.citations);
-        return { ...a, query: question, namedSelf: named, advice: adviceFor(a, named) };
+        return { ...a, query: q, namedSelf: named, advice: adviceFor(a, named) };
       });
-      return { question, results };
+      return { question, ...(alt ? { altQuestion: alt } : {}), results };
     }),
   );
   const questionsWithAnswers = perQuestion.filter((q) => q.results.length > 0);
   if (questionsWithAnswers.length === 0) return null;
 
   const flat = questionsWithAnswers.flatMap((q) =>
-    q.results.map((r) => ({ engine: r.engine, question: q.question, answer: r.answer, citations: r.citations })),
+    q.results.map((r) => ({ engine: r.engine, question: r.query || q.question, answer: r.answer, citations: r.citations })),
   );
   let names: RecommendedName[] = [];
   try {
