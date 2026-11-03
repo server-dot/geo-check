@@ -3358,15 +3358,7 @@ export default function HomeClient({
     }
   })();
   const reportBrand = brandTable?.rows.find((r) => r.isSelf)?.name ?? "";
-  const citedSummary = (() => {
-    if (!recommend || !brandTable) return { self: 0, topRival: null as { name: string; count: number } | null };
-    const pages = buildCitedPages(recommend, brandTable);
-    const self = pages.filter((p) => p.type === "self").reduce((n, p) => n + p.count, 0);
-    const byRival = new Map<string, number>();
-    for (const p of pages) if (p.type === "competitor") byRival.set(p.brand || p.host, (byRival.get(p.brand || p.host) ?? 0) + p.count);
-    const top = [...byRival.entries()].sort((x, y) => y[1] - x[1])[0];
-    return { self, topRival: top ? { name: top[0], count: top[1] } : null };
-  })();
+  const citedPagesAll = recommend && brandTable ? buildCitedPages(recommend, brandTable) : [];
   function goPage(id: string) {
     setReportPage(id);
     window.scrollTo({ top: 0 });
@@ -3684,8 +3676,7 @@ export default function HomeClient({
                   questions={recommend.questions}
                   brandChecks={engine.brandVisibility}
                   sentiment={recommend.sentiment}
-                  selfCited={citedSummary.self}
-                  topRivalCited={citedSummary.topRival}
+                  citedPages={citedPagesAll}
                   onGo={goPage}
                 />
               ) : (

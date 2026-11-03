@@ -1,16 +1,25 @@
 "use client";
 
-// ── 總覽：摘要牆 ───────────────────────────────────────────
-// 2026-11-03 小積木：要更像儀表板、多一點圖表，但走自己的風格。
-// 總覽是一面摘要牆：每張卡都是別頁的精華，右上角「看完整 →」跳到那一頁。
-// 配色規則：你＝品牌金、對手＝深藍灰深淺、正面＝綠、負面＝紅（色盲下一律另帶符號）。
+// ── 總覽：Power BI 式儀表板 ────────────────────────────────
+// 2026-11-03 小積木：「像 Power BI 一樣的感覺」——正式圖表（座標軸、格線、滑鼠提示），
+// 一排 KPI 卡＋下面一格一格的圖。每張卡右上角「看完整 →」跳到那一頁。
+// 圖表元件與色盤見 Charts.tsx。
 
 import type { ReactNode } from "react";
-import { Ring, shortEngine, type BrandTable } from "./ReportOverview";
+import { shortEngine, type BrandTable } from "./ReportOverview";
+import {
+  BrandEngineColumns,
+  BrandTotalBars,
+  QuestionStacked,
+  SelfVsRival,
+  SentimentDiverging,
+  SourceTreemap,
+  SovDonut,
+} from "./Charts";
+import { SOURCE_LABEL, type SourceType } from "@/lib/geo-source-type";
 
 interface QuestionLike {
   question: string;
-  altQuestion?: string;
   results: { engine: string; namedSelf?: boolean; citedSelf: boolean }[];
 }
 
@@ -19,52 +28,49 @@ interface SentimentLike {
   answerCount: number;
 }
 
-const RIVAL_SHADES = ["#303c54", "#4a5468", "#5f6a80", "#8f99ab", "#b9c0cc"];
+const TYPE_COLORS: Record<SourceType, string> = {
+  self: "#fcb418",
+  competitor: "#303c54",
+  shop: "#5f6a80",
+  media: "#8f99ab",
+  social: "#c9ced8",
+  other: "#e3e6ec",
+};
 
-export function Card({
-  title,
-  right,
-  children,
-  className = "",
-}: {
-  title: string;
-  right?: ReactNode;
-  children: ReactNode;
-  className?: string;
-}) {
+export function Card({ title, sub, right, children, className = "" }: { title: string; sub?: string; right?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <div className={`rounded-xl border border-line bg-card shadow-[0_1px_2px_rgba(48,60,84,.06)] ${className}`}>
-      <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3">
-        <p className="text-[15px] font-bold text-ink">{title}</p>
+    <div className={`flex flex-col rounded-xl border border-line bg-card shadow-[0_1px_3px_rgba(48,60,84,.07)] ${className}`}>
+      <div className="flex items-start justify-between gap-3 px-5 pt-4">
+        <div>
+          <p className="text-[16px] font-bold text-ink">{title}</p>
+          {sub && <p className="mt-0.5 text-[14px] text-ink3">{sub}</p>}
+        </div>
         {right}
       </div>
-      <div className="p-5">{children}</div>
+      <div className="flex-1 px-5 pb-4 pt-3">{children}</div>
     </div>
   );
 }
 
 function GoLink({ label = "看完整", onClick }: { label?: string; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="text-[14px] font-medium text-goldInk hover:underline">
+    <button type="button" onClick={onClick} className="shrink-0 text-[14px] font-medium text-goldInk hover:underline">
       {label} →
     </button>
   );
 }
 
-function level(r: number): { text: string; cls: string } {
-  if (r >= 0.6) return { text: "常被推薦", cls: "text-ok" };
-  if (r >= 0.3) return { text: "有時被推薦", cls: "text-warn" };
-  return { text: "很少被推薦", cls: "text-fail" };
-}
-
-function HBar({ value, max, color, label, right }: { value: number; max: number; color: string; label: ReactNode; right: ReactNode }) {
+function Kpi({ label, value, unit, foot, tone }: { label: string; value: ReactNode; unit?: string; foot: ReactNode; tone?: "ok" | "warn" | "fail" }) {
+  const bar = tone === "ok" ? "bg-ok" : tone === "warn" ? "bg-warn" : tone === "fail" ? "bg-fail" : "bg-line";
   return (
-    <div className="grid grid-cols-[130px_1fr_64px] items-center gap-3 py-1.5">
-      <span className="truncate text-[14px] text-ink">{label}</span>
-      <div className="h-3 overflow-hidden rounded-full bg-inset">
-        <div className="h-full rounded-full" style={{ width: `${(value / Math.max(1, max)) * 100}%`, background: color }} />
-      </div>
-      <span className="mono text-right text-[14px] text-ink2 tabular-nums">{right}</span>
+    <div className="relative overflow-hidden rounded-xl border border-line bg-card px-5 py-4 shadow-[0_1px_3px_rgba(48,60,84,.07)]">
+      <span className={`absolute inset-y-0 left-0 w-1 ${bar}`} />
+      <p className="text-[14px] font-medium text-ink3">{label}</p>
+      <p className="mt-1.5 flex items-baseline gap-1">
+        <span className="text-[34px] font-bold leading-none tracking-tight text-ink tabular-nums">{value}</span>
+        {unit && <span className="text-[15px] text-ink3">{unit}</span>}
+      </p>
+      <div className="mt-2 text-[14px] text-ink2">{foot}</div>
     </div>
   );
 }
@@ -74,239 +80,123 @@ export function OverviewBoard({
   questions,
   brandChecks,
   sentiment,
-  selfCited,
-  topRivalCited,
+  citedPages,
   onGo,
 }: {
   table: BrandTable;
   questions: QuestionLike[];
   brandChecks: { engine: string; citedSelf: boolean }[];
   sentiment?: SentimentLike | null;
-  selfCited: number;
-  topRivalCited: { name: string; count: number } | null;
+  citedPages: { type: SourceType; count: number; brand: string; host: string }[];
   onGo: (page: string) => void;
 }) {
   const self = table.rows.find((r) => r.isSelf)!;
   const ratio = self.count / Math.max(1, table.total);
-  const lv = level(ratio);
+  const lv = ratio >= 0.6 ? { t: "常被推薦", tone: "ok" as const } : ratio >= 0.3 ? { t: "有時被推薦", tone: "warn" as const } : { t: "很少被推薦", tone: "fail" as const };
   const found = brandChecks.filter((b) => b.citedSelf).length;
   const rank = table.selfRank;
-
-  // 問題 × AI 熱力格
-  const cells = questions.map((q) =>
-    table.engines.map((e) => {
-      const rs = q.results.filter((r) => shortEngine(r.engine) === e);
-      return { named: rs.filter((r) => r.namedSelf).length, total: rs.length };
-    }),
-  );
-  // 最大的缺口：換了說法還是沒推你的（題目 × AI）
-  let gap: { qi: number; engine: string; total: number } | null = null;
-  cells.forEach((row, qi) =>
-    row.forEach((c, ei) => {
-      if (c.total > 0 && c.named === 0 && (!gap || c.total > gap.total)) gap = { qi, engine: table.engines[ei], total: c.total };
-    }),
-  );
-  const g = gap as { qi: number; engine: string; total: number } | null;
-
-  const top = table.rows.filter((r) => r.count > 0).slice(0, 6);
-  let shade = 0;
-  const colorOf = (isSelf: boolean) => (isSelf ? "var(--lime)" : RIVAL_SHADES[Math.min(shade++, RIVAL_SHADES.length - 1)]);
-  const topColored = top.map((r) => ({ ...r, color: colorOf(r.isSelf) }));
-
   const pos = sentiment?.themes.filter((t) => t.polarity === "positive") ?? [];
   const neg = sentiment?.themes.filter((t) => t.polarity === "negative") ?? [];
+  const brandsTop = table.rows.filter((r) => r.count > 0).slice(0, 6);
+  const rival = table.rows.find((r) => !r.isSelf && r.count > 0);
 
-  // 聲量佔比
-  const sovRows = table.rows.filter((r) => r.count > 0);
-  const sovSum = sovRows.reduce((n, r) => n + r.count, 0);
-  const R = 50;
-  const C = 2 * Math.PI * R;
-  let off = 0;
-  let sovShade = 0;
-  const sovSegs = [
-    ...sovRows.slice(0, 5).map((r) => ({ name: r.name, v: r.count, color: r.isSelf ? "var(--lime)" : RIVAL_SHADES[Math.min(sovShade++, 4)] })),
-    ...(sovRows.length > 5 ? [{ name: "其他", v: sovRows.slice(5).reduce((n, r) => n + r.count, 0), color: "#e3e6ec" }] : []),
-  ];
+  const qData = questions.map((q, qi) => ({
+    label: `第 ${qi + 1} 題`,
+    full: q.question,
+    byEngine: Object.fromEntries(
+      table.engines.map((e) => {
+        const rs = q.results.filter((r) => shortEngine(r.engine) === e);
+        return [e, { named: rs.filter((r) => r.namedSelf).length, total: rs.length }];
+      }),
+    ),
+  }));
+
+  const typeOrder: SourceType[] = ["self", "competitor", "shop", "media", "social", "other"];
+  const treemap = typeOrder
+    .map((t) => ({ name: SOURCE_LABEL[t], size: citedPages.filter((p) => p.type === t).reduce((n, p) => n + p.count, 0), color: TYPE_COLORS[t] }))
+    .filter((d) => d.size > 0)
+    .sort((a, b) => b.size - a.size);
+  const selfCited = citedPages.filter((p) => p.type === "self").reduce((n, p) => n + p.count, 0);
+  const totalCited = citedPages.reduce((n, p) => n + p.count, 0);
 
   return (
-    <div className="grid grid-cols-12 gap-5">
-      {/* 主卡：AI 推薦你 */}
-      <Card title="AI 推薦你嗎" right={<GoLink label="看每一題" onClick={() => onGo("questions")} />} className="col-span-6 row-span-2">
-        <div className="flex items-center gap-6">
-          <div className="relative h-[132px] w-[132px] shrink-0">
-            <Ring part={self.count} whole={table.total} size={132} />
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-[30px] font-bold leading-none text-ink tabular-nums">
-                {self.count}
-                <span className="text-[17px] font-normal text-ink3">/{table.total}</span>
-              </span>
-              <span className="mt-1 text-[14px] text-ink3">次回答</span>
-            </div>
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className={`text-[22px] font-bold ${lv.cls}`}>{lv.text}</p>
-            <p className="mt-1 text-[14px] text-ink3">
-              {new Set(table.flat.map((f) => f.qi)).size} 個推薦題、{table.engines.length} 家 AI，大約每 {Math.max(1, Math.round(1 / Math.max(ratio, 0.01)))} 次回答有 1 次推你
-            </p>
-            <div className="mt-3">
-              {table.engines.map((e) => (
-                <HBar
-                  key={e}
-                  label={e}
-                  value={self.byEngine?.[e] ?? 0}
-                  max={table.engineTotals[e]}
-                  color="var(--lime)"
-                  right={`${self.byEngine?.[e] ?? 0}/${table.engineTotals[e]}`}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* 小卡 */}
-      <Card title="AI 認得你" className="col-span-3">
-        <p className="text-[30px] font-bold leading-none text-ink tabular-nums">
-          {found}
-          <span className="text-[17px] font-normal text-ink3">/{brandChecks.length} 家</span>
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {brandChecks.map((b) => (
-            <span
-              key={b.engine}
-              className={`rounded-full px-2.5 py-1 text-[14px] font-medium ${b.citedSelf ? "bg-ok/15 text-ok" : "bg-fail/10 text-fail"}`}
-            >
-              {b.citedSelf ? "✓" : "✗"} {shortEngine(b.engine)}
-            </span>
-          ))}
-        </div>
-      </Card>
-      <Card title="推薦排名" right={<GoLink onClick={() => onGo("brands")} />} className="col-span-3">
-        <p className="text-[30px] font-bold leading-none text-ink">{rank ? (rank <= 3 ? "前 3 名" : `第 ${rank} 名`) : "未上榜"}</p>
-        <p className="mt-3 text-[14px] text-ink3">
-          AI 點名的 {table.rows.length} 個品牌裡{rank ? `，這次排第 ${rank}` : ""}
-        </p>
-      </Card>
-      <Card title="AI 評價" right={<GoLink onClick={() => onGo("sentiment")} />} className="col-span-3">
-        <p className="text-[30px] font-bold leading-none tabular-nums">
-          <span className="text-ok">{pos.length}</span>
-          <span className="mx-1 text-[17px] font-normal text-ink3">好評</span>
-          <span className="text-fail">{neg.length}</span>
-          <span className="ml-1 text-[17px] font-normal text-ink3">缺點</span>
-        </p>
-        <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-inset">
-          <div className="bg-ok" style={{ width: `${(pos.length / Math.max(1, pos.length + neg.length)) * 100}%` }} />
-          <div className="bg-fail" style={{ width: `${(neg.length / Math.max(1, pos.length + neg.length)) * 100}%` }} />
-        </div>
-      </Card>
-      <Card title="你的網站被 AI 引用" right={<GoLink onClick={() => onGo("citations")} />} className="col-span-3">
-        <p className="text-[30px] font-bold leading-none text-ink tabular-nums">
-          {selfCited}
-          <span className="ml-1 text-[17px] font-normal text-ink3">次</span>
-        </p>
-        {topRivalCited && (
-          <div className="mt-2">
-            <HBar label="你" value={selfCited} max={Math.max(selfCited, topRivalCited.count)} color="var(--lime)" right={selfCited} />
-            <HBar label={topRivalCited.name} value={topRivalCited.count} max={Math.max(selfCited, topRivalCited.count)} color="#303c54" right={topRivalCited.count} />
-          </div>
-        )}
-      </Card>
-
-      {/* AI 推薦了誰 */}
-      <Card title="AI 推薦了誰" right={<GoLink onClick={() => onGo("brands")} />} className="col-span-7">
-        {topColored.map((r) => (
-          <HBar
-            key={r.name}
-            label={
-              <span className={r.isSelf ? "font-bold" : ""}>
-                {r.name}
-                {r.isSelf && <span className="ml-1.5 rounded-full bg-lime px-1.5 py-0.5 text-[12.5px] font-bold">你</span>}
-              </span>
-            }
-            value={r.count}
-            max={top[0]?.count ?? 1}
-            color={r.color}
-            right={`${r.count}/${table.total}`}
-          />
-        ))}
-      </Card>
-
-      {/* 聲量佔比 */}
-      <Card title="聲量佔比" className="col-span-5">
-        <div className="flex items-center gap-5">
-          <svg viewBox="0 0 140 140" className="h-[150px] w-[150px] shrink-0 -rotate-90" aria-hidden="true">
-            {sovSegs.map((sg) => {
-              const len = (sg.v / Math.max(1, sovSum)) * C;
-              const el = (
-                <circle key={sg.name} cx="70" cy="70" r={R} fill="none" stroke={sg.color} strokeWidth="22" strokeDasharray={`${Math.max(0, len - 1.5)} ${C}`} strokeDashoffset={-off} />
-              );
-              off += len;
-              return el;
-            })}
-          </svg>
-          <ul className="min-w-0 flex-1 space-y-1.5">
-            {sovSegs.map((sg) => (
-              <li key={sg.name} className="flex items-center gap-2 text-[14px]">
-                <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: sg.color }} />
-                <span className="min-w-0 flex-1 truncate text-ink2">{sg.name}</span>
-                <span className="mono text-ink3 tabular-nums">{Math.round((sg.v / Math.max(1, sovSum)) * 100)}%</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </Card>
-
-      {/* 熱力格 */}
-      <Card title="每一題 × 每家 AI" right={<GoLink onClick={() => onGo("questions")} />} className="col-span-7">
-        <div className="grid gap-2" style={{ gridTemplateColumns: `minmax(0,1fr) repeat(${table.engines.length}, 96px)` }}>
-          <span />
-          {table.engines.map((e) => (
-            <span key={e} className="text-center text-[14px] text-ink3">
-              {e}
-            </span>
-          ))}
-          {questions.map((q, qi) => (
-            <div key={q.question} className="contents">
-              <span className="truncate self-center text-[14px] text-ink" title={q.question}>
-                第 {qi + 1} 題：{q.question}
-              </span>
-              {cells[qi].map((c, ei) => {
-                const full = c.total > 0 && c.named === c.total;
-                const cls = c.total === 0 ? "bg-inset text-ink3" : full ? "bg-ok text-white" : c.named > 0 ? "bg-ok/25 text-ok" : "bg-fail/15 text-fail";
-                return (
-                  <span key={ei} className={`flex h-11 items-center justify-center rounded-lg text-[15px] font-bold tabular-nums ${cls}`}>
-                    {c.total === 0 ? "—" : `${c.named > 0 ? "✓" : "✗"} ${c.named}/${c.total}`}
-                  </span>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* 好話／缺點＋最大缺口 */}
-      <div className="col-span-5 flex flex-col gap-5">
-        {sentiment && (
-          <Card title="AI 說你的好話／缺點" right={<GoLink onClick={() => onGo("sentiment")} />}>
-            <ul className="space-y-2">
-              {[...pos.slice(0, 2), ...neg.slice(0, 2)].map((t) => (
-                <li key={t.theme} className="flex items-start gap-2 text-[14px]">
-                  <span className={`font-bold ${t.polarity === "positive" ? "text-ok" : "text-fail"}`}>{t.polarity === "positive" ? "✓" : "✗"}</span>
-                  <span className="text-ink">{t.theme}</span>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
-        {g && (
-          <Card title="最大的缺口" right={<GoLink label="看每一題" onClick={() => onGo("questions")} />}>
-            <p className="text-[15px] leading-relaxed text-ink">
-              <strong>{g.engine}</strong> 對第 {g.qi + 1} 題{g.total > 1 ? "換了說法也" : ""}沒有推你：
-            </p>
-            <p className="mt-1 text-[14px] text-ink3">「{questions[g.qi].question}」</p>
-          </Card>
-        )}
+    <div className="space-y-5">
+      {/* KPI 列 */}
+      <div className="grid grid-cols-5 gap-4">
+        <Kpi label="AI 推薦你" value={`${self.count}/${table.total}`} unit="次回答" tone={lv.tone} foot={<span className="font-semibold">{lv.t}</span>} />
+        <Kpi label="AI 認得你" value={`${found}/${brandChecks.length}`} unit="家" tone={found === brandChecks.length ? "ok" : found > 0 ? "warn" : "fail"} foot="用你的名字問找得到官網" />
+        <Kpi label="推薦排名" value={rank ? (rank <= 3 ? "前 3" : `第 ${rank}`) : "—"} unit={rank ? "名" : ""} tone={rank && rank <= 3 ? "ok" : rank ? "warn" : "fail"} foot={`AI 點名的 ${table.rows.length} 個品牌裡`} />
+        <Kpi
+          label="AI 評價"
+          value={
+            <>
+              <span className="text-ok">{pos.length}</span>
+              <span className="mx-1 text-[20px] text-ink3">:</span>
+              <span className="text-fail">{neg.length}</span>
+            </>
+          }
+          tone={neg.length === 0 ? "ok" : pos.length >= neg.length ? "warn" : "fail"}
+          foot="✓ 好話 : ✗ 缺點"
+        />
+        <Kpi
+          label="你的網站被引用"
+          value={selfCited}
+          unit={`/ ${totalCited} 次`}
+          tone={selfCited > 0 ? "ok" : "fail"}
+          foot={`佔 AI 引用的 ${Math.round((selfCited / Math.max(1, totalCited)) * 100)}%`}
+        />
       </div>
+
+      {/* 第二列 */}
+      <div className="grid grid-cols-12 gap-5">
+        <Card title="各品牌在各家 AI 被推薦的次數" sub="同一批推薦題底下，每家 AI 點名了誰" right={<GoLink onClick={() => onGo("brands")} />} className="col-span-8">
+          <BrandEngineColumns rows={brandsTop} engines={table.engines} />
+        </Card>
+        <Card title="聲量佔比" sub="所有被點名的次數裡，各品牌佔多少" className="col-span-4">
+          <SovDonut rows={table.rows.filter((r) => r.count > 0)} />
+        </Card>
+      </div>
+
+      {/* 第三列 */}
+      <div className="grid grid-cols-12 gap-5">
+        <Card title="推薦排名" sub={`被推薦的次數（共 ${table.total} 次回答）`} right={<GoLink onClick={() => onGo("brands")} />} className="col-span-5">
+          <BrandTotalBars rows={brandsTop} total={table.total} />
+        </Card>
+        <Card title="每一題推薦你的次數" sub="依 AI 堆疊；滑鼠移上去看題目" right={<GoLink onClick={() => onGo("questions")} />} className="col-span-7">
+          <QuestionStacked questions={qData} engines={table.engines} />
+        </Card>
+      </div>
+
+      {/* 第四列 */}
+      <div className="grid grid-cols-12 gap-5">
+        {sentiment && sentiment.themes.length > 0 && (
+          <Card title="AI 怎麼評價你" sub="✓ 好話往右、✗ 缺點往左；長度＝出現在幾段回答" right={<GoLink onClick={() => onGo("sentiment")} />} className="col-span-7">
+            <SentimentDiverging themes={sentiment.themes.slice(0, 8)} />
+          </Card>
+        )}
+        <Card title="AI 引用的來源" sub="AI 回答時拿來當依據的網頁，依類型分" right={<GoLink onClick={() => onGo("citations")} />} className={sentiment ? "col-span-5" : "col-span-12"}>
+          <SourceTreemap data={treemap} />
+        </Card>
+      </div>
+
+      {rival && rival.byEngine && self.byEngine && (
+        <div className="grid grid-cols-12 gap-5">
+          <Card title={`你 vs ${rival.name}`} sub="被推薦最多的對手，各家 AI 推了誰幾次" right={<GoLink onClick={() => onGo("competitors")} />} className="col-span-6">
+            <SelfVsRival engines={table.engines} self={self.byEngine} rival={rival.byEngine} rivalName={rival.name} totals={table.engineTotals} />
+          </Card>
+          <Card title="AI 認得你" sub="直接用你的名字問" right={<GoLink onClick={() => onGo("brand-check")} />} className="col-span-6">
+            <div className="flex h-full flex-wrap content-center gap-3">
+              {brandChecks.map((b) => (
+                <div key={b.engine} className={`flex-1 rounded-xl border p-5 text-center ${b.citedSelf ? "border-ok/30 bg-ok/5" : "border-fail/30 bg-fail/5"}`}>
+                  <p className="text-[15px] text-ink2">{shortEngine(b.engine)}</p>
+                  <p className={`mt-2 text-[26px] font-bold ${b.citedSelf ? "text-ok" : "text-fail"}`}>{b.citedSelf ? "✓ 找得到" : "✗ 找不到"}</p>
+                  <p className="mt-1 text-[14px] text-ink3">你的官網</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
