@@ -1,6 +1,6 @@
 "use client";
 
-import { BrandProfileTable } from "@/components/report/BrandProfile";
+import { BrandProfileView } from "@/components/report/BrandProfile";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { StepAuditIcon, StepInputIcon, StepReportIcon } from "@/components/marketing/StepIcons";
 import Link from "next/link";
@@ -3975,10 +3975,10 @@ export default function HomeClient({
 
             {engine.brandVisibility.length > 0 && (
               <div className="mt-12">
-                <DashSection id="brand-check" title="品牌輪廓" desc={`${recommend?.profile?.engines.join("、") ?? "各平台"} 介紹 ${reportBrand} 時的品類、產品、特色、價格帶與通路`}>
+                <DashSection id="brand-check" title="品牌輪廓" desc={`AI 平台介紹 ${reportBrand} 時的品牌認知：品類、主力產品、品牌特色、價格帶、通路`}>
                   {recommend?.profile && (
                     <div className="mb-8">
-                      <BrandProfileTable profile={recommend.profile} brandChecks={engine.brandVisibility} />
+                      <BrandProfileView profile={recommend.profile} brandChecks={engine.brandVisibility} brandName={reportBrand} />
                     </div>
                   )}
                   {recommend?.profile && <p className="mb-3 text-[16px] font-semibold text-ink">各平台回答原文</p>}

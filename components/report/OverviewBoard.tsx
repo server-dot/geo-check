@@ -17,7 +17,7 @@ import {
   SovDonut,
 } from "./Charts";
 import type { BrandProfile } from "@/lib/geo-brand-profile";
-import { BrandProfileTable } from "./BrandProfile";
+import { KeywordCloud } from "./BrandProfile";
 import { SOURCE_LABEL, type SourceType } from "@/lib/geo-source-type";
 
 interface QuestionLike {
@@ -188,9 +188,9 @@ export function OverviewBoard({
           <Card title={`競品比較：${rival.name}`} sub={`${self.name} 與推薦次數最多的競品，各平台推薦次數`} right={<GoLink onClick={() => onGo("competitors")} />} className="col-span-6">
             <SelfVsRival engines={table.engines} self={self.byEngine} rival={rival.byEngine} rivalName={rival.name} totals={table.engineTotals} />
           </Card>
-          <Card title="品牌輪廓" sub={`各平台介紹 ${self.name} 時的品類與特色`} right={<GoLink onClick={() => onGo("brand-check")} />} className="col-span-6">
-            {profile ? (
-              <BrandProfileTable profile={profile} brandChecks={brandChecks} compact />
+          <Card title="品牌輪廓" sub={`AI 平台介紹 ${self.name} 時用到的描述與提到的平台數`} right={<GoLink onClick={() => onGo("brand-check")} />} className="col-span-6">
+            {profile?.keywords?.length ? (
+              <KeywordCloud keywords={profile.keywords} total={profile.engines.length} size="sm" />
             ) : (
             <div className="flex h-full flex-wrap content-center gap-3">
               {brandChecks.map((b) => (

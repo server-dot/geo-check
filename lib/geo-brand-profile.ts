@@ -28,9 +28,16 @@ export interface ProfileRow {
   conflict: string; // 各家說法互相矛盾時的一句說明，沒有就空字串
 }
 
+export interface ProfileKeyword {
+  word: string; // 8 字內的形容，例如「私密保養」「台灣品牌」
+  engines: string[]; // 哪幾家 AI 這樣講
+}
+
 export interface BrandProfile {
   engines: string[];
   rows: ProfileRow[];
+  intros?: string[]; // 每家回答的第一句（原文），跟 engines 同順序
+  keywords?: ProfileKeyword[];
 }
 
 interface AnswerIn {
@@ -119,6 +126,40 @@ ${list}
   }
 }
 
+// 每家回答的第一句：AI 被問到你時開口的那句話，最能代表它怎麼看你。直接截原文，不經模型。
+export function firstSentence(answer: string): string {
+  const plain = answer
+    .replace(/\[\d+\]|【[^】]*】|\[([^\]]*)\]\([^)]*\)/g, (m, t) => t ?? '')
+    .replace(/[*_`#>]/g, '')
+    .replace(/[「」]/g, '')
+    .trim();
+  const m = plain.match(/^[\s\S]*?[。！？\n]/);
+  return (m ? m[0] : plain).replace(/\n/g, '').trim().slice(0, 90);
+}
+
+// 各家講到的特點合併成一組關鍵詞，標出幾家 AI 這樣講：三家都講的就是 AI 對你的共識
+async function collectKeywords(brand: string, rows: ProfileRow[], engines: string[], apiKey: string): Promise<ProfileKeyword[]> {
+  const list = engines
+    .map((e, i) => `${e}：${rows.map((r) => r.cells[i].value && `${r.label}＝${r.cells[i].value}`).filter(Boolean).join('；') || '（沒有）'}`)
+    .join('\n');
+  const prompt = `幾個 AI 介紹「${brand}」時的說法如下。請整理成 6～10 個描述這個品牌的關鍵詞（每個 8 字內，例如「私密保養」「台灣品牌」「價格親民」「藥妝通路」），意思相同的合併成一個，並標出是哪幾家 AI 講的。
+
+${list}
+
+只回傳 JSON：{"keywords":[{"word":"私密保養","engines":["${engines.join('","')}"]}]}`;
+  try {
+    const parsed = parseJson<{ keywords?: { word?: unknown; engines?: unknown }[] }>(await askJson(prompt, apiKey, 600));
+    return (parsed?.keywords ?? [])
+      .filter((k): k is { word: string; engines: unknown[] } => typeof k.word === 'string' && Array.isArray(k.engines))
+      .map((k) => ({ word: k.word.trim(), engines: engines.filter((e) => k.engines.includes(e)) }))
+      .filter((k) => k.word && k.engines.length > 0)
+      .sort((a, b) => b.engines.length - a.engines.length)
+      .slice(0, 10);
+  } catch {
+    return [];
+  }
+}
+
 export async function extractProfile(brand: string, answers: AnswerIn[], apiKey: string): Promise<BrandProfile | null> {
   if (answers.length === 0) return null;
   const engines = answers.map((a) => shortEngine(a.engine));
@@ -129,7 +170,7 @@ export async function extractProfile(brand: string, answers: AnswerIn[], apiKey:
     cells: engines.map((engine, i) => ({ engine, value: per[i][f.key]?.value ?? '', quote: per[i][f.key]?.quote ?? '' })),
     conflict: '',
   }));
-  const conflicts = await findConflicts(brand, rows, apiKey);
+  const [conflicts, keywords] = await Promise.all([findConflicts(brand, rows, apiKey), collectKeywords(brand, rows, engines, apiKey)]);
   for (const r of rows) r.conflict = conflicts[r.key] ?? '';
-  return { engines, rows };
+  return { engines, rows, intros: answers.map((a) => firstSentence(a.answer)), keywords };
 }
