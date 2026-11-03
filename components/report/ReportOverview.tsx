@@ -422,16 +422,29 @@ export function BrandRankTable({ table }: { table: BrandTable }) {
 
 // ── 左側目錄（桌機才出現）──────────────────────────────────
 
-export function ReportNav({ items }: { items: { id: string; label: string }[] }) {
+export function ReportNav({
+  items,
+  active,
+  onSelect,
+}: {
+  items: { id: string; label: string }[];
+  active: string;
+  onSelect: (id: string) => void;
+}) {
   return (
     <nav aria-label="報告目錄">
       <p className="eyebrow mb-2 px-3 text-ink3">報告目錄</p>
       <ul className="space-y-0.5">
         {items.map((it) => (
           <li key={it.id}>
-            <a href={`#${it.id}`} className="report-nav-link">
+            <button
+              type="button"
+              onClick={() => onSelect(it.id)}
+              aria-current={it.id === active ? "page" : undefined}
+              className={`report-nav-link w-full text-left ${it.id === active ? "report-nav-link--active" : ""}`}
+            >
               {it.label}
-            </a>
+            </button>
           </li>
         ))}
       </ul>

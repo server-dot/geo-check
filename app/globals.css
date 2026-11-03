@@ -651,6 +651,12 @@ html[data-reveal] .marketing .reveal.is-in {
   color: var(--ink);
   text-decoration: none;
 }
+.report-nav-link--active,
+.report-nav-link--active:hover {
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 600;
+}
 /* 報告左欄的 logo 跟底部連結：全域 <a> 底線規則沒包 @layer，utility 蓋不掉 */
 .report-shell-logo,
 .report-shell-logo:hover {

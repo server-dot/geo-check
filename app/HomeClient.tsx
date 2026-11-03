@@ -12,6 +12,12 @@ import type { ContentMatch } from "@/lib/geo-content-match";
 import { buildCategories5, computeOverallScore, CATEGORY5_KEY_MAP, CATEGORY5_ORDER, type Category5 } from "@/lib/geo-score";
 import { track } from "@/lib/ga";
 import { SITE_NAME } from "@/lib/site";
+// 報告目錄切換：每一頁要顯示哪些區塊（section id）。沒列的頁就只顯示同名那一區
+const REPORT_PAGES: Record<string, string[]> = {
+  overview: ["overview", "brands"],
+  tech: ["tech", "audit"],
+};
+
 // 第一版報告先不給技術內容跟改善建議（見報告區塊那段註解）
 const SHOW_TECH_SECTIONS = false;
 
@@ -3263,6 +3269,7 @@ export default function HomeClient({
   }, []);
 
   const reportReady = status?.status === "completed" && !!status.engine;
+  const [reportPage, setReportPage] = useState("overview");
 
   async function handleCheck(e?: React.FormEvent) {
     e?.preventDefault();
@@ -3621,7 +3628,6 @@ export default function HomeClient({
             <ReportNav
               items={[
                 { id: "overview", label: "總覽" },
-                ...(brandTable ? [{ id: "brands", label: "AI 推薦了誰" }] : []),
                 ...(brandTable ? [{ id: "competitors", label: "競爭對手分析" }] : []),
                 ...(recommend?.sentiment ? [{ id: "sentiment", label: "AI 怎麼評價你" }] : []),
                 ...(recommend ? [{ id: "questions", label: "每一題的結果" }] : []),
@@ -3633,6 +3639,11 @@ export default function HomeClient({
                   ? [{ id: "tech", label: "技術健檢" }, ...(status?.audit ? [{ id: "audit", label: "深度健檢明細" }] : [])]
                   : []),
               ]}
+              active={reportPage}
+              onSelect={(id) => {
+                setReportPage(id);
+                window.scrollTo({ top: 0 });
+              }}
             />
               </div>
               <div className="border-t border-line px-5 py-4 text-[14px]">
@@ -3641,17 +3652,20 @@ export default function HomeClient({
                 <Link href="/" className="report-shell-link">回首頁</Link>
               </div>
             </aside>
-            <div className="ml-[260px] min-w-0 px-12 py-10">
-            <DashSection
-              id="overview"
-              title={reportBrand || reportHost}
-              desc={
-                <>
-                  <span className="mono">{reportHost}</span>
-                  {recommend && <> · {new Date(recommend.askedAt).toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })} 問的 AI</>}
-                </>
-              }
-            >
+            {/* 目錄是切換頁面，不是一頁捲到底（2026-11-03 小積木：這樣才能專心讀）。
+                每一區都是 <section id>（DashSection），用 CSS 只留目前這頁的；總覽頁另外帶「AI 推薦了誰」。 */}
+            <style>{`.report-main > *:not(${(REPORT_PAGES[reportPage] ?? [reportPage]).map((id) => `#${id}`).join(",")}):not(${(REPORT_PAGES[reportPage] ?? [reportPage]).map((id) => `:has(#${id})`).join(",")}):not(.report-head) { display: none; }`}</style>
+            <div className="report-main ml-[260px] flex min-w-0 flex-col gap-10 px-12 py-8 [&>*]:!mt-0">
+            <div className="report-head -mx-12 -mt-8 flex items-baseline gap-4 border-b border-line bg-card px-12 py-5">
+              <h1 className="text-[24px] font-bold text-ink">{reportBrand || reportHost}</h1>
+              <span className="mono text-[15px] text-ink3">{reportHost}</span>
+              {recommend && (
+                <span className="text-[15px] text-ink3">
+                  {new Date(recommend.askedAt).toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })} 問的 AI
+                </span>
+              )}
+            </div>
+            <DashSection id="overview" title="總覽" desc="AI 有沒有推薦你、認不認得你、怎麼評價你">
               <OverviewKpis
                 table={brandTable}
                 namedSelf={recommend?.namedSelfCount ?? 0}
