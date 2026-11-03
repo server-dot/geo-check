@@ -23,7 +23,7 @@ const SHOW_TECH_SECTIONS = false;
 
 import { CompetitorCompare, HeadToHead } from "@/components/report/CompetitorCompare";
 import { OverviewBoard } from "@/components/report/OverviewBoard";
-import { BrandRankTable, buildBrandTable, buildCitedPages, ChannelList, CitationTable, CitedPagesSection, DashSection, OverviewKpis, QuestionTable, ReportNav, SentimentSection, ShareDonut, shortEngine } from "@/components/report/ReportOverview";
+import { type BrandTable, BrandRankTable, buildBrandTable, buildCitedPages, ChannelList, CitationTable, CitedPagesSection, DashSection, OverviewKpis, QuestionTable, ReportNav, SentimentSection, ShareDonut, shortEngine } from "@/components/report/ReportOverview";
 
 // 首頁 hero 下面的三格數字帶，掛載時跑一次 1100ms 的 ease-out-cubic count-up
 // （跟設計稿 dc-runtime 的 componentDidMount 那段動畫邏輯一致）。
@@ -2762,7 +2762,10 @@ function citedInLabel(keywords: string[]): string {
   return [...joined].length <= 18 ? joined : `出現在 ${keywords.length} 題`;
 }
 
-function renderAnswerMarkdown(text: string, citations: { url: string }[]): React.ReactNode {
+// hl：要標示的品牌（原始回答頁用：你＝黃底、對手＝灰底）
+type Highlight = { self: RegExp | null; rivals: RegExp | null };
+
+function renderAnswerMarkdown(text: string, citations: { url: string }[], hl?: Highlight): React.ReactNode {
   const lines = text.split(/\r?\n/);
   const blocks: React.ReactNode[] = [];
   let para: string[] = [];
@@ -2777,7 +2780,7 @@ function renderAnswerMarkdown(text: string, citations: { url: string }[]): React
     if (para.length === 0) return;
     blocks.push(
       <p key={`p${blocks.length}`} className={blocks.length > 0 ? "mt-2" : undefined}>
-        {renderInlineMarkdown(para.join("\n"), citations)}
+        {renderInlineMarkdown(para.join("\n"), citations, hl)}
       </p>,
     );
     para = [];
@@ -2796,7 +2799,7 @@ function renderAnswerMarkdown(text: string, citations: { url: string }[]): React
               <tr>
                 {head.map((c, i) => (
                   <th key={i} className="whitespace-nowrap border border-line bg-inset px-2 py-1 text-left font-semibold">
-                    {renderInlineMarkdown(c, citations)}
+                    {renderInlineMarkdown(c, citations, hl)}
                   </th>
                 ))}
               </tr>
@@ -2806,7 +2809,7 @@ function renderAnswerMarkdown(text: string, citations: { url: string }[]): React
                 <tr key={ri}>
                   {r.map((c, ci) => (
                     <td key={ci} className="break-words border border-line px-2 py-1 align-top">
-                      {renderInlineMarkdown(c, citations)}
+                      {renderInlineMarkdown(c, citations, hl)}
                     </td>
                   ))}
                 </tr>
@@ -2837,7 +2840,37 @@ function renderAnswerMarkdown(text: string, citations: { url: string }[]): React
   return blocks;
 }
 
-function renderInlineMarkdown(text: string, citations: { url: string }[]): React.ReactNode[] {
+// 把一段純文字裡的品牌名包成 <mark>
+function highlightText(text: string, hl: Highlight | undefined, keyBase: string): React.ReactNode[] {
+  if (!hl || (!hl.self && !hl.rivals)) return [text];
+  const parts: { re: RegExp; cls: string }[] = [];
+  if (hl.self) parts.push({ re: hl.self, cls: "rounded bg-lime/60 px-0.5 font-semibold text-ink" });
+  if (hl.rivals) parts.push({ re: hl.rivals, cls: "rounded bg-ink/10 px-0.5 text-ink" });
+  const src = parts.map((p) => `(${p.re.source})`).join("|");
+  const re = new RegExp(src, "gi");
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  let k = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    if (m[0].length === 0) {
+      re.lastIndex++;
+      continue;
+    }
+    if (m.index > last) out.push(text.slice(last, m.index));
+    const isSelf = hl.self && m[1] !== undefined;
+    out.push(
+      <mark key={`${keyBase}-${k++}`} className={isSelf ? parts[0].cls : parts[parts.length - 1].cls}>
+        {m[0]}
+      </mark>,
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+function renderInlineMarkdown(text: string, citations: { url: string }[], hl?: Highlight): React.ReactNode[] {
   const tokens: React.ReactNode[] = [];
   // 三種：**粗體**、[1] 引用編號、[文字](網址) 連結。
   // 最後一種原本沒處理，整串網址會照原樣印出來，長的直接撐破卡片。
@@ -2846,11 +2879,11 @@ function renderInlineMarkdown(text: string, citations: { url: string }[]): React
   let key = 0;
   let m: RegExpExecArray | null;
   while ((m = pattern.exec(text))) {
-    if (m.index > last) tokens.push(text.slice(last, m.index));
+    if (m.index > last) tokens.push(...highlightText(text.slice(last, m.index), hl, `t${key++}`));
     if (m[1] !== undefined) {
       tokens.push(
         <strong key={key++} className="font-semibold text-gray-900">
-          {m[1]}
+          {highlightText(m[1], hl, `b${key}`)}
         </strong>,
       );
     } else if (m[2] !== undefined && m[3] !== undefined) {
@@ -2879,7 +2912,7 @@ function renderInlineMarkdown(text: string, citations: { url: string }[]): React
     }
     last = pattern.lastIndex;
   }
-  if (last < text.length) tokens.push(text.slice(last));
+  if (last < text.length) tokens.push(...highlightText(text.slice(last), hl, `t${key++}`));
   return tokens;
 }
 
@@ -3052,6 +3085,175 @@ function EditQuestions({ jobId, current, onDone }: { jobId: string | null; curre
         <button type="button" onClick={() => setOpen(false)} disabled={busy} className="text-[15px] text-ink3">取消</button>
       </div>
       {err && <p className="text-[15px]" style={{ color: STATUS_COLOR.fail }}>✗ {err}</p>}
+    </div>
+  );
+}
+
+// ── 原始回答（參考 WorkDuo「資料檢視 → 回覆」）──────────────
+// 2026-11-03：所有數字都要能追到 AI 的原話，客戶才信。一則回答一列，點開看全文，
+// 你的品牌黃底、對手灰底；右側列出平台、問法、提到的品牌、引用來源。
+type ExplorerRow = {
+  id: string;
+  kind: "推薦題" | "用名字問";
+  qi: number | null;
+  question: string;
+  engine: string;
+  r: VisibilityCardData;
+  named: boolean;
+  brands: string[];
+};
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function ResponsesExplorer({
+  rec,
+  table,
+  brandChecks,
+  selfName,
+}: {
+  rec: RecommendVisibility;
+  table: BrandTable;
+  brandChecks: VisibilityCardData[];
+  selfName: string;
+}) {
+  const [engineFilter, setEngineFilter] = useState("全部");
+  const [namedFilter, setNamedFilter] = useState<"all" | "yes" | "no">("all");
+  const [open, setOpen] = useState<ExplorerRow | null>(null);
+
+  const brandsAt = (i: number) => table.rows.filter((b) => !b.isSelf && b.hits?.includes(i)).map((b) => b.name);
+  let fi = 0;
+  const rows: ExplorerRow[] = [];
+  rec.questions.forEach((q, qi) =>
+    q.results.forEach((r, ri) => {
+      const i = fi++;
+      rows.push({ id: `q${qi}-${ri}`, kind: "推薦題", qi, question: r.query || q.question, engine: shortEngine(r.engine), r, named: !!r.namedSelf, brands: brandsAt(i) });
+    }),
+  );
+  brandChecks.forEach((b, bi) =>
+    rows.push({ id: `b${bi}`, kind: "用名字問", qi: null, question: b.query, engine: shortEngine(b.engine), r: b, named: b.citedSelf, brands: [] }),
+  );
+  const engines = ["全部", ...Array.from(new Set(rows.map((r) => r.engine)))];
+  const shown = rows.filter((r) => (engineFilter === "全部" || r.engine === engineFilter) && (namedFilter === "all" || (namedFilter === "yes" ? r.named : !r.named)));
+
+  const selfRe = new RegExp([selfName, ...(selfName.match(/[A-Za-z]{3,}/g) ?? [])].filter(Boolean).map(escapeRe).join("|"), "i");
+  const rivalNames = table.rows.filter((b) => !b.isSelf && b.count > 0).map((b) => b.name);
+  const rivalTokens = Array.from(new Set(rivalNames.flatMap((n) => [n, ...(n.match(/[\u4e00-\u9fff]{2,}|[A-Za-z0-9]{3,}/g) ?? [])]))).filter((t) => t.length >= 2 && !selfRe.test(t));
+  const hl: Highlight = { self: selfRe, rivals: rivalTokens.length ? new RegExp(rivalTokens.sort((a, b) => b.length - a.length).map(escapeRe).join("|"), "i") : null };
+
+  const chip = (active: boolean) => `rounded-full border px-3 py-1 text-[14px] ${active ? "border-ink bg-ink text-paper" : "border-line bg-card text-ink2 hover:border-ink3"}`;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[14px] text-ink3">平台：</span>
+        {engines.map((e) => (
+          <button key={e} type="button" onClick={() => setEngineFilter(e)} className={chip(engineFilter === e)}>
+            {e}
+          </button>
+        ))}
+        <span className="ml-4 text-[14px] text-ink3">有沒有推你：</span>
+        {(
+          [
+            ["all", "全部"],
+            ["yes", "✓ 有"],
+            ["no", "✗ 沒有"],
+          ] as const
+        ).map(([v, l]) => (
+          <button key={v} type="button" onClick={() => setNamedFilter(v)} className={chip(namedFilter === v)}>
+            {l}
+          </button>
+        ))}
+        <span className="ml-auto text-[14px] text-ink3">共 {shown.length} 則回答</span>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-line bg-card">
+        <table className="w-full text-[15px]">
+          <thead>
+            <tr className="border-b border-line bg-inset/60 text-left text-[14px] text-ink3">
+              <th className="w-[110px] px-4 py-2.5 font-medium">類型</th>
+              <th className="px-3 py-2.5 font-medium">問 AI 的問題</th>
+              <th className="w-[150px] px-3 py-2.5 font-medium">平台</th>
+              <th className="w-[110px] px-3 py-2.5 font-medium">有沒有推你</th>
+              <th className="w-[26%] px-3 py-2.5 font-medium">同時提到</th>
+              <th className="w-[80px] px-3 py-2.5 text-right font-medium">引用</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((row) => (
+              <tr key={row.id} onClick={() => setOpen(row)} className="cursor-pointer border-b border-line align-top last:border-0 hover:bg-inset/50">
+                <td className="px-4 py-3 text-[14px] text-ink3">{row.kind === "推薦題" ? `第 ${(row.qi ?? 0) + 1} 題` : "用名字問"}</td>
+                <td className="px-3 py-3 text-ink">{row.question}</td>
+                <td className="px-3 py-3 text-ink2">{row.engine}</td>
+                <td className="px-3 py-3">{row.named ? <span className="font-semibold text-ok">✓ 有</span> : <span className="font-semibold text-fail">✗ 沒有</span>}</td>
+                <td className="px-3 py-3 text-[14px] text-ink2">{row.brands.length ? row.brands.slice(0, 4).join("、") + (row.brands.length > 4 ? ` 等 ${row.brands.length} 個` : "") : "—"}</td>
+                <td className="mono px-3 py-3 text-right text-[14px] text-ink2">{row.r.citations.length}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {open && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-ink/40" onClick={() => setOpen(null)}>
+          <div className="flex h-full w-[min(1100px,90vw)] bg-card shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="min-w-0 flex-1 overflow-y-auto p-8">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[14px] text-ink3">問 AI 的問題</p>
+                  <p className="mt-1 text-[19px] font-bold text-ink">{open.question}</p>
+                </div>
+                <button type="button" onClick={() => setOpen(null)} className="rounded-lg border border-line px-3 py-1.5 text-[14px] text-ink2 hover:bg-inset">
+                  關閉 ✕
+                </button>
+              </div>
+              <div className="mt-5 text-[15.5px] leading-[1.85] text-ink2">{renderAnswerMarkdown(open.r.answer, open.r.citations, hl)}</div>
+            </div>
+            <aside className="w-[340px] shrink-0 overflow-y-auto border-l border-line bg-paper p-6">
+              <p className="text-[14px] font-bold text-ink">詳細資料</p>
+              <dl className="mt-3 space-y-2 text-[14px]">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink3">平台</dt>
+                  <dd className="text-ink">{open.engine}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink3">類型</dt>
+                  <dd className="text-ink">{open.kind}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink3">有沒有推你</dt>
+                  <dd className={open.named ? "font-semibold text-ok" : "font-semibold text-fail"}>{open.named ? "✓ 有" : "✗ 沒有"}</dd>
+                </div>
+              </dl>
+              {open.brands.length > 0 && (
+                <>
+                  <p className="mt-5 text-[14px] font-bold text-ink">同時提到的品牌</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {open.brands.map((b) => (
+                      <span key={b} className="rounded-full bg-ink/10 px-2.5 py-0.5 text-[14px] text-ink">
+                        {b}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+              <p className="mt-5 text-[14px] font-bold text-ink">引用來源（{open.r.citations.length}）</p>
+              <ol className="mt-2 space-y-2">
+                {open.r.citations.map((c, i) => (
+                  <li key={i} className="flex gap-2 text-[14px]">
+                    <span className="mono w-6 shrink-0 text-ink3">[{i + 1}]</span>
+                    <a href={c.url} target="_blank" rel="noopener noreferrer" className={`report-table-link min-w-0 break-all ${c.isSelf ? "font-bold" : ""}`}>
+                      {c.isSelf ? "★ " : ""}
+                      {c.title || c.url}
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </aside>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3638,6 +3840,7 @@ export default function HomeClient({
                 ...(brandTable ? [{ id: "competitors", label: "競爭對手分析" }] : []),
                 ...(recommend?.sentiment ? [{ id: "sentiment", label: "AI 怎麼評價你" }] : []),
                 ...(recommend ? [{ id: "questions", label: "每一題的結果" }] : []),
+                ...(recommend ? [{ id: "responses", label: "AI 的原始回答" }] : []),
                 ...(diagnosis ? [{ id: "why", label: "AI 為什麼沒推薦你" }] : []),
                 ...(citedDomains.length > 0 ? [{ id: "citations", label: "AI 引用了誰的網站" }] : []),
                 ...(engine.brandVisibility.length > 0 ? [{ id: "brand-check", label: "AI 認不認得你" }] : []),
@@ -3731,6 +3934,14 @@ export default function HomeClient({
                     renderDetail={(qi) => recommend.questions[qi].results.map((r, i) => <BrandVisibilityCard key={`${r.engine}-${i}`} result={r} />)}
                   />
                   <p className="mt-2 text-[14px] text-ink3">AI 的回答每次問都會變，這是當下的快照，不是趨勢。</p>
+                </DashSection>
+              </div>
+            )}
+
+            {recommend && brandTable && (
+              <div className="mt-12">
+                <DashSection id="responses" title="AI 的原始回答" desc="每一則回答都在這裡，點一列看全文；你的品牌黃底、對手灰底">
+                  <ResponsesExplorer rec={recommend} table={brandTable} brandChecks={engine.brandVisibility} selfName={reportBrand} />
                 </DashSection>
               </div>
             )}
