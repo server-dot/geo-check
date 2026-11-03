@@ -370,7 +370,7 @@ export function BrandRankTable({ table }: { table: BrandTable }) {
           <tr className="border-b border-line bg-inset/60 text-left text-[14px] font-medium text-ink3">
             <th className="w-10 px-4 py-2.5 text-right font-medium">#</th>
             <th className="px-3 py-2.5 font-medium">品牌</th>
-            <th className="px-3 py-2.5 font-medium">被點名（{table.total} 次回答中）</th>
+            <th className="px-3 py-2.5 font-medium">被推薦次數（{table.total} 次回答）</th>
             {table.engines.map((e) => (
               <th key={e} className="px-3 py-2.5 text-right font-medium">
                 {e}
@@ -561,7 +561,7 @@ export function QuestionTable({
                 {e}
               </th>
             ))}
-            <th className="w-[34%] px-3 py-2.5 font-medium">AI 同時推了誰</th>
+            <th className="w-[34%] px-3 py-2.5 font-medium">其他被推薦品牌</th>
           </tr>
         </thead>
         {questions.map((q, qi) => {
@@ -678,7 +678,7 @@ export function ChannelList({ table }: { table: BrandTable }) {
   if (table.channels.length === 0) return null;
   return (
     <div className="rounded-[10px] border border-line bg-card px-4 py-3 text-[14px]">
-      <span className="font-medium text-ink2">AI 也提到的</span>
+      <span className="font-medium text-ink2">其他提及對象</span>
       <span className="ml-2 text-[14px] text-ink3">（通路、媒體、專家，不算進排名）</span>
       <p className="mt-1.5 leading-relaxed text-ink2">
         {table.channels.map((c, i) => (
@@ -850,7 +850,7 @@ export function CitedPagesSection({ pages, selfLabel, max = 10 }: { pages: Cited
       </div>
 
       <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
-        <p className="border-b border-line px-4 py-2.5 text-[14px] font-medium text-ink2">你跟對手的網站，各被 AI 引用幾次</p>
+        <p className="border-b border-line px-4 py-2.5 text-[14px] font-medium text-ink2">官網引用排名</p>
         {sites.length === 0 ? (
           <p className="px-4 py-4 text-[15px] text-ink3">這次 AI 沒有引用任何品牌的官網，引用的都是電商、媒體跟社群。</p>
         ) : (
@@ -934,10 +934,10 @@ export function SentimentSection({ themes, answerCount, reviewQuery }: { themes:
         <table className="w-full min-w-[620px] text-[15px]">
           <thead>
             <tr className="border-b border-line bg-inset/60 text-left text-[14px] text-ink3">
-              <th className="px-4 py-2.5 font-medium">AI 怎麼說你</th>
-              <th className="w-[90px] px-3 py-2.5 font-medium">正／負</th>
-              <th className="w-[180px] px-3 py-2.5 font-medium">出現在幾段</th>
-              <th className="w-[200px] px-3 py-2.5 font-medium">哪家 AI 說的</th>
+              <th className="px-4 py-2.5 font-medium">評價主題</th>
+              <th className="w-[90px] px-3 py-2.5 font-medium">類別</th>
+              <th className="w-[180px] px-3 py-2.5 font-medium">出現次數</th>
+              <th className="w-[200px] px-3 py-2.5 font-medium">平台</th>
             </tr>
           </thead>
           <tbody>

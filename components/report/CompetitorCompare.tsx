@@ -92,7 +92,7 @@ export function HeadToHead({ selfName, cmp }: { selfName: string; cmp: CompareLi
     f === "self" ? { t: `偏向你`, cls: "bg-lime text-ink" } : f === "rival" ? { t: `偏向${cmp.rival}`, cls: "bg-ink text-paper" } : { t: "看需求，不分高下", cls: "bg-inset text-ink2" };
   return (
     <div className="rounded-[10px] border border-line bg-card p-5">
-      <p className="text-[15px] font-bold text-ink">直接問 AI：「{cmp.query}？」</p>
+      <p className="text-[15px] font-bold text-ink">直接比較：{cmp.query}？</p>
       <div className="mt-3 grid gap-2 grid-cols-3">
         {cmp.verdicts.map((v) => {
           const f = favor(v.favors);
@@ -195,7 +195,7 @@ export function CompetitorCompare({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[15px] text-ink2">跟誰比：</span>
+        <span className="text-[15px] text-ink2">比較對象：</span>
         {rivals.map((r) => (
           <button
             key={r.name}
@@ -218,7 +218,7 @@ export function CompetitorCompare({
       {/* 1. 次數 */}
       <div className="grid gap-3 grid-cols-3">
         <div className="rounded-[10px] border border-line bg-card px-5 py-4">
-          <p className="text-[14px] text-ink2">被 AI 推薦的次數</p>
+          <p className="text-[14px] text-ink2">推薦次數</p>
           <p className="mt-1.5 text-[26px] font-bold leading-none text-ink tabular-nums">
             {self.count}
             <span className="mx-2 text-base font-normal text-ink3">vs</span>
@@ -229,14 +229,14 @@ export function CompetitorCompare({
           </p>
         </div>
         <div className="rounded-[10px] border border-line bg-card px-5 py-4">
-          <p className="text-[14px] text-ink2">推了 {rival.name}、沒推你</p>
+          <p className="text-[14px] text-ink2">競品獨占回答</p>
           <p className={`mt-1.5 text-[26px] font-bold leading-none tabular-nums ${rivalOnly.length > 0 ? "text-fail" : "text-ink"}`}>
             {rivalOnly.length}
             <span className="ml-1.5 text-base font-normal text-ink3">次回答</span>
           </p>
         </div>
         <div className="rounded-[10px] border border-line bg-card px-4 py-3">
-          <p className="mb-1 text-[14px] text-ink2">各家 AI 推薦次數</p>
+          <p className="mb-1 text-[14px] text-ink2">各平台推薦次數</p>
           {table.engines.map((e) => (
             <Butterfly key={e} label={e} me={self.byEngine?.[e] ?? 0} them={rival.byEngine?.[e] ?? 0} max={table.engineTotals[e] ?? 3} />
           ))}
@@ -246,7 +246,7 @@ export function CompetitorCompare({
       {/* 2. 定位 */}
       {positioning && (
         <div>
-          <p className="mb-2 text-[15px] font-bold text-ink">AI 怎麼形容你們</p>
+          <p className="mb-2 text-[15px] font-bold text-ink">品牌定位比較</p>
           <div className="grid gap-3 grid-cols-2">
             <TraitList title={`你（${self.name}）`} traits={selfPos?.traits ?? []} highlight />
             <TraitList title={rival.name} traits={rivalPos?.traits ?? []} />
@@ -257,7 +257,7 @@ export function CompetitorCompare({
       {/* 3. 缺席的地方 */}
       <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
         <p className="border-b border-line px-4 py-2.5 text-[15px] font-bold text-ink">
-          AI 推 {rival.name} 沒推你的時候，看的是這些網頁
+          競品獨占回答的引用來源
         </p>
         {gapPages.length === 0 ? (
           <p className="px-4 py-3 text-[15px] text-ink3">
@@ -287,7 +287,7 @@ export function CompetitorCompare({
       <div className="rounded-[10px] border border-line bg-card px-4 py-3">
         <div className="mb-1 grid grid-cols-[1fr_minmax(0,1.3fr)_1fr] text-[14px] text-ink3">
           <span className="text-right font-semibold text-ink">你</span>
-          <span className="text-center">每一題</span>
+          <span className="text-center">推薦題</span>
           <span className="font-semibold text-ink">{rival.name}</span>
         </div>
         {rows.map((r, i) => (

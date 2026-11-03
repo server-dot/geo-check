@@ -123,11 +123,11 @@ export function OverviewBoard({
     <div className="space-y-5">
       {/* KPI 列 */}
       <div className="grid grid-cols-5 gap-4">
-        <Kpi label="AI 推薦你" value={`${self.count}/${table.total}`} unit="次回答" tone={lv.tone} foot={<span className="font-semibold">{lv.t}</span>} />
-        <Kpi label="AI 認得你" value={`${found}/${brandChecks.length}`} unit="家" tone={found === brandChecks.length ? "ok" : found > 0 ? "warn" : "fail"} foot="用你的名字問找得到官網" />
+        <Kpi label="推薦次數" value={`${self.count}/${table.total}`} unit="次回答" tone={lv.tone} foot={<span className="font-semibold">{lv.t}</span>} />
+        <Kpi label="品牌辨識" value={`${found}/${brandChecks.length}`} unit="家" tone={found === brandChecks.length ? "ok" : found > 0 ? "warn" : "fail"} foot="以品牌名詢問能找到官網的平台數" />
         <Kpi label="推薦排名" value={rank ? `第 ${rank}` : "未上榜"} unit={rank ? "名" : ""} tone={rank && rank <= 3 ? "ok" : rank ? "warn" : "fail"} foot={`AI 點名的 ${table.rows.length} 個品牌裡`} />
         <Kpi
-          label="AI 評價"
+          label="品牌評價"
           value={
             <>
               <span className="text-ok">{pos.length}</span>
@@ -136,10 +136,10 @@ export function OverviewBoard({
             </>
           }
           tone={neg.length === 0 ? "ok" : pos.length >= neg.length ? "warn" : "fail"}
-          foot="✓ 好話 : ✗ 缺點"
+          foot="正面 : 負面描述"
         />
         <Kpi
-          label="你的網站被引用"
+          label="自有引用次數"
           value={selfCited}
           unit={`/ ${totalCited} 次`}
           tone={selfCited > 0 ? "ok" : "fail"}
@@ -149,20 +149,20 @@ export function OverviewBoard({
 
       {/* 第二列 */}
       <div className="grid grid-cols-12 gap-5">
-        <Card title="各品牌在各家 AI 被推薦的次數" right={<GoLink onClick={() => onGo("brands")} />} className="col-span-8">
+        <Card title="各平台品牌推薦次數" sub="前 6 名品牌在各 AI 平台被推薦的次數" right={<GoLink onClick={() => onGo("brands")} />} className="col-span-8">
           <BrandEngineColumns rows={brandsTop} engines={table.engines} />
         </Card>
-        <Card title="聲量佔比" sub="所有品牌被點名的次數裡，各佔多少" className="col-span-4">
+        <Card title="聲量佔有率" sub="各品牌在所有推薦提及中的佔比" className="col-span-4">
           <SovDonut rows={table.rows.filter((r) => r.count > 0)} />
         </Card>
       </div>
 
       {/* 第三列 */}
       <div className="grid grid-cols-12 gap-5">
-        <Card title="推薦排名" sub={`被推薦的次數（共 ${table.total} 次回答）`} right={<GoLink onClick={() => onGo("brands")} />} className="col-span-5">
+        <Card title="推薦排名" sub={`${table.total} 次 AI 回答中的被推薦次數`} right={<GoLink onClick={() => onGo("brands")} />} className="col-span-5">
           <BrandTotalBars rows={brandsTop} total={table.total} />
         </Card>
-        <Card title="每一題推薦你的次數" sub="依 AI 疊起來" right={<GoLink onClick={() => onGo("questions")} />} className="col-span-7">
+        <Card title="各推薦題表現" sub={`${self.name} 在各推薦題被推薦的次數，依平台堆疊`} right={<GoLink onClick={() => onGo("questions")} />} className="col-span-7">
           <QuestionStacked questions={qData} engines={table.engines} />
         </Card>
       </div>
@@ -170,26 +170,26 @@ export function OverviewBoard({
       {/* 第四列 */}
       <div className="grid grid-cols-12 gap-5">
         {sentiment && sentiment.themes.length > 0 && (
-          <Card title="AI 怎麼評價你" sub="✓ 好話往右、✗ 缺點往左；長度＝出現在幾段回答" right={<GoLink onClick={() => onGo("sentiment")} />} className="col-span-7">
+          <Card title="品牌評價" sub="正面描述往右、負面描述往左，長度為出現次數" right={<GoLink onClick={() => onGo("sentiment")} />} className="col-span-7">
             <SentimentDiverging themes={sentiment.themes.slice(0, 8)} />
           </Card>
         )}
-        <Card title="AI 引用的來源" sub="依網站類型分" right={<GoLink onClick={() => onGo("citations")} />} className={sentiment ? "col-span-5" : "col-span-12"}>
+        <Card title="引用類型" sub="AI 回答引用的網頁，依網站類型分" right={<GoLink onClick={() => onGo("citations")} />} className={sentiment ? "col-span-5" : "col-span-12"}>
           <SourceTreemap data={treemap} />
         </Card>
       </div>
 
       {rival && rival.byEngine && self.byEngine && (
         <div className="grid grid-cols-12 gap-5">
-          <Card title={`你 vs ${rival.name}`} sub="被推薦最多的對手" right={<GoLink onClick={() => onGo("competitors")} />} className="col-span-6">
+          <Card title={`競品比較：${rival.name}`} sub={`${self.name} 與推薦次數最多的競品，各平台推薦次數`} right={<GoLink onClick={() => onGo("competitors")} />} className="col-span-6">
             <SelfVsRival engines={table.engines} self={self.byEngine} rival={rival.byEngine} rivalName={rival.name} totals={table.engineTotals} />
           </Card>
-          <Card title="AI 認得你" sub="直接用你的名字問" right={<GoLink onClick={() => onGo("brand-check")} />} className="col-span-6">
+          <Card title="品牌辨識" sub="以品牌名詢問 AI 時能否找到官網" right={<GoLink onClick={() => onGo("brand-check")} />} className="col-span-6">
             <div className="flex h-full flex-wrap content-center gap-3">
               {brandChecks.map((b) => (
                 <div key={b.engine} className={`flex-1 rounded-xl border p-5 text-center ${b.citedSelf ? "border-ok/30 bg-ok/5" : "border-fail/30 bg-fail/5"}`}>
                   <p className="text-[15px] text-ink2">{shortEngine(b.engine)}</p>
-                  <p className={`mt-2 text-[26px] font-bold ${b.citedSelf ? "text-ok" : "text-fail"}`}>{b.citedSelf ? "✓ 找得到" : "✗ 找不到"}</p>
+                  <p className={`mt-2 text-[26px] font-bold ${b.citedSelf ? "text-ok" : "text-fail"}`}>{b.citedSelf ? "✓ 已辨識" : "✗ 未辨識"}</p>
                   <p className="mt-1 text-[14px] text-ink3">你的官網</p>
                 </div>
               ))}

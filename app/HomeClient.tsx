@@ -3153,7 +3153,7 @@ function ResponsesExplorer({
             {e}
           </button>
         ))}
-        <span className="ml-4 text-[14px] text-ink3">有沒有推你：</span>
+        <span className="ml-4 text-[14px] text-ink3">已提及：</span>
         {(
           [
             ["all", "全部"],
@@ -3173,10 +3173,10 @@ function ResponsesExplorer({
           <thead>
             <tr className="border-b border-line bg-inset/60 text-left text-[14px] text-ink3">
               <th className="w-[110px] px-4 py-2.5 font-medium">類型</th>
-              <th className="px-3 py-2.5 font-medium">問 AI 的問題</th>
+              <th className="px-3 py-2.5 font-medium">推薦題</th>
               <th className="w-[150px] px-3 py-2.5 font-medium">平台</th>
-              <th className="w-[110px] px-3 py-2.5 font-medium">有沒有推你</th>
-              <th className="w-[26%] px-3 py-2.5 font-medium">同時提到</th>
+              <th className="w-[110px] px-3 py-2.5 font-medium">已提及</th>
+              <th className="w-[26%] px-3 py-2.5 font-medium">其他提及品牌</th>
               <th className="w-[80px] px-3 py-2.5 text-right font-medium">引用</th>
             </tr>
           </thead>
@@ -3201,7 +3201,7 @@ function ResponsesExplorer({
             <div className="min-w-0 flex-1 overflow-y-auto p-8">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-[14px] text-ink3">問 AI 的問題</p>
+                  <p className="text-[14px] text-ink3">推薦題</p>
                   <p className="mt-1 text-[19px] font-bold text-ink">{open.question}</p>
                 </div>
                 <button type="button" onClick={() => setOpen(null)} className="rounded-lg border border-line px-3 py-1.5 text-[14px] text-ink2 hover:bg-inset">
@@ -3222,13 +3222,13 @@ function ResponsesExplorer({
                   <dd className="text-ink">{open.kind}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-ink3">有沒有推你</dt>
+                  <dt className="text-ink3">已提及</dt>
                   <dd className={open.named ? "font-semibold text-ok" : "font-semibold text-fail"}>{open.named ? "✓ 有" : "✗ 沒有"}</dd>
                 </div>
               </dl>
               {open.brands.length > 0 && (
                 <>
-                  <p className="mt-5 text-[14px] font-bold text-ink">同時提到的品牌</p>
+                  <p className="mt-5 text-[14px] font-bold text-ink">其他提及品牌</p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {open.brands.map((b) => (
                       <span key={b} className="rounded-full bg-ink/10 px-2.5 py-0.5 text-[14px] text-ink">
@@ -3836,15 +3836,15 @@ export default function HomeClient({
             <ReportNav
               items={[
                 { id: "overview", label: "總覽" },
-                ...(brandTable ? [{ id: "brands", label: "AI 推薦了誰" }] : []),
+                ...(brandTable ? [{ id: "brands", label: "品牌推薦排名" }] : []),
                 ...(brandTable ? [{ id: "competitors", label: "競爭對手分析" }] : []),
-                ...(recommend?.sentiment ? [{ id: "sentiment", label: "AI 怎麼評價你" }] : []),
-                ...(recommend ? [{ id: "questions", label: "每一題的結果" }] : []),
-                ...(recommend ? [{ id: "responses", label: "AI 的原始回答" }] : []),
-                ...(diagnosis ? [{ id: "why", label: "AI 為什麼沒推薦你" }] : []),
-                ...(citedDomains.length > 0 ? [{ id: "citations", label: "AI 引用了誰的網站" }] : []),
-                ...(engine.brandVisibility.length > 0 ? [{ id: "brand-check", label: "AI 認不認得你" }] : []),
-                { id: "more", label: "想查別的主題" },
+                ...(recommend?.sentiment ? [{ id: "sentiment", label: "品牌評價" }] : []),
+                ...(recommend ? [{ id: "questions", label: "推薦題表現" }] : []),
+                ...(recommend ? [{ id: "responses", label: "AI 回答紀錄" }] : []),
+                ...(diagnosis ? [{ id: "why", label: "未被推薦原因" }] : []),
+                ...(citedDomains.length > 0 ? [{ id: "citations", label: "引用來源" }] : []),
+                ...(engine.brandVisibility.length > 0 ? [{ id: "brand-check", label: "品牌辨識" }] : []),
+                { id: "more", label: "關鍵字查詢" },
                 ...(SHOW_TECH_SECTIONS
                   ? [{ id: "tech", label: "技術健檢" }, ...(status?.audit ? [{ id: "audit", label: "深度健檢明細" }] : [])]
                   : []),
@@ -3889,7 +3889,7 @@ export default function HomeClient({
 
             {brandTable && (
               <div className="mt-12">
-                <DashSection id="brands" title="AI 推薦了誰">
+                <DashSection id="brands" title="品牌推薦排名" desc={`${reportBrand} 與其他品牌在 ${brandTable.total} 次 AI 回答中被推薦的次數`}>
                   <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-5">
                     <div className="min-w-0 space-y-3">
                       <BrandRankTable table={brandTable} />
@@ -3903,7 +3903,7 @@ export default function HomeClient({
 
             {recommend && brandTable && brandTable.rows.some((r) => !r.isSelf && r.count > 0) && (
               <div className="mt-12">
-                <DashSection id="competitors" title="競爭對手分析">
+                <DashSection id="competitors" title="競爭對手分析" desc={`${reportBrand} 與競品的推薦次數、品牌定位與引用來源比較`}>
                   <div className="space-y-4">
                     {recommend.compare && recommend.compare.verdicts.length > 0 && <HeadToHead selfName={reportBrand} cmp={recommend.compare} />}
                     <CompetitorCompare table={brandTable} questions={recommend.questions} positioning={recommend.positioning} defaultRival={recommend.compare?.rival} />
@@ -3914,7 +3914,7 @@ export default function HomeClient({
 
             {recommend?.sentiment && (
               <div className="mt-12">
-                <DashSection id="sentiment" title="AI 怎麼評價你">
+                <DashSection id="sentiment" title="品牌評價" desc={`AI 回答中對 ${reportBrand} 的正面與負面描述`}>
                   <SentimentSection themes={recommend.sentiment.themes} answerCount={recommend.sentiment.answerCount} reviewQuery={recommend.sentiment.reviewQuery} />
                 </DashSection>
               </div>
@@ -3924,7 +3924,7 @@ export default function HomeClient({
               <div className="mt-12">
                 <DashSection
                   id="questions"
-                  title="每一題的結果"
+                  title="推薦題表現"
                   desc={`${recommend.customQuestions ? "題目是你自己改的" : "題目是 AI 讀你的首頁猜的"}。${recommend.questions.some((q) => q.altQuestion) ? "Perplexity、ChatGPT 每題用兩種問法各問一次，Google 問一次" : `每題各問 ${brandTable.engines.join("、")} 一次`}`}
                   right={<EditQuestions key={recommend.askedAt} jobId={reportJobId} current={recommend.questions.map((q) => q.question)} onDone={setRecommendOverride} />}
                 >
@@ -3940,7 +3940,7 @@ export default function HomeClient({
 
             {recommend && brandTable && (
               <div className="mt-12">
-                <DashSection id="responses" title="AI 的原始回答" desc="點一列看全文。黃底是你，灰底是對手">
+                <DashSection id="responses" title="AI 回答紀錄" desc="所有 AI 回答的全文、提及品牌與引用來源">
                   <ResponsesExplorer rec={recommend} table={brandTable} brandChecks={engine.brandVisibility} selfName={reportBrand} />
                 </DashSection>
               </div>
@@ -3948,7 +3948,7 @@ export default function HomeClient({
 
             {diagnosis && (
               <div className="mt-12">
-                <DashSection id="why" title="AI 為什麼沒推薦你">
+                <DashSection id="why" title="未被推薦原因" desc="從品牌辨識、內容對應、第三方推薦三方面檢查">
                   <DiagnosisBlock d={diagnosis} />
                 </DashSection>
               </div>
@@ -3956,7 +3956,7 @@ export default function HomeClient({
 
             {recommend && brandTable ? (
               <div className="mt-12">
-                <DashSection id="citations" title="AI 引用了誰的網站">
+                <DashSection id="citations" title="引用來源" desc="AI 回答引用的網頁類型，與各品牌官網的被引用次數">
                   <CitedPagesSection pages={buildCitedPages(recommend, brandTable)} selfLabel={reportBrand} />
                 </DashSection>
               </div>
@@ -3972,7 +3972,7 @@ export default function HomeClient({
 
             {engine.brandVisibility.length > 0 && (
               <div className="mt-12">
-                <DashSection id="brand-check" title="AI 認不認得你" desc="用你的名字直接問">
+                <DashSection id="brand-check" title="品牌辨識" desc={`以「${reportBrand}」直接詢問 AI 時，能否找到官網`}>
                   <div className="grid gap-4 grid-cols-2">
                     {engine.brandVisibility.map((r) => (
                       <CompactAnswerCard key={r.engine} result={r} />
@@ -3983,7 +3983,7 @@ export default function HomeClient({
             )}
 
             <div className="mt-12">
-              <DashSection id="more" title="想查別的主題" desc="輸入你想搶的關鍵字，看 AI 會推薦誰">
+              <DashSection id="more" title="關鍵字查詢" desc="自訂關鍵字，查詢 AI 推薦的品牌">
                 <div className="rounded-[10px] border border-line bg-card p-6">
                 {suggestedKeywords.length > 0 && (
                   <div className="mb-3">
