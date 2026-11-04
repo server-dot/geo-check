@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { StepAuditIcon, StepInputIcon, StepReportIcon } from "@/components/marketing/StepIcons";
 import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
-import { AUTH_CHANGED_EVENT, openLogin } from "@/components/marketing/AccountMenu";
+import AccountMenu, { AUTH_CHANGED_EVENT, openLogin } from "@/components/marketing/AccountMenu";
 import Section from "@/components/marketing/Section";
 import Footer from "@/components/marketing/Footer";
 import { tallyCitedDomains, type CitedDomain } from "@/lib/geo-cited-domains";
@@ -4088,6 +4088,10 @@ export default function HomeClient({
                   {new Date((status?.finishedAt ?? status?.createdAt ?? recommend?.askedAt)!).toLocaleString("zh-TW", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })} 檢測
                 </span>
               )}
+              {/* 報告頁沒有導覽列，帳號選單（含檢測紀錄）放標題列右上角 */}
+              <div className="ml-auto self-center">
+                <AccountMenu />
+              </div>
             </div>
             <DashSection id="overview" title="總覽">
               {brandTable && recommend ? (
