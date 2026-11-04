@@ -62,6 +62,7 @@ export function BrandProfileView({
   const total = profile.engines.length;
   const cited = (engine: string) => brandChecks.find((b) => shortEngine(b.engine) === engine)?.citedSelf;
   const conflicts = profile.rows.filter((r) => r.conflict);
+  const mismatches = profile.rows.flatMap((r) => r.cells.filter((c) => c.siteMismatch).map((c) => ({ label: r.label, c })));
 
   return (
     <div className="space-y-5">
@@ -70,6 +71,16 @@ export function BrandProfileView({
           <p className="text-[16px] font-bold text-ink">AI 對 {brandName} 的認知關鍵詞</p>
           <p className="mt-0.5 mb-5 text-[14px] text-ink3">{profile.engines.join("、")} 介紹 {brandName} 時用到的描述，依提到的平台數排列</p>
           <KeywordCloud keywords={profile.keywords} total={total} />
+          {mismatches.length > 0 && (
+            <div className="mt-5 space-y-1.5 border-t border-line pt-4">
+              {mismatches.map(({ label, c }) => (
+                <p key={label + c.engine} className="text-[15px] text-ink2">
+                  <span className="font-semibold text-fail">✗ {c.engine} 的{label}跟官網不同：</span>
+                  它說「{c.value}」，官網寫「{c.siteMismatch!.siteQuote}」
+                </p>
+              ))}
+            </div>
+          )}
           {conflicts.length > 0 && (
             <div className="mt-5 space-y-1.5 border-t border-line pt-4">
               {conflicts.map((r) => (
@@ -117,6 +128,11 @@ export function BrandProfileView({
                           </div>
                         ) : (
                           <span className="text-[15px] text-ink3">未提及</span>
+                        )}
+                        {c.siteMismatch && (
+                          <p className="mt-1.5 text-[14px] leading-snug text-fail">
+                            ✗ 跟官網不同，官網寫「{c.siteMismatch.siteQuote}」
+                          </p>
                         )}
                       </dd>
                     </div>

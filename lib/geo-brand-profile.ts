@@ -19,6 +19,8 @@ export interface ProfileCell {
   engine: string;
   value: string; // 空字串＝這家 AI 沒提到
   quote: string;
+  // 跟官網對不上時才有：官網原文（回頁面核對過）＋哪一頁
+  siteMismatch?: { note: string; siteQuote: string; url: string };
 }
 
 export interface ProfileRow {
@@ -160,7 +162,61 @@ ${list}
   }
 }
 
-export async function extractProfile(brand: string, answers: AnswerIn[], apiKey: string): Promise<BrandProfile | null> {
+export interface SitePage {
+  url: string;
+  title: string;
+  text: string;
+}
+
+// 核對官網要讀哪幾頁：首頁＋服務、價格、關於、FAQ、聯絡這類講「自己是誰、賣什麼、多少錢」的頁
+const FACT_PAGE = /\/(services?|pricing|price|plans?|about|faq|contact|shop|products?|collections?)(\/|$)|服務|價格|方案|關於/i;
+
+function siteExcerpt(pages: SitePage[]): { text: string; pages: SitePage[] } {
+  const home = pages.find((p) => { try { return new URL(p.url).pathname === '/'; } catch { return false; } });
+  const picked = [...(home ? [home] : []), ...pages.filter((p) => p !== home && FACT_PAGE.test(decodeURIComponent(p.url)))].slice(0, 6);
+  const text = picked.map((p, i) => `[頁${i}] ${p.url}\n${p.text.slice(0, 2200)}`).join('\n\n');
+  return { text, pages: picked };
+}
+
+// 2026-11-04 小積木：AI 介紹品牌講錯（Perplexity 說「官網沒有公開報價」，服務頁明明標了 NT$3,600 起），
+// 工具卻照單全收。拿爬到的官網逐格核對，只標「跟官網說法相反」的，官網沒寫到的不算錯。
+async function checkAgainstSite(brand: string, rows: ProfileRow[], pages: SitePage[], apiKey: string): Promise<void> {
+  const { text, pages: picked } = siteExcerpt(pages);
+  if (!text) return;
+  const items: { id: string; cell: ProfileCell; label: string }[] = [];
+  rows.forEach((r) => r.cells.forEach((c, i) => c.value && items.push({ id: `${r.key}.${i}`, cell: c, label: r.label })));
+  if (items.length === 0) return;
+  const prompt = `幾個 AI 介紹「${brand}」，下面是它們的說法，以及「${brand}」官網的內容。請逐條核對：AI 的說法跟官網寫的「互相矛盾」嗎？
+
+只有「官網明確寫了相反的事」才算矛盾，例如 AI 說「沒有公開價格」但官網列了價格、AI 說「只在實體店賣」但官網有線上購買。
+AI 講得比官網籠統、多講了官網沒寫的事、用詞不同，都不算矛盾。
+要連「原句」一起看：原句裡只要有一句跟官網相反就算，特別是「官網沒有寫／沒有公開 X」這種說法，官網其實有寫 X 就是矛盾。
+
+AI 的說法：
+${items.map((it) => `${it.id}｜${it.cell.engine}｜${it.label}：${it.cell.value}（原句：${it.cell.quote}）`).join('\n')}
+
+官網內容：
+${text}
+
+只回傳 JSON：{"mismatches":[{"id":"price.0","note":"官網服務頁有列價格","page":0,"siteQuote":"官網原文一字不差的片段（6～40 字）"}]}。沒有矛盾就回 {"mismatches":[]}。`;
+  let parsed: { mismatches?: { id?: unknown; note?: unknown; page?: unknown; siteQuote?: unknown }[] } | null = null;
+  try {
+    parsed = parseJson(await askJson(prompt, apiKey, 700));
+  } catch {
+    return;
+  }
+  for (const m of parsed?.mismatches ?? []) {
+    const it = items.find((x) => x.id === m.id);
+    const page = typeof m.page === 'number' ? picked[m.page] : undefined;
+    if (!it || !page || typeof m.siteQuote !== 'string' || typeof m.note !== 'string') continue;
+    // 官網引文要回那一頁核對得到，模型編的不算
+    const q = verifiedQuote(norm(page.text), m.siteQuote);
+    if (!q) continue;
+    it.cell.siteMismatch = { note: m.note.trim().slice(0, 40), siteQuote: q, url: page.url };
+  }
+}
+
+export async function extractProfile(brand: string, answers: AnswerIn[], apiKey: string, sitePages: SitePage[] = []): Promise<BrandProfile | null> {
   if (answers.length === 0) return null;
   const engines = answers.map((a) => shortEngine(a.engine));
   const per = await Promise.all(answers.map((a) => extractOne(brand, a.answer, apiKey)));
@@ -170,7 +226,11 @@ export async function extractProfile(brand: string, answers: AnswerIn[], apiKey:
     cells: engines.map((engine, i) => ({ engine, value: per[i][f.key]?.value ?? '', quote: per[i][f.key]?.quote ?? '' })),
     conflict: '',
   }));
-  const [conflicts, keywords] = await Promise.all([findConflicts(brand, rows, apiKey), collectKeywords(brand, rows, engines, apiKey)]);
+  const [conflicts, keywords] = await Promise.all([
+    findConflicts(brand, rows, apiKey),
+    collectKeywords(brand, rows, engines, apiKey),
+    checkAgainstSite(brand, rows, sitePages, apiKey).catch(() => {}),
+  ]);
   for (const r of rows) r.conflict = conflicts[r.key] ?? '';
   return { engines, rows, intros: answers.map((a) => firstSentence(a.answer)), keywords };
 }
