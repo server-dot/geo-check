@@ -105,10 +105,14 @@ export function sentimentInputs(
 // 「正面 5、負面 0」，但 Google 搜「Relove 評價」的 AI 摘要第一句就是「評價兩極化」，
 // 列了除毛膏刺激、效果有限等負評。所以輿情要另外直接問一題評價，三家各問一次。
 // 「Relove私密及全身保養 官方網站」→「Relove」：一般人問 AI 只會打品牌名
+// 英文開頭的品牌保留連續的英文詞：「Q kangber」不能切成「Q」（2026-11-04 aiqkangber.com
+// 被問成「Q 是什麼品牌」，AI 全在講 Samsung Q 系列、Q Burger）。切完不到 2 個字就用原名。
 export function selfShortName(brandName: string): string {
-  const latin = brandName.match(/^[A-Za-z0-9][A-Za-z0-9\-]{2,}/)?.[0];
-  const head = brandName.split(/[\s|｜\-–—:：]/)[0]?.trim();
-  return latin ?? head ?? brandName;
+  const name = brandName.trim();
+  const latin = name.match(/^[A-Za-z0-9][A-Za-z0-9&.'\-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&.'\-]*)*/)?.[0]?.trim();
+  const head = name.split(/[\s|｜\-–—:：]/)[0]?.trim();
+  const short = latin || head || name;
+  return short.length >= 2 ? short : name;
 }
 
 export function reviewQueryFor(brandName: string): string {
