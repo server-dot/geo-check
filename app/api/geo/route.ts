@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assertPublicUrl, guardedFetch, UnsafeUrlError } from '@/lib/geo-url-guard';
 import { LIMITS, clientIp, hoursLeft, releaseAuditSlot, takeDaily, tryAcquireAuditSlot } from '@/lib/rate-limit';
+import { getSessionUser, isAdmin } from '@/lib/auth';
+import { reserveAudit, releaseAudit, type AuditKind } from '@/lib/quota';
 import {
   checkAiCrawlerAccess,
   parseContentSignals,
@@ -147,7 +149,8 @@ async function checkLlmsTxt(origin: string): Promise<{ exists: boolean | null; t
 
 // 「AI 引擎可達性」這層：robots.txt bot 存取、內容可視性、Content Signals、llms.txt。
 // 秒級跑完，是原本 geo-check MVP 的四項檢測，維持同一套邏輯不變。
-async function runEngineChecks(origin: string): Promise<EngineResult> {
+// withBrand：GEO 才要拿品牌名去問 AI「你認得這個品牌嗎」（會燒 API）；SEO 不問
+async function runEngineChecks(origin: string, withBrand: boolean): Promise<EngineResult> {
   const [robots, homepage, llmsTxtFetch] = await Promise.all([
     fetchRobots(origin),
     fetchHomepage(origin),
@@ -171,7 +174,7 @@ async function runEngineChecks(origin: string): Promise<EngineResult> {
   const toVerify = policyResults.filter((r) => r.status === 'allowed');
   const [probes, brandVisibility] = await Promise.all([
     toVerify.length > 0 ? probeBotAccess(origin, toVerify.map((r) => r.ua)) : Promise.resolve(new Map<string, ProbeResult>()),
-    checkBrandVisibility(visibility?.title ?? '', origin, visibility?.orgName),
+    withBrand ? checkBrandVisibility(visibility?.title ?? '', origin, visibility?.orgName) : Promise.resolve([]),
   ]);
 
   const results = policyResults.map((r) => {
@@ -204,10 +207,16 @@ async function runEngineChecks(origin: string): Promise<EngineResult> {
 }
 
 export async function POST(req: NextRequest) {
+  // 先登入才能跑：每個 Google 帳號 GEO、SEO 每天各免費一次（見 lib/quota.ts）
+  const user = getSessionUser(req);
+  if (!user) return NextResponse.json({ error: '請先用 Google 帳號登入', needLogin: true }, { status: 401 });
+
   let input: string | undefined;
+  let kind: AuditKind;
   try {
-    const body = (await req.json()) as { url?: string };
+    const body = (await req.json()) as { url?: string; kind?: string };
     input = body.url?.trim();
+    kind = body.kind === 'seo' ? 'seo' : 'geo';
   } catch {
     // body 不是合法 JSON。不接住的話 req.json() 會往外拋成 500
     return NextResponse.json({ error: '請求格式不正確' }, { status: 400 });
@@ -224,114 +233,155 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err instanceof UnsafeUrlError ? err.message : '網址格式不正確' }, { status: 400 });
   }
 
-  // 次數限制：同一個 IP 一天最多跑幾次、全站同時最多幾個在跑。
-  // 先看同時數再扣每日額度——被同時數擋下來的那次不該吃掉他今天的額度。
+  // 同時數先看——被同時數擋下來的那次不該吃掉他的免費次數
   if (!tryAcquireAuditSlot()) {
     return NextResponse.json({ error: '現在同時有太多網站在檢測，請等一兩分鐘再試。' }, { status: 503 });
   }
-  const ip = clientIp(req);
-  const limited = takeDaily('audit', ip, LIMITS.auditPerDay);
-  if (limited) {
+  // 每 IP 每日上限留著當第二道閘：一個人開很多 Google 帳號時還擋得住。管理員不受限。
+  if (!isAdmin(user.email)) {
+    const limited = takeDaily('audit', clientIp(req), LIMITS.auditPerDay);
+    if (limited) {
+      releaseAuditSlot();
+      return NextResponse.json(
+        { error: `這個網路位置今天已經跑過 ${LIMITS.auditPerDay} 次健檢，${hoursLeft(limited.retryAfterMs)}後可以再跑。要一次看很多網站的話，直接聯絡我們。` },
+        { status: 429 },
+      );
+    }
+  }
+  let reserved: boolean;
+  try {
+    reserved = await reserveAudit(user.email, kind, origin);
+  } catch {
+    releaseAuditSlot();
+    return NextResponse.json({ error: '系統暫時無法確認你的免費次數，請稍後再試。' }, { status: 503 });
+  }
+  if (!reserved) {
     releaseAuditSlot();
     return NextResponse.json(
-      { error: `這個網路位置今天已經跑過 ${LIMITS.auditPerDay} 次健檢，${hoursLeft(limited.retryAfterMs)}後可以再跑。要一次看很多網站的話，直接聯絡我們。` },
-      { status: 429 },
+      { error: `今日 ${KIND_LABEL[kind]}已檢測完畢，明天可以再測。`, quotaUsed: true },
+      { status: 403 },
     );
   }
 
   // 先跑一次快速的連線檢查：robots.txt 連線層都失敗代表整個網站連不上，
-  // 沒有必要開一個註定失敗的背景 job 讓使用者空等。
+  // 沒有必要開一個註定失敗的背景 job 讓使用者空等。連不上不算用掉次數。
   let engine: EngineResult;
   try {
-    engine = await runEngineChecks(origin);
+    engine = await runEngineChecks(origin, kind === 'geo');
   } catch (err) {
     releaseAuditSlot();
+    await releaseAudit(user.email, kind).catch(() => {});
     return NextResponse.json({ error: describeFetchError(err, host) }, { status: 502 });
   }
 
-  const job = createAuditJob(origin);
+  const job = createAuditJob(origin, kind, user.email);
   updateAuditJob(job.id, { status: 'crawling', message: '開始爬取網站…', engine });
 
   // ── 背景執行（不 await，讓請求先回 jobId）──
   void (async () => {
-    // 推薦題查詢跟爬蟲互不相依，先開跑；要等結果時再 await。
-    // 這段自己吞錯（回 null），不能讓它把整個深度健檢弄成 failed。
-    const vis = engine.visibility;
-    const recommendInput = vis
-      ? {
-          brandName: guessBrandName(vis.title, vis.orgName),
-          title: vis.title,
-          description: vis.description,
-          h1: vis.h1,
-          leadParagraphs: vis.leadParagraphs,
-          preview: vis.preview,
-        }
-      : null;
-    const recommendPromise = recommendInput
-      ? runRecommendVisibility(recommendInput, origin).catch(() => null)
-      : Promise.resolve(null);
     try {
-      const crawl = await crawlSite(origin, {
-        onProgress: (p) =>
-          updateAuditJob(job.id, {
-            status: 'crawling',
-            progress: p,
-            message: `爬取中：已爬 ${p.crawled} 頁（發現 ${p.discovered} 頁，上限 ${p.cap}）`,
-          }),
-      });
-      updateAuditJob(job.id, { status: 'analyzing', message: `已爬 ${crawl.pages.length} 頁，彙總分析中…` });
-      const audit = await aggregateAuditChecks(crawl, (msg) => updateAuditJob(job.id, { status: 'analyzing', message: msg }));
-      updateAuditJob(job.id, { status: 'analyzing', message: '整理結構化資料缺漏建議中…' });
-      const rawSchemaCards = buildSchemaTypeCards(crawl.pages.map((p) => ({ url: p.url, jsonLdNodes: p.jsonLdNodes })));
-      const schemaCards = await enrichSchemaCards(
-        rawSchemaCards,
-        crawl.pages.map((p) => ({ url: p.url, mainText: p.mainText })),
-      );
-      updateAuditJob(job.id, { status: 'analyzing', message: '等 AI 回答推薦題…' });
-      let recommendVisibility = await recommendPromise;
-      const matchPages = crawl.pages
-        .filter((p) => p.ok && !p.nonHtml)
-        .map((p) => ({ url: p.url, title: p.title, text: p.mainText }));
-      if (recommendInput) setAuditJobContext(job.id, { origin, recommendInput, pages: matchPages });
-      const apiKey = process.env.OPENROUTER_API_KEY;
-      if (recommendVisibility && apiKey) {
-        updateAuditJob(job.id, { status: 'analyzing', message: '比對你的頁面有沒有在回答這些題目…' });
-        const rv = recommendVisibility;
-        const [contentMatch, extras] = await Promise.all([
-          matchQuestionsToPages(rv.questions, matchPages, apiKey).catch(() => null),
-          (async () => {
-            const selfName = selfShortName(rv.brandName);
-            const rivals = topRivals(rv.names);
-            const [review, cmp] = await Promise.all([
-              fetchReviewAnswers(rv.brandName, origin),
-              rivals[0] ? fetchCompareAnswers(selfName, rivals[0], origin).catch(() => null) : Promise.resolve(null),
-            ]);
-            const all = rv.questions.flatMap((q) => q.results.map((r) => ({ engine: r.engine, answer: r.answer })));
-            const [s, positioning, compare, profile] = await Promise.all([
-              extractSentiment(rv.brandName, [...sentimentInputs(rv, engine.brandVisibility), ...review.answers], apiKey).catch(() => null),
-              extractPositioning(selfName, rivals, [...all, ...review.answers, ...(cmp?.answers ?? [])], apiKey).catch(() => null),
-              cmp ? extractCompare(selfName, cmp.rival, cmp.query, cmp.answers, apiKey).catch(() => null) : Promise.resolve(null),
-              extractProfile(selfName, engine.brandVisibility, apiKey).catch(() => null),
-            ]);
-            return { sentiment: s ? { ...s, reviewQuery: review.query } : null, positioning, compare, profile };
-          })().catch(() => ({ sentiment: null, positioning: null, compare: null, profile: null })),
-        ]);
-        recommendVisibility = { ...rv, contentMatch, ...extras };
-      }
-      updateAuditJob(job.id, {
-        status: 'completed',
-        result: audit,
-        schemaCards,
-        recommendVisibility,
-        pageWords: crawl.pages.filter((p) => p.ok && !p.nonHtml).map((p) => p.mainTextLength),
-        message: `完成，爬取 ${crawl.pages.length} 頁、產出 ${audit.length} 項深度檢測`,
-      });
+      if (kind === 'seo') await runSeo(job.id, origin);
+      else await runGeo(job.id, origin, engine);
     } catch (e) {
-      updateAuditJob(job.id, { status: 'failed', error: e instanceof Error ? e.message : String(e), message: '深度健檢失敗' });
+      await releaseAudit(user.email, kind).catch(() => {});
+      updateAuditJob(job.id, { status: 'failed', error: e instanceof Error ? e.message : String(e), message: '健檢失敗' });
     } finally {
       releaseAuditSlot();
     }
   })();
 
-  return NextResponse.json({ ok: true, jobId: job.id });
+  return NextResponse.json({ ok: true, jobId: job.id, kind });
+}
+
+const KIND_LABEL: Record<AuditKind, string> = { geo: 'GEO 健檢', seo: 'SEO 健檢' };
+
+function crawlWithProgress(jobId: string, origin: string) {
+  return crawlSite(origin, {
+    onProgress: (p) =>
+      updateAuditJob(jobId, {
+        status: 'crawling',
+        progress: p,
+        message: `爬取中：已爬 ${p.crawled} 頁（發現 ${p.discovered} 頁，上限 ${p.cap}）`,
+      }),
+  });
+}
+
+// SEO 健檢：多頁爬蟲＋23 項規則（標題描述、大小標題、canonical、sitemap…）＋結構化資料。不問 AI 推薦題。
+async function runSeo(jobId: string, origin: string) {
+  const crawl = await crawlWithProgress(jobId, origin);
+  updateAuditJob(jobId, { status: 'analyzing', message: `已爬 ${crawl.pages.length} 頁，彙總分析中…` });
+  const audit = await aggregateAuditChecks(crawl, (msg) => updateAuditJob(jobId, { status: 'analyzing', message: msg }));
+  updateAuditJob(jobId, { status: 'analyzing', message: '整理結構化資料缺漏建議中…' });
+  const rawSchemaCards = buildSchemaTypeCards(crawl.pages.map((p) => ({ url: p.url, jsonLdNodes: p.jsonLdNodes })));
+  const schemaCards = await enrichSchemaCards(
+    rawSchemaCards,
+    crawl.pages.map((p) => ({ url: p.url, mainText: p.mainText })),
+  );
+  updateAuditJob(jobId, {
+    status: 'completed',
+    result: audit,
+    schemaCards,
+    recommendVisibility: null,
+    pageWords: crawl.pages.filter((p) => p.ok && !p.nonHtml).map((p) => p.mainTextLength),
+    message: `完成，爬取 ${crawl.pages.length} 頁、產出 ${audit.length} 項檢測`,
+  });
+}
+
+// GEO 健檢：問 AI 推薦題、品牌評價、對手比較。爬蟲還是要跑——「未被推薦原因」要比對你的頁面
+// 有沒有在回答這些題目——但不跑 23 項規則（那是 SEO 健檢）。
+async function runGeo(jobId: string, origin: string, engine: EngineResult) {
+  // 推薦題查詢跟爬蟲互不相依，先開跑；要等結果時再 await。
+  // 這段自己吞錯（回 null），不能讓它把整個健檢弄成 failed。
+  const vis = engine.visibility;
+  const recommendInput = vis
+    ? {
+        brandName: guessBrandName(vis.title, vis.orgName),
+        title: vis.title,
+        description: vis.description,
+        h1: vis.h1,
+        leadParagraphs: vis.leadParagraphs,
+        preview: vis.preview,
+      }
+    : null;
+  const recommendPromise = recommendInput
+    ? runRecommendVisibility(recommendInput, origin).catch(() => null)
+    : Promise.resolve(null);
+  const crawl = await crawlWithProgress(jobId, origin);
+  updateAuditJob(jobId, { status: 'analyzing', message: '等 AI 回答推薦題…' });
+  let recommendVisibility = await recommendPromise;
+  const matchPages = crawl.pages
+    .filter((p) => p.ok && !p.nonHtml)
+    .map((p) => ({ url: p.url, title: p.title, text: p.mainText }));
+  if (recommendInput) setAuditJobContext(jobId, { origin, recommendInput, pages: matchPages });
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (recommendVisibility && apiKey) {
+    updateAuditJob(jobId, { status: 'analyzing', message: '比對你的頁面有沒有在回答這些題目…' });
+    const rv = recommendVisibility;
+    const [contentMatch, extras] = await Promise.all([
+      matchQuestionsToPages(rv.questions, matchPages, apiKey).catch(() => null),
+      (async () => {
+        const selfName = selfShortName(rv.brandName);
+        const rivals = topRivals(rv.names);
+        const [review, cmp] = await Promise.all([
+          fetchReviewAnswers(rv.brandName, origin),
+          rivals[0] ? fetchCompareAnswers(selfName, rivals[0], origin).catch(() => null) : Promise.resolve(null),
+        ]);
+        const all = rv.questions.flatMap((q) => q.results.map((r) => ({ engine: r.engine, answer: r.answer })));
+        const [s, positioning, compare, profile] = await Promise.all([
+          extractSentiment(rv.brandName, [...sentimentInputs(rv, engine.brandVisibility), ...review.answers], apiKey).catch(() => null),
+          extractPositioning(selfName, rivals, [...all, ...review.answers, ...(cmp?.answers ?? [])], apiKey).catch(() => null),
+          cmp ? extractCompare(selfName, cmp.rival, cmp.query, cmp.answers, apiKey).catch(() => null) : Promise.resolve(null),
+          extractProfile(selfName, engine.brandVisibility, apiKey).catch(() => null),
+        ]);
+        return { sentiment: s ? { ...s, reviewQuery: review.query } : null, positioning, compare, profile };
+      })().catch(() => ({ sentiment: null, positioning: null, compare: null, profile: null })),
+    ]);
+    recommendVisibility = { ...rv, contentMatch, ...extras };
+  }
+  updateAuditJob(jobId, {
+    status: 'completed',
+    recommendVisibility,
+    pageWords: crawl.pages.filter((p) => p.ok && !p.nonHtml).map((p) => p.mainTextLength),
+    message: `完成，爬取 ${crawl.pages.length} 頁`,
+  });
 }

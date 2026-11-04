@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
     message: job.message,
     progress: job.progress,
     url: job.url,
+    kind: job.kind,
     engine: job.engine,
     audit: job.status === 'completed' ? job.result : undefined,
     schemaCards: job.status === 'completed' ? job.schemaCards : undefined,

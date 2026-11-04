@@ -2,9 +2,11 @@
 
 import { BrandProfileView } from "@/components/report/BrandProfile";
 import { Fragment, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { StepAuditIcon, StepInputIcon, StepReportIcon } from "@/components/marketing/StepIcons";
 import Link from "next/link";
 import Masthead from "@/components/marketing/Masthead";
+import { AUTH_CHANGED_EVENT, openLogin } from "@/components/marketing/AccountMenu";
 import Section from "@/components/marketing/Section";
 import Footer from "@/components/marketing/Footer";
 import { tallyCitedDomains, type CitedDomain } from "@/lib/geo-cited-domains";
@@ -16,11 +18,20 @@ import { SITE_NAME } from "@/lib/site";
 // 報告目錄切換：每一頁要顯示哪些區塊（section id）。沒列的頁就只顯示同名那一區
 const REPORT_PAGES: Record<string, string[]> = {
   overview: ["overview"],
-  tech: ["tech", "audit"],
 };
 
-// 第一版報告先不給技術內容跟改善建議（見報告區塊那段註解）
-const SHOW_TECH_SECTIONS = false;
+type AuditKind = "geo" | "seo";
+const KIND_INFO: Record<AuditKind, { label: string; desc: string }> = {
+  geo: { label: "GEO 健檢", desc: "AI 推薦了誰、怎麼評價你、AI 爬蟲讀不讀得到" },
+  seo: { label: "SEO 健檢", desc: "多頁深度健檢：標題描述、大小標題、sitemap、結構化資料…" },
+};
+
+interface MeResponse {
+  user: { email: string; name: string; picture?: string } | null;
+  usage?: Record<AuditKind, { url: string; at: string } | null>;
+  admin?: boolean;
+  loginAvailable: boolean;
+}
 
 import { CompetitorCompare, HeadToHead } from "@/components/report/CompetitorCompare";
 import { OverviewBoard } from "@/components/report/OverviewBoard";
@@ -63,7 +74,7 @@ const HOME_CHECKS = [
 ];
 
 const HOME_STEPS = [
-  { no: "01", title: "輸入網址", body: "貼上網址就好，不用註冊。", Icon: StepInputIcon },
+  { no: "01", title: "輸入網址", body: "選 GEO 或 SEO，用 Google 帳號登入，每天各免費一次。", Icon: StepInputIcon },
   {
     no: "02",
     title: "七層檢測 + 深度健檢",
@@ -279,6 +290,7 @@ interface StatusResponse {
   message: string;
   progress: { crawled: number; discovered: number; cap: number };
   url: string;
+  kind?: AuditKind;
   engine?: EngineResult;
   audit?: CheckItem[];
   schemaCards?: SchemaTypeCard[];
@@ -2429,8 +2441,8 @@ function SchemaSection({
 // 已經挑出來了，這張表是「要查證時才翻」的明細，不該用一整片文字擋在路上，所以
 // 預設收合。跟 BotAccessList 同一個原則：收合是預設呈現方式，不是藏資訊——標題列
 // 保留三個狀態的數量，一鍵展開看全部。
-function AuditTable({ checks, origin }: { checks: CheckItem[]; origin?: string }) {
-  const [open, setOpen] = useState(false);
+function AuditTable({ checks, origin, defaultOpen = false }: { checks: CheckItem[]; origin?: string; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
   const groups = new Map<string, CheckItem[]>();
   for (const c of checks) {
     const g = groups.get(c.category) ?? [];
@@ -3417,6 +3429,78 @@ function LlmsTxtCard({ llmsTxt }: { llmsTxt: { exists: boolean | null; quality: 
   );
 }
 
+// 首頁／報告側欄的檢測類型切換：GEO、SEO 是兩條獨立的檢測，每個 Google 帳號每天各免費一次。
+// 今天用過了不在這裡標，按「開始檢測」時才跳提示框（管理員／公司網域不受限）。
+function KindPicker({
+  kind,
+  onChange,
+  compact = false,
+}: {
+  kind: AuditKind;
+  onChange: (k: AuditKind) => void;
+  compact?: boolean;
+}) {
+  return (
+    <div role="radiogroup" aria-label="檢測類型" className={`grid grid-cols-2 gap-2 ${compact ? "mb-2" : "mb-3"}`}>
+      {(["geo", "seo"] as const).map((k) => {
+        const active = kind === k;
+        return (
+          <button
+            key={k}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(k)}
+            className={`rounded-lg px-3 text-left transition-colors ${compact ? "py-1.5" : "py-2.5"} ${
+              active ? "bg-lime/[.16] shadow-[inset_0_0_0_2px_var(--lime)]" : "bg-white/[.06] shadow-[inset_0_0_0_1px_rgba(255,255,255,.22)] hover:bg-white/[.1]"
+            }`}
+          >
+            <span className={`flex items-center gap-2 font-semibold text-paper ${compact ? "text-[13px]" : "text-[14.5px]"}`}>
+              {KIND_INFO[k].label}
+            </span>
+            {!compact && <span className="mt-0.5 block text-[12px] leading-snug text-[#c6cdda]">{KIND_INFO[k].desc}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// 今天這一種健檢用完了：跳提示框，不在按鈕上標「已用過」
+function QuotaNotice({ kind, onClose }: { kind: AuditKind; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] grid place-items-center bg-black/50 px-4"
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div role="alertdialog" aria-modal="true" aria-labelledby="quota-title" className="w-full max-w-[400px] rounded-2xl bg-white p-7 text-ink shadow-[0_20px_60px_rgba(0,0,0,.25)]">
+        <h2 id="quota-title" className="text-[20px] font-bold">今日已檢測完畢</h2>
+        <p className="mt-2 text-[14px] leading-relaxed text-ink3">
+          今天的免費 {KIND_INFO[kind].label} 已經用過了，明天可以再測。想一次看更多網站，可以直接聯絡我們。
+        </p>
+        <div className="mt-6 flex gap-2">
+          <button type="button" onClick={onClose} autoFocus className="btn-lime flex-1 py-2.5 text-[14.5px]">
+            知道了
+          </button>
+          <Link href="/contact" className="flex-1 rounded-lg border border-line py-2.5 text-center text-[14.5px] hover:bg-black/[.04]">
+            聯絡我們
+          </Link>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function kindUsed(me: MeResponse | null, k: AuditKind): boolean {
+  return !!me?.user && !me.admin && !!me.usage?.[k];
+}
+
 export default function HomeClient({
   botCount,
   checkCount,
@@ -3449,6 +3533,34 @@ export default function HomeClient({
   const [keywordLoading, setKeywordLoading] = useState(false);
   const [keywordError, setKeywordError] = useState("");
   const [recommendOverride, setRecommendOverride] = useState<RecommendVisibility | null>(null);
+  const [kind, setKind] = useState<AuditKind>("geo");
+  const [reportPage, setReportPage] = useState("overview");
+  const [me, setMe] = useState<MeResponse | null>(null);
+  // 今日次數用完的提示框
+  const [quotaNotice, setQuotaNotice] = useState<AuditKind | null>(null);
+
+  function refreshMe() {
+    return fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d: MeResponse) => {
+        setMe(d);
+        return d;
+      })
+      .catch(() => null);
+  }
+
+  function goLogin(u: string, k: AuditKind) {
+    // 跟右上角「登入」同一個彈框；登完回首頁自動開始這次健檢
+    openLogin(`/?${new URLSearchParams({ url: u, kind: k, autostart: "1" }).toString()}`, "要先登入才能開始檢測");
+  }
+
+  // 右上角帳號選單登出／登入後，重抓次數狀態
+  useEffect(() => {
+    const onChange = () => void refreshMe();
+    window.addEventListener(AUTH_CHANGED_EVENT, onChange);
+    return () => window.removeEventListener(AUTH_CHANGED_EVENT, onChange);
+  }, []);
+
 
   // 按下「開始檢測」之後，「01 THE CHECK」以下那幾個行銷內容區塊（介紹健檢會看什麼、
   // 怎麼運作、報告長什麼樣）就不需要了——使用者已經在等結果，這些說明文字只會讓進度卡
@@ -3466,7 +3578,9 @@ export default function HomeClient({
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d) {
-          setStatus(d as StatusResponse);
+          const k: AuditKind = new URLSearchParams(window.location.search).get("kind") === "seo" ? "seo" : d.kind ?? "geo";
+          setStatus({ ...(d as StatusResponse), kind: k });
+          setReportPage(k === "seo" ? "seo-overview" : "overview");
           setUrl(d.url ?? "");
         }
       })
@@ -3474,24 +3588,53 @@ export default function HomeClient({
   }, []);
 
   const reportReady = status?.status === "completed" && !!status.engine;
-  const [reportPage, setReportPage] = useState("overview");
 
   async function handleCheck(e?: React.FormEvent) {
     e?.preventDefault();
     if (!url.trim() || loading) return;
+    if (!me?.user) {
+      if (me && !me.loginAvailable) {
+        setError("登入功能還沒設定好，暫時無法檢測。");
+        return;
+      }
+      goLogin(url.trim(), kind);
+      return;
+    }
+    if (kindUsed(me, kind)) {
+      setQuotaNotice(kind);
+      return;
+    }
+    await startCheck(url.trim(), kind);
+  }
+
+  async function startCheck(target: string, k: AuditKind) {
+    if (loading) return;
+    setUrl(target);
+    setKind(k);
     setLoading(true);
     setError("");
     setStatus(null);
     setRecommendOverride(null);
-    track("audit_start", { domain: url.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "") });
+    track("audit_start", { kind: k, domain: target.replace(/^https?:\/\//, "").replace(/\/.*$/, "") });
     try {
       const res = await fetch("/api/geo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url: target, kind: k }),
       });
       const data = await res.json();
+      if (res.status === 401 && data.needLogin) {
+        goLogin(target, k);
+        return;
+      }
+      if (res.status === 403 && data.quotaUsed) {
+        setLoading(false);
+        setQuotaNotice(k);
+        void refreshMe();
+        return;
+      }
       if (!res.ok) throw new Error(data.error ?? "檢測失敗");
+      void refreshMe();
       const jobId = data.jobId as string;
       activeJobId.current = jobId;
       setReportJobId(jobId);
@@ -3517,11 +3660,13 @@ export default function HomeClient({
       setStatus(d);
       if (d.status === "completed") {
         setLoading(false);
+        setReportPage(d.kind === "seo" ? "seo-overview" : "overview");
         // 完成才算一次真的健檢：GA 事件帶網域、總分、等第、三種狀態各幾項
         const cats = buildCategories5(d.engine, d.audit);
         const overall = computeOverallScore(cats);
         const count = (st: string) => (d.audit ?? []).filter((c) => c.status === st).length;
         track("audit_complete", {
+          kind: d.kind ?? "geo",
           domain: d.engine?.origin.replace(/^https?:\/\//, "") ?? "",
           score: overall.score,
           grade: overall.grade,
@@ -3532,11 +3677,43 @@ export default function HomeClient({
         });
         return;
       }
-      if (d.status === "failed") throw new Error(d.error ?? "健檢失敗");
+      if (d.status === "failed") {
+        void refreshMe(); // 失敗會把次數還回去
+        throw new Error(d.error ?? "健檢失敗");
+      }
     }
   }
 
+  // 登入回來時網址帶著 url／kind／autostart：自動開跑，不用使用者再按一次
+  const autostart = useRef<{ url: string; kind: AuditKind } | null>(null);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const qUrl = q.get("url");
+    const qKind = q.get("kind") === "seo" ? "seo" : "geo";
+    const hasKind = q.has("kind");
+    const loginError = q.get("login_error");
+    if (qUrl && q.get("autostart") === "1") autostart.current = { url: qUrl, kind: qKind };
+    if (q.has("url") || q.has("login_error") || q.has("autostart")) {
+      q.delete("url");
+      q.delete("kind");
+      q.delete("autostart");
+      q.delete("login_error");
+      const rest = q.toString();
+      window.history.replaceState(null, "", rest ? `/?${rest}` : "/");
+    }
+    refreshMe().then((d) => {
+      if (qUrl) setUrl(qUrl);
+      if (hasKind) setKind(qKind);
+      if (loginError) setError(loginError);
+      const a = autostart.current;
+      autostart.current = null;
+      if (a && d?.user) void startCheck(a.url, a.kind);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在掛載時跑一次
+  }, []);
+
   const engine = status?.engine;
+  const reportKind: AuditKind = status?.kind ?? "geo";
   const unknownCount = engine?.results.filter((r) => r.status === "unknown").length ?? 0;
 
   // 自動抓的候選字只是建議，不會預設進查詢清單——使用者要自己點加入，
@@ -3625,6 +3802,7 @@ export default function HomeClient({
     <div className="min-h-screen bg-paper">
       <div className="marketing">
         {!reportReady && <Masthead />}
+        {quotaNotice && <QuotaNotice kind={quotaNotice} onClose={() => setQuotaNotice(null)} />}
 
         {reportReady ? null : (
           <>
@@ -3669,9 +3847,11 @@ export default function HomeClient({
                 <mark className="bg-transparent whitespace-nowrap text-lime">答案裡</mark>嗎？
               </h1>
               <p className="mt-[22px] max-w-[32em] text-[17.5px] text-[#c6cdda]">
-                我們用各家 AI 爬蟲的身分實際去讀你的網站，再實際去問 AI 認不認得你的品牌，最後跑一次多頁深度健檢。
+                GEO 健檢用各家 AI 爬蟲的身分實際去讀你的網站，再實際去問 AI 推薦了誰；SEO 健檢多頁取樣，逐項檢查標題、結構與收錄。
               </p>
-              <form onSubmit={handleCheck} className="pointer-events-auto mt-9 flex max-w-[560px] gap-2.5">
+              <form onSubmit={handleCheck} className="pointer-events-auto mt-9 max-w-[560px]">
+                <KindPicker kind={kind} onChange={setKind} />
+                <div className="flex gap-2.5">
                 <input
                   type="text"
                   value={url}
@@ -3683,11 +3863,12 @@ export default function HomeClient({
                 <button type="submit" disabled={loading} className="btn-lime shrink-0 px-[22px] py-[11px] text-[14.5px]">
                   {loading ? "檢測中…" : "開始檢測"}
                 </button>
+                </div>
               </form>
               {/* 11.5px 的細字疊在光軌上，用 #a2acbd 實測只有 4.22:1（量法：把文字層
                   visibility:hidden 後截圖，取這一帶最亮的背景像素）。提亮到 #c6cdda 才過 4.5。 */}
               <p className="mono mt-3.5 text-[11.5px] text-[#c6cdda]">
-                約 40 秒 · 不需要註冊 · 只讀取公開可存取的內容 · 已檢測 {checkedCount} 個網站
+                Google 帳號登入 · GEO、SEO 每天各免費一次 · 只讀取公開可存取的內容 · 已檢測 {checkedCount} 個網站
               </p>
             </div>
           </div>
@@ -3786,14 +3967,14 @@ export default function HomeClient({
             <RadarSweep />
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-4">
-                <p className="eyebrow">{status ? "深度健檢進行中" : "健檢啟動中"}</p>
+                <p className="eyebrow">{status ? `${KIND_INFO[kind].label}進行中` : "健檢啟動中"}</p>
                 {status && status.progress.crawled > 0 && (
                   <span className="mono text-xs text-ink3">
                     {status.progress.crawled}/{status.progress.cap} 頁
                   </span>
                 )}
               </div>
-              <p className="mt-2 text-sm text-ink2">{status ? status.message : "正在檢查 AI 爬蟲存取權限、品牌能見度…"}</p>
+              <p className="mt-2 text-sm text-ink2">{status ? status.message : kind === "seo" ? "正在連線你的網站…" : "正在檢查 AI 爬蟲存取權限、品牌能見度…"}</p>
               <div className="progress-track mt-4">
                 {status?.status === "crawling" && status.progress.cap > 0 ? (
                   <div
@@ -3822,6 +4003,7 @@ export default function HomeClient({
               </Link>
               <form onSubmit={handleCheck} className="border-b border-white/10 px-5 py-4">
                 <p className="mb-2 text-[14px] text-[#a7b1c2]">檢測其他網站</p>
+                <KindPicker kind={kind} onChange={setKind} compact />
                 <input
                   type="text"
                   value={url}
@@ -3836,7 +4018,11 @@ export default function HomeClient({
               </form>
               <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
             <ReportNav
-              items={[
+              items={reportKind === "seo" ? [
+                { id: "seo-overview", label: "SEO 總覽" },
+                ...(status?.audit && status.schemaCards ? [{ id: "schema", label: "結構化資料" }] : []),
+                ...(status?.audit ? [{ id: "audit", label: "深度健檢明細" }] : []),
+              ] : [
                 { id: "overview", label: "總覽" },
                 ...(brandTable ? [{ id: "brands", label: "品牌推薦排名" }] : []),
                 ...(brandTable ? [{ id: "competitors", label: "競爭對手分析" }] : []),
@@ -3847,9 +4033,7 @@ export default function HomeClient({
                 ...(citedDomains.length > 0 ? [{ id: "citations", label: "引用來源" }] : []),
                 ...(engine.brandVisibility.length > 0 ? [{ id: "brand-check", label: "品牌輪廓" }] : []),
                 { id: "more", label: "關鍵字查詢" },
-                ...(SHOW_TECH_SECTIONS
-                  ? [{ id: "tech", label: "技術健檢" }, ...(status?.audit ? [{ id: "audit", label: "深度健檢明細" }] : [])]
-                  : []),
+                { id: "tech", label: "AI 爬蟲存取" },
               ]}
               active={reportPage}
               onSelect={goPage}
@@ -3868,7 +4052,8 @@ export default function HomeClient({
             <div className="report-head sticky top-0 z-20 -mx-12 flex items-baseline gap-4 border-b border-line bg-card px-12 py-5">
               <h1 className="text-[24px] font-bold text-ink">{reportBrand || reportHost}</h1>
               <span className="mono text-[15px] text-ink3">{reportHost}</span>
-              {recommend && (
+              <span className="rounded-full border border-line px-2.5 py-0.5 text-[13px] text-ink2">{KIND_INFO[reportKind].label}</span>
+              {recommend && reportKind === "geo" && (
                 <span className="text-[15px] text-ink3">
                   {new Date(recommend.askedAt).toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })} 問的 AI
                 </span>
@@ -4086,12 +4271,12 @@ export default function HomeClient({
               </DashSection>
             </div>
 
-            {/* 封存（2026-11-02）：第一版報告只給「看不懂技術的人」看——AI 有沒有推薦你、推了誰。
-                技術檢測（爬蟲權限、五分類分數、結構化資料、深度健檢）跟「要怎麼改」先收起來，
-                程式碼留著，要恢復把 SHOW_TECH_SECTIONS 改回 true。 */}
-            {SHOW_TECH_SECTIONS && (
-            <>
-            <div id="tech" className="mt-12 scroll-mt-24">
+            {/* GEO 健檢的「AI 爬蟲存取」頁：11-02 封存的技術檢測＋改善建議，11-04 加回來。
+                23 項深度健檢、結構化資料、總分報告圖搬到 SEO 健檢（兩條獨立的檢測）。 */}
+            {reportKind === "geo" && (
+            <DashSection id="tech" title="AI 爬蟲存取" desc="各家 AI 爬蟲讀不讀得到你的網站、讀到什麼，以及哪裡可以改">
+            <div className="flex flex-col gap-6">
+            <div>
             {/* 判定不出來時必須明講。給假綠燈比不給答案傷害更大 */}
             <div
               className={`rounded-[10px] border p-6 text-center ${
@@ -4155,26 +4340,6 @@ export default function HomeClient({
               {engine.robotsStatus === "found" && (
                 <p className="mono mt-2 text-[14px] text-ink3">規則來源：{engine.robotsUrl}</p>
               )}
-            </div>
-
-            {/* 健檢報告圖：整份報告的入口。原本這上面還有「五分類總覽」（總分環＋
-                雷達圖）跟「檢測總覽」（狀態色堆疊長條）兩塊，內容跟報告圖裡的雷達、
-                甜甜圈完全重複，同一組數字在同一頁講三次——報告圖本來就是設計來取代
-                它們的，所以整個拿掉，不是搬到別的地方。 */}
-            <div className="mt-6">
-              <ReportBoardSection
-                jobId={reportJobId}
-                origin={engine.origin}
-                engine={engine}
-                audit={status?.audit}
-                pageWords={status?.pageWords}
-                crawledPages={status?.progress.crawled ?? 0}
-                keywordPage={
-                  Object.keys(allKeywordResults).length > 0
-                    ? { keywords: allKeywordOrder, results: allKeywordResults, citedDomains, diagnosis }
-                    : null
-                }
-              />
             </div>
 
             </div>
@@ -4254,35 +4419,61 @@ export default function HomeClient({
 
             {engine.visibilityNote && <p className="mt-4 text-center text-[15px] text-ink3">{engine.visibilityNote}</p>}
 
-            {status?.audit && status.schemaCards && (
-              <SchemaSection audit={status.audit} schemaCards={status.schemaCards} origin={engine.origin} />
-            )}
-
-            <h2 className="eyebrow mt-8 mb-3">各家 AI 爬蟲的存取權限</h2>
+            <div>
+            <h2 className="eyebrow mb-3">各家 AI 爬蟲的存取權限</h2>
             <BotAccessList results={engine.results} origin={engine.origin} />
+            </div>
 
             {engine.contentSignals && <ContentSignalsSection signals={engine.contentSignals} />}
 
             {engine.llmsTxt.exists !== null && <LlmsTxtCard llmsTxt={engine.llmsTxt} />}
 
-            {/* 深度健檢：多頁爬蟲＋規則＋AI 語意判斷。這個區塊外層已經整包包在
-                status.status === "completed" 底下，跑到這裡 status.audit 一定有值——
-                進行中的畫面統一由最外層那張進度卡負責，這裡不用再重複一份。
-                上面那張分佈圖講的就是這張表的組成，貼著放才是圖文對照。 */}
-            {status?.audit && (
-              <RbSoloCard className="mt-10 print:hidden">
-                <RbCheckDistribution cats={buildCategories5(engine, status.audit)} />
-              </RbSoloCard>
+            </div>
+            </DashSection>
             )}
-            <div id="audit" className="mt-6 scroll-mt-24">
-              {status?.audit && (
+
+            {/* SEO 健檢：多頁爬蟲＋23 項規則＋結構化資料，每項附改善建議 */}
+            {reportKind === "seo" && (
+              <DashSection id="seo-overview" title="SEO 總覽" desc="多頁取樣後的總分，與各分類需處理、可優化、正常的項目數">
+            {/* 健檢報告圖：整份報告的入口。原本這上面還有「五分類總覽」（總分環＋
+                雷達圖）跟「檢測總覽」（狀態色堆疊長條）兩塊，內容跟報告圖裡的雷達、
+                甜甜圈完全重複，同一組數字在同一頁講三次——報告圖本來就是設計來取代
+                它們的，所以整個拿掉，不是搬到別的地方。 */}
+            <div>
+              <ReportBoardSection
+                jobId={reportJobId}
+                origin={engine.origin}
+                engine={engine}
+                audit={status?.audit}
+                pageWords={status?.pageWords}
+                crawledPages={status?.progress.crawled ?? 0}
+                keywordPage={
+                  Object.keys(allKeywordResults).length > 0
+                    ? { keywords: allKeywordOrder, results: allKeywordResults, citedDomains, diagnosis }
+                    : null
+                }
+              />
+            </div>
+                {status?.audit && (
+                  <RbSoloCard className="mt-6 print:hidden">
+                    <RbCheckDistribution cats={buildCategories5(engine, status.audit)} />
+                  </RbSoloCard>
+                )}
+              </DashSection>
+            )}
+            {reportKind === "seo" && status?.audit && status.schemaCards && (
+              <DashSection id="schema" title="結構化資料" desc="網站目前有哪些結構化資料、缺哪些欄位，可以直接生成補上">
+                <SchemaSection audit={status.audit} schemaCards={status.schemaCards} origin={engine.origin} />
+              </DashSection>
+            )}
+            {reportKind === "seo" && status?.audit && (
+              <DashSection id="audit" title="深度健檢明細" desc="逐項列出量到的值、影響與改善建議；結構化資料另見上一頁">
                 <AuditTable
                   checks={status.audit.filter((c) => c.key !== "schema" && c.key !== "localbiz")}
                   origin={engine.origin}
+                  defaultOpen
                 />
-              )}
-            </div>
-            </>
+              </DashSection>
             )}
             </div>
           </div>

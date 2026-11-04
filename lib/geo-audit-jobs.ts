@@ -7,6 +7,7 @@ import type { LlmsTxtQuality } from './geo-llms-txt';
 import type { SchemaTypeCard } from './geo-schema-check';
 import type { RecommendVisibility, RecommendInput } from './geo-recommend-visibility';
 import type { MatchPage } from './geo-content-match';
+import type { AuditKind } from './quota';
 
 // ── GEO 深度健檢：背景工作進度存放（module 內 in-memory Map）────────────
 // 多頁爬蟲＋AI 語意判斷跑起來要幾十秒到一兩分鐘，改成背景 job：
@@ -35,6 +36,10 @@ export interface EngineResult {
 export interface AuditJob {
   id: string;
   url: string;
+  // GEO（AI 推薦儀表板＋AI 爬蟲存取）或 SEO（多頁深度健檢）——兩條獨立的檢測
+  kind: AuditKind;
+  // 誰跑的：失敗時要把這個帳號的免費次數還回去
+  email: string;
   status: AuditJobStatus;
   message: string;
   progress: { crawled: number; discovered: number; cap: number };
@@ -64,13 +69,15 @@ function sweep() {
   }
 }
 
-export function createAuditJob(url: string): AuditJob {
+export function createAuditJob(url: string, kind: AuditKind, email: string): AuditJob {
   sweep();
   const now = Date.now();
   const id = `geo_${now.toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const job: AuditJob = {
     id,
     url,
+    kind,
+    email,
     status: 'engine',
     message: '檢測 AI 引擎可達性…',
     progress: { crawled: 0, discovered: 0, cap: 40 },

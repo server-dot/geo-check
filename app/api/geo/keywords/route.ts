@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { checkKeywordVisibility } from '@/lib/geo-keyword-visibility';
 import { assertPublicUrl, UnsafeUrlError } from '@/lib/geo-url-guard';
 import { LIMITS, clientIp, hoursLeft, takeDaily } from '@/lib/rate-limit';
+import { getSessionUser, isAdmin } from '@/lib/auth';
 
 // 關鍵字 AI 能見度：使用者自己選好要測哪些關鍵字後才觸發，不是每次健檢自動跑——
 // 一個關鍵字要查兩個引擎，關鍵字越多花的 API 額度越多，這裡刻意做成按需查詢，
@@ -11,6 +12,8 @@ export const maxDuration = 30;
 const MAX_KEYWORDS_PER_REQUEST = 8;
 
 export async function POST(req: NextRequest) {
+  const user = getSessionUser(req);
+  if (!user) return NextResponse.json({ error: '請先用 Google 帳號登入', needLogin: true }, { status: 401 });
   let body: { keywords?: unknown; url?: unknown };
   try {
     body = await req.json();
@@ -36,7 +39,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err instanceof UnsafeUrlError ? err.message : '網址格式不正確' }, { status: 400 });
   }
 
-  const limited = takeDaily('keywords', clientIp(req), LIMITS.keywordRequestsPerDay);
+  const limited = isAdmin(user.email) ? null : takeDaily('keywords', clientIp(req), LIMITS.keywordRequestsPerDay);
   if (limited) {
     return NextResponse.json(
       { error: `這個網路位置今天已經查過 ${LIMITS.keywordRequestsPerDay} 輪關鍵字，${hoursLeft(limited.retryAfterMs)}後可以再查。` },

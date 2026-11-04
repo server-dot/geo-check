@@ -3,6 +3,7 @@ import { getAuditJob, getAuditJobContext, updateAuditJob } from '@/lib/geo-audit
 import { runRecommendVisibility, sanitizeCustomQuestions } from '@/lib/geo-recommend-visibility';
 import { matchQuestionsToPages } from '@/lib/geo-content-match';
 import { LIMITS, clientIp, hoursLeft, takeDaily } from '@/lib/rate-limit';
+import { getSessionUser, isAdmin } from '@/lib/auth';
 
 // 使用者自己改推薦題再問一次。AI 猜的題目可能根本不是客戶會問的、或跟你主推的東西對不上，
 // 那後面「AI 為什麼沒推薦你」三關的判斷全都建立在錯的題目上——所以要讓人能改。
@@ -10,6 +11,8 @@ import { LIMITS, clientIp, hoursLeft, takeDaily } from '@/lib/rate-limit';
 export const maxDuration = 90;
 
 export async function POST(req: NextRequest) {
+  const user = getSessionUser(req);
+  if (!user) return NextResponse.json({ error: '請先用 Google 帳號登入', needLogin: true }, { status: 401 });
   let body: { jobId?: unknown; questions?: unknown };
   try {
     body = await req.json();
@@ -29,7 +32,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '題目要 8 到 80 個字，而且不能有你的品牌名（有品牌名就變成問 AI 認不認得你）。' }, { status: 400 });
   }
 
-  const limited = takeDaily('recommend', clientIp(req), LIMITS.keywordRequestsPerDay);
+  const limited = isAdmin(user.email) ? null : takeDaily('recommend', clientIp(req), LIMITS.keywordRequestsPerDay);
   if (limited) {
     return NextResponse.json(
       { error: `這個網路位置今天已經改題重問 ${LIMITS.keywordRequestsPerDay} 次，${hoursLeft(limited.retryAfterMs)}後可以再問。` },
