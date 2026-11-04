@@ -265,10 +265,14 @@ export async function extractRecommendedNames(
         .map((c, i) => (c.isSelf ? `[${i + 1}]` : ''))
         .filter(Boolean);
       const lineWithName = answers[idx].answer.split('\n').find((l) => l.toLowerCase().includes(key)) ?? '';
+      // 那一行已經點名你的時候，引用標記是給你的，不能算到同一行的別人頭上
+      // （11-04 aiqkangber：「其中 Darrell TW、D2 Group、Q kangber 比較偏…[5][6][10]」，
+      // Darrell TW 被當成你，推最多次的對手從名單上消失）
+      const lineNamesSelf = tokens.some((t) => lineWithName.toLowerCase().includes(t));
       const isSelf =
         tokens.some((t) => key.includes(t) || (key.length >= 3 && t.includes(key))) ||
         isSameSite(hostnameOf(name.startsWith('http') ? name : `https://${name}`), domain) ||
-        selfMarks.some((m) => lineWithName.includes(m));
+        (!lineNamesSelf && selfMarks.some((m) => lineWithName.includes(m)));
       let entry = byNorm.get(norm);
       if (!entry) {
         entry = { name, norm, answers: new Set(), engines: new Set(), isSelf, kind };
