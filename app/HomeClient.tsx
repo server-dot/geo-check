@@ -1527,7 +1527,7 @@ function ReportBoard({
                           {r.engine}
                         </span>
                         <span style={{ fontSize: 12, whiteSpace: "nowrap", flex: "none", color: r.citedSelf ? "var(--rb-ok)" : "var(--rb-fail)" }}>
-                          {r.citedSelf ? "🟢 有提到你" : "🔴 沒有引用你"}
+                          {r.citedSelf ? "🟢 引用了你的網站" : "🔴 沒有引用你的網站"}
                         </span>
                       </div>
                       {r.advice && <div style={{ fontSize: 12.5, lineHeight: 1.65, color: "var(--rb-ink2)" }}>{r.advice}</div>}
@@ -1652,7 +1652,6 @@ function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData 
   const rest = data.citedDomains.length - top.length;
   const selfBelow = selfRank >= 10 ? data.citedDomains[selfRank] : null;
   const hitStatus: CheckStatus = allResults.length === 0 ? "warn" : hit === allResults.length ? "ok" : hit > 0 ? "warn" : "fail";
-  const citedOnly = allResults.filter((r) => r.citedSelf && r.namedSelf === false).length;
 
   return (
     <div
@@ -1697,9 +1696,7 @@ function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData 
           note={
             hit > 0
               ? `${allResults.length} 次提問裡有 ${hit} 次把你寫進答案`
-              : citedOnly > 0
-                ? `${allResults.length} 次都沒把你寫進答案，其中 ${citedOnly} 次它查過你`
-                : "AI 回答這些題目時沒有提到你"
+              : "AI 回答這些題目時沒有提到你"
           }
         />
         <RbStat label="被引用的網域" value={data.citedDomains.length} unit="個" dot="🌐" note="所有回答的引用來源，依網域彙總" />
@@ -1732,10 +1729,10 @@ function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData 
                           fontSize: 12,
                           whiteSpace: "nowrap",
                           flex: "none",
-                          color: scored(r) ? "var(--rb-ok)" : r.citedSelf ? "var(--rb-warn)" : "var(--rb-fail)",
+                          color: scored(r) ? "var(--rb-ok)" : "var(--rb-fail)",
                         }}
                       >
-                        {scored(r) ? "🟢 有提到你" : r.citedSelf ? "🟡 查過你沒推你" : "🔴 沒有提到你"}
+                        {scored(r) ? "🟢 有提到你" : "🔴 沒有提到你"}
                       </span>
                     </div>
                     {r.advice && <div style={{ fontSize: 12.5, lineHeight: 1.65, color: "var(--rb-ink2)" }}>{r.advice}</div>}
@@ -3321,10 +3318,12 @@ function BrandVisibilityCard({ result }: { result: VisibilityCardData }) {
             : "🔴 沒有引用你自己的網站"
           : result.namedSelf
             ? "🟢 答案裡推薦了你"
-            : result.citedSelf
-              ? "🟡 查過你，但答案裡沒推薦你"
-              : "🔴 沒有推薦你"}
+            : "🔴 答案裡沒推薦你"}
       </p>
+      {/* 推薦（答案點名）跟引用（來源列出你的網站）分開講，不合成一個燈號 */}
+      {result.namedSelf !== undefined && (
+        <p className="mt-1 text-[14px] text-ink3">引用來源：{result.citedSelf ? "有你的網站" : "沒有你的網站"}</p>
+      )}
       {result.advice && <p className="mt-2 text-[15px] leading-relaxed text-ink2">{result.advice}</p>}
 
       <div className="quote-block mt-4 border-l-[3px] border-lime pl-4">

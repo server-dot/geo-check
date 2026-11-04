@@ -525,11 +525,12 @@ interface QuestionLike {
   results: { engine: string; namedSelf?: boolean; citedSelf: boolean }[];
 }
 
-// 一題、一家 AI：兩種問法裡推了你幾次
-function Verdict({ named, total, cited }: { named: number; total: number; cited: boolean }) {
+// 一題、一家 AI：兩種問法裡推了你幾次。只看「答案有沒有點名推薦你」——
+// 引用（來源列出你的網站）是另一件事，放在「引用來源」頁，不混進這格。
+function Verdict({ named, total }: { named: number; total: number }) {
   const all = total > 0 && named === total;
-  const cls = all ? "bg-ok text-white" : named > 0 ? "bg-ok/15 text-ok" : cited ? "bg-warn/15 text-warn" : "bg-fail/10 text-fail";
-  const label = named > 0 ? `✓ 推薦你${total > 1 ? ` ${named}/${total}` : ""}` : cited ? "△ 查過你" : `✗ 沒有你${total > 1 ? ` 0/${total}` : ""}`;
+  const cls = all ? "bg-ok text-white" : named > 0 ? "bg-ok/15 text-ok" : "bg-fail/10 text-fail";
+  const label = named > 0 ? `✓ 推薦你${total > 1 ? ` ${named}/${total}` : ""}` : `✗ 沒推薦${total > 1 ? ` 0/${total}` : ""}`;
   return <span className={`inline-flex w-full justify-center rounded-md px-2 py-1.5 text-[14px] font-semibold ${cls}`}>{label}</span>;
 }
 
@@ -578,7 +579,7 @@ export function QuestionTable({
                   return (
                     <td key={e} className="px-3 pt-3 pb-1 align-top text-[14px]">
                       {rs.length > 0 ? (
-                        <Verdict named={rs.filter((r) => r.namedSelf).length} total={rs.length} cited={rs.some((r) => r.citedSelf)} />
+                        <Verdict named={rs.filter((r) => r.namedSelf).length} total={rs.length} />
                       ) : (
                         <span className="text-ink3">—</span>
                       )}

@@ -201,6 +201,13 @@ export function SentimentDiverging({ themes }: { themes: { theme: string; polari
 }
 
 // 引用來源組成：矩形樹圖
+// 粗估 SVG 文字寬度：中日韓字約一個字級寬，英數半個多
+function textWidth(t: string, fontSize: number): number {
+  let w = 0;
+  for (const ch of t) w += /[\u2e80-\uffff]/.test(ch) ? fontSize : fontSize * 0.6;
+  return w;
+}
+
 export function SourceTreemap({ data }: { data: { name: string; size: number; color: string }[] }) {
   return (
     <ResponsiveContainer width="100%" height={300}>
@@ -217,7 +224,9 @@ export function SourceTreemap({ data }: { data: { name: string; size: number; co
           return (
             <g>
               <rect x={x} y={y} width={width} height={height} fill={color} stroke="#fff" strokeWidth={2} rx={4} />
-              {width > 70 && height > 40 && (
+              {/* 夠高放兩行；矮的放一行「名稱 N 次」；再小就不放字，只靠滑過的提示。
+                  字寬用中文一字約 15px 估，放不下就不畫，免得字被格子切掉。 */}
+              {width >= Math.max(70, (name ?? "").length * 15 + 22) && height >= 56 ? (
                 <>
                   <text x={x + 10} y={y + 24} fontSize={15} fontWeight={700} stroke="none" fill={dark ? "#fff" : "#303c54"}>
                     {name}
@@ -226,12 +235,20 @@ export function SourceTreemap({ data }: { data: { name: string; size: number; co
                     {size} 次
                   </text>
                 </>
-              )}
+              ) : height >= 26 && width >= textWidth(`${name ?? ""} ${size} 次`, 14) + 20 ? (
+                <text x={x + 10} y={y + height / 2 + 5} fontSize={14} stroke="none" fill={dark ? "#fff" : "#303c54"}>
+                  <tspan fontWeight={700}>{name}</tspan> {size} 次
+                </text>
+              ) : height >= 22 && width >= textWidth(name ?? "", 13) + 14 ? (
+                <text x={x + 7} y={y + Math.min(height / 2 + 5, 20)} fontSize={13} fontWeight={700} stroke="none" fill={dark ? "#fff" : "#303c54"}>
+                  {name}
+                </text>
+              ) : null}
             </g>
           );
         }}
       >
-        <Tooltip {...tooltipStyle} formatter={(v) => [`${v} 次引用`, undefined]} />
+        <Tooltip {...tooltipStyle} formatter={(v, _n, item) => [`${v} 次引用`, (item?.payload as { name?: string } | undefined)?.name]} />
       </Treemap>
     </ResponsiveContainer>
   );

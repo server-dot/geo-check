@@ -196,7 +196,7 @@ export function buildReportMarkdown(job: AuditJob): string {
       out.push('');
       for (const r of q.results) {
         out.push(
-          `**${r.engine}**：${r.namedSelf ? '🟢 答案裡推薦了你' : r.citedSelf ? '🟡 查過你，但答案裡沒推薦你' : '🔴 沒有推薦你'}`,
+          `**${r.engine}**：推薦 ${r.namedSelf ? '🟢 答案裡推薦了你' : '🔴 答案裡沒推薦你'}｜引用 ${r.citedSelf ? '有你的網站' : '沒有你的網站'}`,
         );
         out.push('');
         out.push(r.answer.split('\n').map((l) => `> ${l}`).join('\n'));
