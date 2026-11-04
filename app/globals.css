@@ -126,6 +126,9 @@ code {
   display: inline-block;
 }
 .btn-lime:hover { background: var(--limeDark); }
+/* 選單項目、彈框按鈕這類長得不像連結的 <a>：拿掉全域 a 的金色底線（理由同上，要用具名 class） */
+.plain-link,
+.plain-link:hover { text-decoration: none; color: var(--ink); }
 .btn-lime:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-line {

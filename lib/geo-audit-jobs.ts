@@ -8,6 +8,7 @@ import type { SchemaTypeCard } from './geo-schema-check';
 import type { RecommendVisibility, RecommendInput } from './geo-recommend-visibility';
 import type { MatchPage } from './geo-content-match';
 import type { AuditKind } from './quota';
+import { saveAuditHistory } from './audit-history';
 
 // ── GEO 深度健檢：背景工作進度存放（module 內 in-memory Map）────────────
 // 多頁爬蟲＋AI 語意判斷跑起來要幾十秒到一兩分鐘，改成背景 job：
@@ -92,6 +93,33 @@ export function updateAuditJob(id: string, patch: Partial<Omit<AuditJob, 'id' | 
   const job = jobs.get(id);
   if (!job) return;
   Object.assign(job, patch, { updatedAt: Date.now() });
+  // 完成（或完成後改題重問）就存進檢測紀錄，重新整理、隔天回來都還看得到
+  if (job.status === 'completed') {
+    saveAuditHistory({ id: job.id, email: job.email, kind: job.kind, url: job.url, createdAt: job.createdAt, data: auditJobPayload(job) }).catch(
+      (e) => console.error('[history] 存檢測紀錄失敗', id, e),
+    );
+  }
+}
+
+// status API 回給前端的那包；檢測紀錄也原樣存這包
+export function auditJobPayload(job: AuditJob) {
+  const done = job.status === 'completed';
+  return {
+    ok: true,
+    id: job.id,
+    status: job.status,
+    message: job.message,
+    progress: job.progress,
+    url: job.url,
+    kind: job.kind,
+    createdAt: new Date(job.createdAt).toISOString(),
+    engine: job.engine,
+    audit: done ? job.result : undefined,
+    schemaCards: done ? job.schemaCards : undefined,
+    pageWords: done ? job.pageWords : undefined,
+    recommendVisibility: done ? job.recommendVisibility : undefined,
+    error: job.error,
+  };
 }
 
 export function getAuditJob(id: string): AuditJob | undefined {

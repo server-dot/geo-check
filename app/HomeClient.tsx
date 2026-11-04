@@ -291,6 +291,9 @@ interface StatusResponse {
   progress: { crawled: number; discovered: number; cap: number };
   url: string;
   kind?: AuditKind;
+  // 開始檢測／完成的時間（ISO）。檢測紀錄載回來時報告標題列顯示這個
+  createdAt?: string;
+  finishedAt?: string;
   engine?: EngineResult;
   audit?: CheckItem[];
   schemaCards?: SchemaTypeCard[];
@@ -3486,7 +3489,7 @@ function QuotaNotice({ kind, onClose }: { kind: AuditKind; onClose: () => void }
           <button type="button" onClick={onClose} autoFocus className="btn-lime flex-1 py-2.5 text-[14.5px]">
             知道了
           </button>
-          <Link href="/contact" className="flex-1 rounded-lg border border-line py-2.5 text-center text-[14.5px] hover:bg-black/[.04]">
+          <Link href="/contact" className="plain-link flex-1 rounded-lg border border-line py-2.5 text-center text-[14.5px] hover:bg-black/[.04]">
             聯絡我們
           </Link>
         </div>
@@ -3614,6 +3617,7 @@ export default function HomeClient({
     setError("");
     setStatus(null);
     setRecommendOverride(null);
+    if (window.location.search.includes("report=")) window.history.replaceState(null, "", "/");
     track("audit_start", { kind: k, domain: target.replace(/^https?:\/\//, "").replace(/\/.*$/, "") });
     try {
       const res = await fetch("/api/geo", {
@@ -3659,6 +3663,8 @@ export default function HomeClient({
       setStatus(d);
       if (d.status === "completed") {
         setLoading(false);
+        // 網址記住這份報告：重新整理、存書籤都能從檢測紀錄載回來
+        window.history.replaceState(null, "", `/?report=${jobId}`);
         setReportPage(d.kind === "seo" ? "seo-overview" : "overview");
         // 完成才算一次真的健檢：GA 事件帶網域、總分、等第、三種狀態各幾項
         const cats = buildCategories5(d.engine, d.audit);
@@ -3683,6 +3689,29 @@ export default function HomeClient({
     }
   }
 
+  // 網址帶 ?report=<id>：從檢測紀錄載回那份報告（重新整理不會不見）
+  async function openReport(id: string, loggedIn: boolean) {
+    if (!loggedIn) {
+      openLogin(`/?report=${encodeURIComponent(id)}`, "登入後查看檢測紀錄");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/history?id=${encodeURIComponent(id)}`);
+      const d = (await res.json()) as StatusResponse;
+      if (!res.ok) throw new Error(d.error ?? "找不到這份檢測紀錄");
+      const k: AuditKind = d.kind ?? "geo";
+      activeJobId.current = id;
+      setReportJobId(id);
+      setUrl(d.url ?? "");
+      setKind(k);
+      setStatus(d);
+      setReportPage(k === "seo" ? "seo-overview" : "overview");
+    } catch (err) {
+      window.history.replaceState(null, "", "/");
+      setError(err instanceof Error ? err.message : "找不到這份檢測紀錄");
+    }
+  }
+
   // 登入回來時網址帶著 url／kind／autostart：自動開跑，不用使用者再按一次
   const autostart = useRef<{ url: string; kind: AuditKind } | null>(null);
   useEffect(() => {
@@ -3691,6 +3720,7 @@ export default function HomeClient({
     const qKind = q.get("kind") === "seo" ? "seo" : "geo";
     const hasKind = q.has("kind");
     const loginError = q.get("login_error");
+    const reportId = q.get("report");
     if (qUrl && q.get("autostart") === "1") autostart.current = { url: qUrl, kind: qKind };
     if (q.has("url") || q.has("login_error") || q.has("autostart")) {
       q.delete("url");
@@ -3707,6 +3737,7 @@ export default function HomeClient({
       const a = autostart.current;
       autostart.current = null;
       if (a && d?.user) void startCheck(a.url, a.kind);
+      else if (reportId) void openReport(reportId, !!d?.user);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在掛載時跑一次
   }, []);
@@ -4052,9 +4083,9 @@ export default function HomeClient({
               <h1 className="text-[24px] font-bold text-ink">{reportBrand || reportHost}</h1>
               <span className="mono text-[15px] text-ink3">{reportHost}</span>
               <span className="rounded-full border border-line px-2.5 py-0.5 text-[13px] text-ink2">{KIND_INFO[reportKind].label}</span>
-              {recommend && reportKind === "geo" && (
+              {(status?.finishedAt ?? status?.createdAt ?? recommend?.askedAt) && (
                 <span className="text-[15px] text-ink3">
-                  {new Date(recommend.askedAt).toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })} 問的 AI
+                  {new Date((status?.finishedAt ?? status?.createdAt ?? recommend?.askedAt)!).toLocaleString("zh-TW", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })} 檢測
                 </span>
               )}
             </div>

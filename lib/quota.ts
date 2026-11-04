@@ -47,14 +47,24 @@ function db(): Pool | null {
            url TEXT NOT NULL,
            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
            PRIMARY KEY (email, kind, day)
-         );`,
+         );
+         CREATE TABLE IF NOT EXISTS gc_audits (
+           id TEXT PRIMARY KEY,
+           email TEXT NOT NULL,
+           kind TEXT NOT NULL,
+           url TEXT NOT NULL,
+           created_at TIMESTAMPTZ NOT NULL,
+           finished_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+           data JSONB NOT NULL
+         );
+         CREATE INDEX IF NOT EXISTS gc_audits_email ON gc_audits (email, created_at DESC);`,
       )
       .then(() => undefined);
   }
   return pool;
 }
 
-async function pg(): Promise<Pool | null> {
+export async function pg(): Promise<Pool | null> {
   const p = db();
   if (p) await ready;
   return p;

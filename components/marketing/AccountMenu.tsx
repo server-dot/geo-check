@@ -15,6 +15,18 @@ interface Me {
   loginAvailable: boolean;
 }
 
+interface HistoryItem {
+  id: string;
+  kind: Kind;
+  url: string;
+  createdAt: string;
+  finishedAt: string;
+}
+
+function fmtTime(iso: string): string {
+  return new Date(iso).toLocaleString("zh-TW", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
 export const OPEN_LOGIN_EVENT = "gc:open-login";
 export const AUTH_CHANGED_EVENT = "gc:auth-changed";
 
@@ -65,6 +77,7 @@ export default function AccountMenu() {
   const [modalNext, setModalNext] = useState<string | null>(null);
   const [modalHint, setModalHint] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[] | null>(null);
   const [mounted, setMounted] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -124,7 +137,16 @@ export default function AccountMenu() {
         <div ref={menuRef} className="relative">
           <button
             type="button"
-            onClick={() => setMenuOpen((o) => !o)}
+            onClick={() => {
+              const open = !menuOpen;
+              setMenuOpen(open);
+              // 每次打開都重抓，剛跑完的那次才會出現
+              if (open)
+                fetch("/api/history")
+                  .then((r) => r.json())
+                  .then((d: { items?: HistoryItem[] }) => setHistory(d.items ?? []))
+                  .catch(() => setHistory([]));
+            }}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             aria-label={`帳號：${me.user.email}`}
@@ -133,7 +155,7 @@ export default function AccountMenu() {
             <Avatar user={me.user} />
           </button>
           {menuOpen && (
-            <div role="menu" className="absolute right-0 top-[calc(100%+8px)] z-30 w-[260px] rounded-xl border border-line bg-white p-4 text-sm shadow-[0_12px_32px_rgba(0,0,0,.12)]">
+            <div role="menu" className="absolute right-0 top-[calc(100%+8px)] z-30 w-[300px] rounded-xl border border-line bg-white p-4 text-sm shadow-[0_12px_32px_rgba(0,0,0,.12)]">
               <div className="flex items-center gap-3">
                 <Avatar user={me.user} size={36} />
                 <div className="min-w-0">
@@ -151,6 +173,28 @@ export default function AccountMenu() {
                       <span className="text-ink3">{me.usage?.[k] ? "今日已檢測" : "今日可免費 1 次"}</span>
                     </div>
                   ))
+                )}
+              </div>
+              <div className="mt-3 border-t border-line pt-3">
+                <div className="mb-1.5 text-[13px] font-semibold">檢測紀錄</div>
+                {history === null ? (
+                  <div className="py-1 text-[12.5px] text-ink3">載入中…</div>
+                ) : history.length === 0 ? (
+                  <div className="py-1 text-[12.5px] text-ink3">還沒有檢測紀錄</div>
+                ) : (
+                  <ul className="-mx-2 max-h-[260px] overflow-y-auto">
+                    {history.map((h) => (
+                      <li key={h.id}>
+                        <a role="menuitem" href={`/?report=${h.id}`} className="plain-link block rounded-lg px-2 py-1.5 hover:bg-black/[.04]">
+                          <span className="flex items-center gap-2">
+                            <span className="rounded border border-line px-1 text-[11px] text-ink2">{h.kind.toUpperCase()}</span>
+                            <span className="truncate text-[13px]">{h.url.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span>
+                          </span>
+                          <span className="mono mt-0.5 block text-[11.5px] text-ink3">{fmtTime(h.finishedAt)}</span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
               <button
@@ -196,7 +240,7 @@ export default function AccountMenu() {
                 <a
                   href={loginHref(modalNext)}
                   autoFocus
-                  className="mt-6 flex w-full items-center justify-center gap-3 rounded-lg border border-[#dadce0] bg-white py-3 text-[15px] font-medium text-[#3c4043] hover:bg-[#f8f9fa]"
+                  className="plain-link mt-6 flex w-full items-center justify-center gap-3 rounded-lg border border-[#dadce0] bg-white py-3 text-[15px] font-medium text-[#3c4043] hover:bg-[#f8f9fa]"
                 >
                   <GoogleG />
                   使用 Google 帳號登入
