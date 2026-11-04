@@ -373,7 +373,8 @@ async function runGeo(jobId: string, origin: string, engine: EngineResult) {
           cmp ? extractCompare(selfName, cmp.rival, cmp.query, cmp.answers, apiKey).catch(() => null) : Promise.resolve(null),
           extractProfile(selfName, engine.brandVisibility, apiKey).catch(() => null),
         ]);
-        return { sentiment: s ? { ...s, reviewQuery: review.query } : null, positioning, compare, profile };
+        // 評價題的回答全文也要存：報告上的負評引文要追得到出處（11-04 小積木：「是哪裡說到的我沒看到」）
+        return { sentiment: s ? { ...s, reviewQuery: review.query, reviewAnswers: review.answers.map(({ engine, query, answer, citedSelf, citations }) => ({ engine, query, answer, citedSelf, citations })) } : null, positioning, compare, profile };
       })().catch(() => ({ sentiment: null, positioning: null, compare: null, profile: null })),
     ]);
     recommendVisibility = { ...rv, contentMatch, ...extras };

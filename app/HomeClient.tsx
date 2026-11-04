@@ -210,6 +210,7 @@ interface RecommendVisibility {
     themes: { theme: string; polarity: "positive" | "negative"; count: number; engines: string[]; quote: string; quoteEngine: string }[];
     answerCount: number;
     reviewQuery?: string;
+    reviewAnswers?: { engine: string; query: string; answer: string; citedSelf: boolean; citations: { url: string; title: string; isSelf: boolean }[] }[];
   } | null;
   positioning?: { brand: string; isSelf: boolean; traits: { text: string; quote: string; engine: string }[] }[] | null;
   compare?: {
@@ -3108,7 +3109,7 @@ function EditQuestions({ jobId, current, onDone }: { jobId: string | null; curre
 // 你的品牌黃底、對手灰底；右側列出平台、問法、提到的品牌、引用來源。
 type ExplorerRow = {
   id: string;
-  kind: "推薦題" | "用名字問";
+  kind: "推薦題" | "用名字問" | "評價題";
   qi: number | null;
   question: string;
   engine: string;
@@ -3147,6 +3148,10 @@ function ResponsesExplorer({
   );
   brandChecks.forEach((b, bi) =>
     rows.push({ id: `b${bi}`, kind: "用名字問", qi: null, question: b.query, engine: shortEngine(b.engine), r: b, named: b.citedSelf, brands: [] }),
+  );
+  // 「品牌評價」的引文有一部分出自這題，全文要放進來才追得到出處
+  (rec.sentiment?.reviewAnswers ?? []).forEach((a, ai) =>
+    rows.push({ id: `v${ai}`, kind: "評價題", qi: null, question: a.query, engine: shortEngine(a.engine), r: { ...a, advice: "" }, named: true, brands: [] }),
   );
   const engines = ["全部", ...Array.from(new Set(rows.map((r) => r.engine)))];
   const shown = rows.filter((r) => (engineFilter === "全部" || r.engine === engineFilter) && (namedFilter === "all" || (namedFilter === "yes" ? r.named : !r.named)));
@@ -3197,7 +3202,7 @@ function ResponsesExplorer({
           <tbody>
             {shown.map((row) => (
               <tr key={row.id} onClick={() => setOpen(row)} className="cursor-pointer border-b border-line align-top last:border-0 hover:bg-inset/50">
-                <td className="px-4 py-3 text-[14px] text-ink3">{row.kind === "推薦題" ? `第 ${(row.qi ?? 0) + 1} 題` : "用名字問"}</td>
+                <td className="px-4 py-3 text-[14px] text-ink3">{row.kind === "推薦題" ? `第 ${(row.qi ?? 0) + 1} 題` : row.kind}</td>
                 <td className="px-3 py-3 text-ink">{row.question}</td>
                 <td className="px-3 py-3 text-ink2">{row.engine}</td>
                 <td className="px-3 py-3">{row.named ? <span className="font-semibold text-ok">✓ 有</span> : <span className="font-semibold text-fail">✗ 沒有</span>}</td>

@@ -926,7 +926,7 @@ export function SentimentSection({ themes, answerCount, reviewQuery }: { themes:
         <PosNegBar pos={pos} neg={neg} />
         <p className="text-[14px] text-ink3">
           從 {answerCount} 段提到你的回答整理{reviewQuery ? `（含另外直接問三家 AI「${reviewQuery}」）` : ""}
-          {neg === 0 && themes.length > 0 ? "，這次 AI 沒有講到你的缺點" : ""}
+          {neg === 0 && themes.length > 0 ? "，這次 AI 沒有講到你的缺點" : ""}。每句引文的回答全文在下方「AI 回答紀錄」
         </p>
       </div>
       {themes.length === 0 ? (
