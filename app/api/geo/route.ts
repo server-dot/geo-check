@@ -16,6 +16,8 @@ import { runRecommendVisibility } from '@/lib/geo-recommend-visibility';
 import { matchQuestionsToPages } from '@/lib/geo-content-match';
 import { extractProfile } from '@/lib/geo-brand-profile';
 import { extractSentiment, fetchReviewAnswers, selfShortName, sentimentInputs } from '@/lib/geo-sentiment';
+import { detectOwnedSources } from '@/lib/geo-owned-sources';
+import { creditFailedSince } from '@/lib/openrouter-health';
 import { extractPositioning, topRivals } from '@/lib/geo-positioning';
 import { extractCompare, fetchCompareAnswers } from '@/lib/geo-compare';
 import { analyzeLlmsTxt } from '@/lib/geo-llms-txt';
@@ -266,6 +268,7 @@ export async function POST(req: NextRequest) {
   // 先跑一次快速的連線檢查：robots.txt 連線層都失敗代表整個網站連不上，
   // 沒有必要開一個註定失敗的背景 job 讓使用者空等。連不上不算用掉次數。
   let engine: EngineResult;
+  const startedAt = Date.now(); // 額度不足偵測從這裡算起：品牌題在 runEngineChecks 就會打 AI
   try {
     engine = await runEngineChecks(origin, kind === 'geo');
   } catch (err) {
@@ -280,8 +283,8 @@ export async function POST(req: NextRequest) {
   // ── 背景執行（不 await，讓請求先回 jobId）──
   void (async () => {
     try {
-      if (kind === 'seo') await runSeo(job.id, origin);
-      else await runGeo(job.id, origin, engine);
+      if (kind === 'seo') await runSeo(job.id, origin, startedAt);
+      else await runGeo(job.id, origin, engine, startedAt);
     } catch (e) {
       await releaseAudit(user.email, kind).catch(() => {});
       updateAuditJob(job.id, { status: 'failed', error: e instanceof Error ? e.message : String(e), message: '健檢失敗' });
@@ -307,7 +310,7 @@ function crawlWithProgress(jobId: string, origin: string) {
 }
 
 // SEO 健檢：多頁爬蟲＋23 項規則（標題描述、大小標題、canonical、sitemap…）＋結構化資料。不問 AI 推薦題。
-async function runSeo(jobId: string, origin: string) {
+async function runSeo(jobId: string, origin: string, startedAt: number) {
   const crawl = await crawlWithProgress(jobId, origin);
   updateAuditJob(jobId, { status: 'analyzing', message: `已爬 ${crawl.pages.length} 頁，彙總分析中…` });
   const audit = await aggregateAuditChecks(crawl, (msg) => updateAuditJob(jobId, { status: 'analyzing', message: msg }));
@@ -322,6 +325,7 @@ async function runSeo(jobId: string, origin: string) {
     result: audit,
     schemaCards,
     recommendVisibility: null,
+    aiCreditShort: creditFailedSince(startedAt),
     pageWords: crawl.pages.filter((p) => p.ok && !p.nonHtml).map((p) => p.mainTextLength),
     message: `完成，爬取 ${crawl.pages.length} 頁、產出 ${audit.length} 項檢測`,
   });
@@ -329,7 +333,7 @@ async function runSeo(jobId: string, origin: string) {
 
 // GEO 健檢：問 AI 推薦題、品牌評價、對手比較。爬蟲還是要跑——「未被推薦原因」要比對你的頁面
 // 有沒有在回答這些題目——但不跑 23 項規則（那是 SEO 健檢）。
-async function runGeo(jobId: string, origin: string, engine: EngineResult) {
+async function runGeo(jobId: string, origin: string, engine: EngineResult, startedAt: number) {
   // 推薦題查詢跟爬蟲互不相依，先開跑；要等結果時再 await。
   // 這段自己吞錯（回 null），不能讓它把整個健檢弄成 failed。
   const vis = engine.visibility;
@@ -367,8 +371,16 @@ async function runGeo(jobId: string, origin: string, engine: EngineResult) {
           rivals[0] ? fetchCompareAnswers(selfName, rivals[0], origin).catch(() => null) : Promise.resolve(null),
         ]);
         const all = rv.questions.flatMap((q) => q.results.map((r) => ({ engine: r.engine, answer: r.answer })));
+        const sentimentAnswers = [...sentimentInputs(rv, engine.brandVisibility), ...review.answers];
+        // 哪些來源是品牌自己的（官網、官網連出去的帳號、作者是品牌的文章）：評價抽取要排除轉述自己文章的負評
+        const owned = await detectOwnedSources({
+          brandNames: [rv.brandName, selfName],
+          domain: origin,
+          siteExternalLinks: [...crawl.pages].sort((a, b) => Number(b.isHome) - Number(a.isHome)).flatMap((p) => p.externalLinks ?? []),
+          citations: sentimentAnswers.flatMap((a) => a.citations ?? []),
+        }).catch(() => new Set<string>());
         const [s, positioning, compare, profile] = await Promise.all([
-          extractSentiment(rv.brandName, [...sentimentInputs(rv, engine.brandVisibility), ...review.answers], apiKey).catch(() => null),
+          extractSentiment(rv.brandName, sentimentAnswers, apiKey, owned).catch(() => null),
           extractPositioning(selfName, rivals, [...all, ...review.answers, ...(cmp?.answers ?? [])], apiKey).catch(() => null),
           cmp ? extractCompare(selfName, cmp.rival, cmp.query, cmp.answers, apiKey).catch(() => null) : Promise.resolve(null),
           extractProfile(selfName, engine.brandVisibility, apiKey, matchPages).catch(() => null),
@@ -382,6 +394,7 @@ async function runGeo(jobId: string, origin: string, engine: EngineResult) {
   updateAuditJob(jobId, {
     status: 'completed',
     recommendVisibility,
+    aiCreditShort: creditFailedSince(startedAt),
     pageWords: crawl.pages.filter((p) => p.ok && !p.nonHtml).map((p) => p.mainTextLength),
     message: `完成，爬取 ${crawl.pages.length} 頁`,
   });

@@ -68,6 +68,7 @@ export interface PageFacts {
   analytics: string[];
   internalLinks: string[];
   externalCount: number;
+  externalLinks: string[]; // 連到站外的網址（去重，最多 40 個）：拿來認出品牌自己的社群／部落格帳號
   isHome: boolean;
   mainText: string;
   mainTextLength: number;
@@ -187,6 +188,7 @@ function extractPageFacts(html: string, url: string, depth: number, status: numb
 
   const internal = new Set<string>();
   let externalCount = 0;
+  const external = new Set<string>();
   for (const a of root.querySelectorAll('a[href]')) {
     const raw = (a.getAttribute('href') ?? '').trim();
     if (!isCrawlableHref(raw)) continue;
@@ -198,7 +200,10 @@ function extractPageFacts(html: string, url: string, depth: number, status: numb
     }
     if (abs.protocol !== 'http:' && abs.protocol !== 'https:') continue;
     if (abs.origin === origin) internal.add(normalizeUrl(abs.href));
-    else externalCount++;
+    else {
+      externalCount++;
+      if (external.size < 40) external.add(abs.href);
+    }
   }
 
   const bodyClone = parse((root.querySelector('body') ?? root).outerHTML);
@@ -238,6 +243,7 @@ function extractPageFacts(html: string, url: string, depth: number, status: numb
     analytics,
     internalLinks: [...internal],
     externalCount,
+    externalLinks: [...external],
     isHome: pathname === '/',
     mainText,
     mainTextLength,
@@ -396,6 +402,6 @@ function emptyFacts(url: string, depth: number, status: number, ok: boolean, ori
     title: '', description: '', h1: 0, h2: 0,
     imgTotal: 0, imgAltEmpty: 0, imgAltEmptyNames: [], imgLegacy: 0,
     jsonLdTypes: [], jsonLdNodes: [], hasBreadcrumb: false, canonical: '', noindex: false, hasViewport: false,
-    analytics: [], internalLinks: [], externalCount: 0, isHome, mainText: '', mainTextLength: 0, viaSitemap, nonHtml,
+    analytics: [], internalLinks: [], externalCount: 0, externalLinks: [], isHome, mainText: '', mainTextLength: 0, viaSitemap, nonHtml,
   };
 }

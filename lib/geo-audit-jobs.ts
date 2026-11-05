@@ -52,6 +52,8 @@ export interface AuditJob {
   // 推薦題自動查詢（3 題 × 各引擎 + 被點名的名單）。跟爬蟲並行跑，完成才有；
   // null 代表沒設 API key 或整段失敗，前端就不顯示這一塊。
   recommendVisibility?: RecommendVisibility | null;
+  // 這次健檢有 AI 步驟因為 OpenRouter 額度不足失敗（報告會缺幾塊），前端要標出來
+  aiCreditShort?: boolean;
   error?: string;
   createdAt: number;
   updatedAt: number;
@@ -118,6 +120,7 @@ export function auditJobPayload(job: AuditJob) {
     schemaCards: done ? job.schemaCards : undefined,
     pageWords: done ? job.pageWords : undefined,
     recommendVisibility: done ? job.recommendVisibility : undefined,
+    aiCreditShort: done ? job.aiCreditShort || undefined : undefined,
     error: job.error,
   };
 }

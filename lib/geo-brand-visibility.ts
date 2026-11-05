@@ -17,6 +17,7 @@ import { SITE_URL } from "@/lib/site";
 import { fetchGoogleAio } from "@/lib/geo-google-aio";
 import { profileGoogleQuery, profileQuery } from "@/lib/geo-brand-profile";
 import { selfShortName } from "@/lib/geo-sentiment";
+import { noteOpenRouterFailure } from './openrouter-health';
 export interface VisibilityAnswer {
   engine: string;
   query: string;
@@ -74,7 +75,11 @@ async function askModel(
     }),
     signal: AbortSignal.timeout(30000),
   });
-  if (!res.ok) throw new Error(`OpenRouter 錯誤（${model}）：${await res.text()}`);
+  if (!res.ok) {
+    const body = await res.text();
+    noteOpenRouterFailure(res.status, body);
+    throw new Error(`OpenRouter 錯誤（${model}）：${body}`);
+  }
   const data = (await res.json()) as {
     choices?: { message?: { content?: string; annotations?: UrlCitation[] } }[];
   };

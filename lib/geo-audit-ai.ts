@@ -1,6 +1,7 @@
 import { LEVEL, CATEGORY } from './geo-audit-rules';
 import type { CheckResult, CheckStatus } from './geo-audit-rules';
 import { SITE_URL } from '@/lib/site';
+import { noteOpenRouterFailure } from './openrouter-health';
 
 // ── GEO 深度健檢：AI 語意判斷層 ──────────────────────────
 // 規則判不了的語意題，交給 AI（走 OpenRouter）：E-E-A-T 權威訊號足不足。
@@ -41,7 +42,11 @@ async function askOpenRouter(prompt: string, apiKey: string): Promise<string> {
     }),
     signal: AbortSignal.timeout(60000),
   });
-  if (!res.ok) throw new Error(`OpenRouter 錯誤：${await res.text()}`);
+  if (!res.ok) {
+    const body = await res.text();
+    noteOpenRouterFailure(res.status, body);
+    throw new Error(`OpenRouter 錯誤：${body}`);
+  }
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
   return data.choices?.[0]?.message?.content ?? '';
 }

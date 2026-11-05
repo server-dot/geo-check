@@ -1,5 +1,6 @@
 import type { SchemaTypeCard } from './geo-schema-check';
 import { SITE_URL } from '@/lib/site';
+import { noteOpenRouterFailure } from './openrouter-health';
 
 // ── GEO 深度健檢：Schema 缺欄位補完建議 ──────────────────
 // 「結構化資料」專區只做到「缺什麼」，這裡再往前一步：拿缺欄位所在那一頁的
@@ -45,7 +46,11 @@ async function askOpenRouter(prompt: string, apiKey: string): Promise<string> {
     }),
     signal: AbortSignal.timeout(30000),
   });
-  if (!res.ok) throw new Error(`OpenRouter 錯誤：${await res.text()}`);
+  if (!res.ok) {
+    const body = await res.text();
+    noteOpenRouterFailure(res.status, body);
+    throw new Error(`OpenRouter 錯誤：${body}`);
+  }
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
   return data.choices?.[0]?.message?.content ?? '';
 }

@@ -6,6 +6,7 @@ import type { SentimentResult } from './geo-sentiment';
 import type { BrandPositioning } from './geo-positioning';
 import type { CompareResult } from './geo-compare';
 import type { BrandProfile } from './geo-brand-profile';
+import { noteOpenRouterFailure } from './openrouter-health';
 
 // ── GEO：推薦題自動查詢 ──────────────────────────────────
 // 品牌能見度（geo-brand-visibility.ts）問的是「AI 認不認得你」；關鍵字能見度
@@ -103,7 +104,11 @@ export async function askJson(prompt: string, apiKey: string, maxTokens: number)
     }),
     signal: AbortSignal.timeout(30000),
   });
-  if (!res.ok) throw new Error(`OpenRouter 錯誤（${MODEL}）：${await res.text()}`);
+  if (!res.ok) {
+    const body = await res.text();
+    noteOpenRouterFailure(res.status, body);
+    throw new Error(`OpenRouter 錯誤（${MODEL}）：${body}`);
+  }
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
   return data.choices?.[0]?.message?.content ?? '';
 }

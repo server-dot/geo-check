@@ -66,7 +66,7 @@ const norm = (t: string) => t.replace(/[\s*_`#>|[\]()【】「」]/g, '');
 // 整句比對會被刷掉。拆成小段，過半小段在原文找得到才算數；顯示時只留找得到的那幾段，
 // 畫面上的引文一定是原文。
 function verifiedQuote(text: string, quote: string): string | null {
-  const parts = quote.split(/[，,。；;：:…]+/).map((p) => p.trim()).filter((p) => norm(p).length >= 3);
+  const parts = quote.split(/[，。；;：:…]+|,(?!\d)/).map((p) => p.trim()).filter((p) => norm(p).length >= 3);
   const found = parts.filter((p) => text.includes(norm(p)));
   return parts.length > 0 && found.length * 2 >= parts.length ? found.join('…') : null;
 }

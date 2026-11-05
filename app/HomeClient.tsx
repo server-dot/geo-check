@@ -302,6 +302,7 @@ interface StatusResponse {
   pageWords?: number[];
   // 推薦題自動查詢，完成才有；null 代表沒跑（沒 API key 或失敗）
   recommendVisibility?: RecommendVisibility | null;
+  aiCreditShort?: boolean; // 有 AI 步驟因額度不足失敗
   error?: string;
 }
 
@@ -4084,7 +4085,7 @@ export default function HomeClient({
                 每一區都是 <section id>（DashSection），用 CSS 只留目前這頁的；總覽頁另外帶「AI 推薦了誰」。 */}
             <style>{`.report-main > *:not(${(REPORT_PAGES[reportPage] ?? [reportPage]).map((id) => `#${id}`).join(",")}):not(${(REPORT_PAGES[reportPage] ?? [reportPage]).map((id) => `:has(#${id})`).join(",")}):not(.report-head) { display: none; }`}</style>
             <div className="report-main ml-[260px] flex min-w-0 flex-col gap-8 px-12 pb-12 [&>*]:!mt-0">
-            <div className="report-head sticky top-0 z-20 -mx-12 flex items-baseline gap-4 border-b border-line bg-card px-12 py-5">
+            <div className="report-head sticky top-0 z-20 -mx-12 flex flex-wrap items-baseline gap-x-4 gap-y-3 border-b border-line bg-card px-12 py-5">
               <h1 className="text-[24px] font-bold text-ink">{reportBrand || reportHost}</h1>
               <span className="mono text-[15px] text-ink3">{reportHost}</span>
               <span className="rounded-full border border-line px-2.5 py-0.5 text-[13px] text-ink2">{KIND_INFO[reportKind].label}</span>
@@ -4097,6 +4098,13 @@ export default function HomeClient({
               <div className="ml-auto self-center">
                 <AccountMenu />
               </div>
+              {/* 額度不足時 AI 步驟會靜默失敗、報告只是少幾塊，看不出壞了（11-04），所以明講 */}
+              {status?.aiCreditShort && (
+                <p className="basis-full rounded-lg border border-warn/40 bg-warn/10 px-4 py-2.5 text-[15px] text-ink">
+                  <span className="font-semibold text-warn">⚠ 這次檢測有部分 AI 分析沒有完成</span>
+                  ：系統的 AI 服務額度不足，品牌評價、品牌輪廓、推薦名單等區塊可能缺漏或空白。這不是你網站的問題。
+                </p>
+              )}
             </div>
             <DashSection id="overview" title="總覽">
               {brandTable && recommend ? (
