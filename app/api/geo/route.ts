@@ -16,7 +16,7 @@ import { runRecommendVisibility } from '@/lib/geo-recommend-visibility';
 import { matchQuestionsToPages } from '@/lib/geo-content-match';
 import { extractProfile } from '@/lib/geo-brand-profile';
 import { extractSentiment, fetchReviewAnswers, selfShortName, sentimentInputs } from '@/lib/geo-sentiment';
-import { detectOwnedSources } from '@/lib/geo-owned-sources';
+import { detectOwnedSources, markOwned, markOwnedQuestions } from '@/lib/geo-owned-sources';
 import { creditFailedSince } from '@/lib/openrouter-health';
 import { extractPositioning, topRivals } from '@/lib/geo-positioning';
 import { extractCompare, fetchCompareAnswers } from '@/lib/geo-compare';
@@ -360,6 +360,19 @@ async function runGeo(jobId: string, origin: string, engine: EngineResult, start
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (recommendVisibility && apiKey) {
     updateAuditJob(jobId, { status: 'analyzing', message: '比對你的頁面有沒有在回答這些題目…' });
+    // 哪些來源是品牌自己的（官網、姊妹購物站、官網連出去的帳號、作者是品牌的文章）。
+    // 推薦題、品牌辨識的「引用你」都改用這份判斷，不只看同網域（11-09 Relove 的 reloveshop.com.tw 被當成別人）；
+    // 評價抽取也用它排除轉述自己文章的負評。
+    const selfName0 = selfShortName(recommendVisibility.brandName);
+    const siteExternalLinks = [...crawl.pages].sort((a, b) => Number(b.isHome) - Number(a.isHome)).flatMap((p) => p.externalLinks ?? []);
+    const ownedRec = await detectOwnedSources({
+      brandNames: [recommendVisibility.brandName, selfName0],
+      domain: origin,
+      siteExternalLinks,
+      citations: [...recommendVisibility.questions.flatMap((q) => q.results.flatMap((r) => r.citations)), ...engine.brandVisibility.flatMap((b) => b.citations)],
+    }).catch(() => new Set<string>());
+    recommendVisibility = { ...recommendVisibility, ...markOwnedQuestions(recommendVisibility.questions, ownedRec) };
+    engine = { ...engine, brandVisibility: engine.brandVisibility.map((b) => markOwned(b, ownedRec)) };
     const rv = recommendVisibility;
     const [contentMatch, extras] = await Promise.all([
       matchQuestionsToPages(rv.questions, matchPages, apiKey).catch(() => null),
@@ -376,7 +389,7 @@ async function runGeo(jobId: string, origin: string, engine: EngineResult, start
         const owned = await detectOwnedSources({
           brandNames: [rv.brandName, selfName],
           domain: origin,
-          siteExternalLinks: [...crawl.pages].sort((a, b) => Number(b.isHome) - Number(a.isHome)).flatMap((p) => p.externalLinks ?? []),
+          siteExternalLinks,
           citations: sentimentAnswers.flatMap((a) => a.citations ?? []),
         }).catch(() => new Set<string>());
         const [s, positioning, compare, profile] = await Promise.all([
@@ -393,6 +406,7 @@ async function runGeo(jobId: string, origin: string, engine: EngineResult, start
   }
   updateAuditJob(jobId, {
     status: 'completed',
+    engine,
     recommendVisibility,
     aiCreditShort: creditFailedSince(startedAt),
     pageWords: crawl.pages.filter((p) => p.ok && !p.nonHtml).map((p) => p.mainTextLength),

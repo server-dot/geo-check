@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { detectOwnedSources, markOwnedQuestions } from '@/lib/geo-owned-sources';
+import { selfShortName } from '@/lib/geo-sentiment';
 import { getAuditJob, getAuditJobContext, updateAuditJob } from '@/lib/geo-audit-jobs';
 import { runRecommendVisibility, sanitizeCustomQuestions } from '@/lib/geo-recommend-visibility';
 import { matchQuestionsToPages } from '@/lib/geo-content-match';
@@ -51,7 +53,14 @@ export async function POST(req: NextRequest) {
         Promise.resolve(job.recommendVisibility?.sentiment ?? null),
       ])
     : [null, null];
-  const recommendVisibility = { ...rec, contentMatch, sentiment };
+  // 品牌自己的姊妹網站、帳號也算「引用你」，跟健檢主流程同一套判斷
+  const owned = await detectOwnedSources({
+    brandNames: [ctx.recommendInput.brandName, selfShortName(ctx.recommendInput.brandName)],
+    domain: ctx.origin,
+    siteExternalLinks: [],
+    citations: rec.questions.flatMap((q) => q.results.flatMap((r) => r.citations)),
+  }).catch(() => new Set<string>());
+  const recommendVisibility = { ...rec, ...markOwnedQuestions(rec.questions, owned), contentMatch, sentiment };
   // 存回 job，Markdown 版跟之後的輪詢拿到的才會是新題目的結果
   updateAuditJob(jobId, { recommendVisibility });
 

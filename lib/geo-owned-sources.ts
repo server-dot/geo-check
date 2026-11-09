@@ -14,6 +14,8 @@ import { hostnameOf, isSameSite } from './geo-brand-visibility';
 // 3. 網址裡的帳號名就是品牌名（vocus.cc/user/@qkangber、qkangber.medium.com）
 // 4. 頁面標題「後段」就是品牌名（「台灣 5 個 GEO 檢測工具實測｜Q kangber｜AI x 自動化實驗室」）
 // 5. 內容平台上的文章，作者欄（meta author、JSON-LD author）是品牌名或連到 2／3 的帳號
+// 6. 姊妹網域：網域主體是「品牌名＋shop／store／tw…」（2026-11-09 Relove：官網 foreverrelove.com.tw，
+//    AI 引的是它自己的購物站 reloveshop.com.tw，報告卻寫「沒有你的網站」）
 // 只看完全相同的名字，不做「包含」：第三方評測標題常常就是「Q kangber 評價」。
 
 const PLATFORM_HOSTS = [
@@ -57,6 +59,15 @@ function handleIsBrand(u: URL, keys: string[]): boolean {
         return false;
       }
     });
+}
+
+const SIBLING_SUFFIX = /^(|shop|store|official|mall|online|buy|tw|taiwan|global|web|site|brand|life)$/;
+
+function siblingDomain(host: string, keys: string[]): boolean {
+  const h = host.replace(/^www\./, '');
+  if (onPlatform(h)) return false;
+  const label = h.split('.')[0] ?? '';
+  return keys.some((k) => /^[a-z0-9]{4,}$/.test(k) && label.startsWith(k) && SIBLING_SUFFIX.test(label.slice(k.length).replace(/^-/, '')));
 }
 
 function titleTailIsBrand(title: string, keys: string[]): boolean {
@@ -157,6 +168,7 @@ export async function detectOwnedSources(input: OwnedSourceInput): Promise<Set<s
       isSameSite(u.hostname, hostnameOf(input.domain.startsWith('http') ? input.domain : `https://${input.domain}`)) ||
       profiles.has(profilePrefix(u)) ||
       handleIsBrand(u, keys) ||
+      siblingDomain(u.hostname, keys) ||
       (c.title && titleTailIsBrand(c.title, keys))
     ) {
       owned.add(c.url);
@@ -183,4 +195,18 @@ export function sourcesOfLine(line: string, citations: { url: string }[]): strin
 export function sameUrl(a: string, b: string): boolean {
   const n = (s: string) => s.replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/^https?:\/\/(www\.)?/, '').toLowerCase();
   return n(a) === n(b);
+}
+
+// 把「品牌自己的來源」標成 isSelf，citedSelf 跟著重算。推薦題、品牌辨識、改題重問共用。
+export function markOwned<T extends { citedSelf: boolean; citations: { url: string; title: string; isSelf: boolean }[] }>(r: T, owned: Set<string>): T {
+  const citations = r.citations.map((c) => (c.isSelf || owned.has(c.url) ? { ...c, isSelf: true } : c));
+  return { ...r, citations, citedSelf: citations.some((c) => c.isSelf) };
+}
+
+export function markOwnedQuestions<Q extends { results: { citedSelf: boolean; citations: { url: string; title: string; isSelf: boolean }[] }[] }>(
+  questions: Q[],
+  owned: Set<string>,
+): { questions: Q[]; citedSelfCount: number } {
+  const out = questions.map((q) => ({ ...q, results: q.results.map((r) => markOwned(r, owned)) }));
+  return { questions: out, citedSelfCount: out.reduce((n, q) => n + q.results.filter((r) => r.citedSelf).length, 0) };
 }
