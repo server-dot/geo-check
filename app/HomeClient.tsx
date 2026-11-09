@@ -10,7 +10,7 @@ import AccountMenu, { AUTH_CHANGED_EVENT, openLogin } from "@/components/marketi
 import Section from "@/components/marketing/Section";
 import Footer from "@/components/marketing/Footer";
 import { tallyCitedDomains, type CitedDomain } from "@/lib/geo-cited-domains";
-import { buildDiagnosis, GATE_SYMBOL, VERDICT_LABEL, type Diagnosis, type GateState } from "@/lib/geo-diagnosis";
+import { buildDiagnosis, GATE_SYMBOL, VERDICT_LABEL, VERDICT_STATE, type Diagnosis, type GateState } from "@/lib/geo-diagnosis";
 import type { ContentMatch } from "@/lib/geo-content-match";
 import { buildCategories5, computeOverallScore, CATEGORY5_KEY_MAP, CATEGORY5_ORDER, type Category5 } from "@/lib/geo-score";
 import { track } from "@/lib/ga";
@@ -1795,38 +1795,47 @@ function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData 
         </RbCard>
       )}
 
-      {/* AI 為什麼沒推薦你：三關，跟網頁版同一套判斷（lib/geo-diagnosis.ts）。PDF 沒有展開，第 2 關每題印一行 */}
+      {/* 未被推薦原因：跟網頁版同一套判斷（lib/geo-diagnosis.ts），一題一列 */}
       {data.diagnosis && (() => {
         const d = data.diagnosis;
-        const gates: [string, GateState, string][] = [
-          ["AI 認得你嗎", d.gate1.state, d.gate1.line],
-          ["有沒有一頁在回答", d.gate2.state, d.gate2.line],
-          ["別人有沒有推薦你", d.gate3.state, d.gate3.line],
-        ];
+        const rc = d.recognition;
+        const cell = { fontSize: 11.5, color: "var(--rb-ink2)", padding: "5px 6px", verticalAlign: "top" as const, borderTop: "1px solid var(--rb-hair)" };
         return (
           <RbCard style={{ gap: 10 }}>
-            <RbCardTitle title="AI 為什麼沒推薦你" />
+            <RbCardTitle title="未被推薦原因" />
             <div style={{ fontSize: 15, fontWeight: 700, color: "var(--rb-ink)" }}>{d.conclusion}</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {gates.map(([title, st, line], i) => (
-                <div key={title} style={{ display: "grid", gridTemplateColumns: "1.4em 9em 1fr", columnGap: 10, alignItems: "baseline" }}>
-                  <span className="mono" style={{ fontSize: 16, fontWeight: 700, color: GATE_COLOR[st] }}>{GATE_SYMBOL[st]}</span>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--rb-ink)" }}>{i + 1}. {title}</span>
-                  <span style={{ fontSize: 12.5, color: "var(--rb-ink2)" }}>{line}</span>
-                </div>
-              ))}
+            <div style={{ fontSize: 12.5, color: "var(--rb-ink2)" }}>
+              <span className="mono" style={{ fontWeight: 700, color: GATE_COLOR[rc.state], marginRight: 6 }}>{GATE_SYMBOL[rc.state]}</span>
+              {rc.line}
             </div>
-            {d.gate2.matches.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, borderTop: "1px solid var(--rb-hair)", paddingTop: 8 }}>
-                {d.gate2.matches.map((m) => (
-                  <div key={m.question} className="rb-clip" style={{ fontSize: 11, color: "var(--rb-ink2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    <span style={{ fontWeight: 700, color: "var(--rb-ink)" }}>「{m.question}」</span>{" "}
-                    {VERDICT_LABEL[m.verdict]}
-                    {m.missing.length > 0 && <>（頁面上沒有：{m.missing.join("、")}）</>}
-                  </div>
-                ))}
-              </div>
-            )}
+            <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+              <thead>
+                <tr style={{ fontSize: 11, color: "var(--rb-ink3)", textAlign: "left" }}>
+                  <th style={{ padding: "4px 6px", fontWeight: 500 }}>推薦題</th>
+                  <th style={{ padding: "4px 6px", fontWeight: 500, width: "12%" }}>AI 推你</th>
+                  <th style={{ padding: "4px 6px", fontWeight: 500, width: "28%" }}>你網站上最接近的頁</th>
+                  <th style={{ padding: "4px 6px", fontWeight: 500, width: "22%" }}>AI 推了誰</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.rows.map((r) => {
+                  const st: GateState = r.match ? VERDICT_STATE[r.match.verdict] : "unknown";
+                  return (
+                    <tr key={r.question}>
+                      <td style={{ ...cell, color: "var(--rb-ink)" }}>{r.question}</td>
+                      <td className="mono" style={cell}>{r.named > 0 ? "✓" : "✗"} {r.named}/{r.total}</td>
+                      <td style={cell}>
+                        <span className="mono" style={{ fontWeight: 700, color: GATE_COLOR[st], marginRight: 4 }}>{GATE_SYMBOL[st]}</span>
+                        {r.match ? VERDICT_LABEL[r.match.verdict] : "沒比對出來"}
+                        {r.match?.pageTitle && <div style={{ color: "var(--rb-ink3)" }}>{r.match.pageTitle}</div>}
+                      </td>
+                      <td style={cell}>{r.rivals.length ? r.rivals.join("、") : "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div style={{ fontSize: 10.5, color: "var(--rb-ink3)" }}>{d.thirdPartyNote}</div>
             <div style={{ fontSize: 10.5, color: "var(--rb-ink3)" }}>{d.recencyNote}</div>
           </RbCard>
         );
@@ -2939,8 +2948,8 @@ function renderInlineMarkdown(text: string, citations: { url: string }[], hl?: H
 // 題目是模型從首頁內容猜的，畫面上要講明白，不能讓人以為是真實搜尋量。
 // 名單是從回答正文抽的專有名詞（主觀），所以每張卡都保留原文可以核對；
 // 客觀的「引用網域」彙總在下面另一塊，兩個一起看。
-// 「AI 為什麼沒推薦你」三關（判斷邏輯在 lib/geo-diagnosis.ts，三處共用）。
-// 第一眼只有一句結論＋三列燈號；第 2 關每題的對照（你最接近的頁、缺的字、AI 引的同業頁）收進展開。
+// 「未被推薦原因」（判斷邏輯在 lib/geo-diagnosis.ts，三處共用）：一句結論＋一題一列。
+// 只列現象（推你幾次、最接近的頁、推了誰），不列缺的字或該補什麼。
 // 燈號一律「符號＋顏色」，不靠顏色單獨表意（warn/fail 色盲下同色）。
 const GATE_COLOR: Record<GateState, string> = {
   pass: STATUS_COLOR.ok,
@@ -2949,100 +2958,54 @@ const GATE_COLOR: Record<GateState, string> = {
   unknown: "#4a5468",
 };
 
-const GATE_TITLES = ["AI 認得你嗎", "有沒有一頁在回答", "別人有沒有推薦你"];
-
-function GateRow({ n, state, line, children }: { n: number; state: GateState; line: string; children?: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const expandable = !!children;
-  const head = (
-    <>
-      <span className="mono text-[20px] font-bold leading-none" style={{ color: GATE_COLOR[state] }}>{GATE_SYMBOL[state]}</span>
-      <span className="text-[15px] font-bold text-ink">{n}. {GATE_TITLES[n - 1]}</span>
-      <span className="text-[15px] text-ink2">{line}</span>
-      <span className="text-right text-[14px] text-ink3">{expandable ? (open ? "▾" : "▸") : ""}</span>
-    </>
-  );
-  const grid = { gridTemplateColumns: "1.4em 9.5em 1fr 1.2em" };
-  return (
-    <div className="border-t border-line py-3 first:border-t-0">
-      {expandable ? (
-        <button type="button" onClick={() => setOpen((v) => !v)} className="grid w-full items-baseline gap-x-3 text-left max-[560px]:!grid-cols-[1.4em_1fr_1.2em]" style={grid} aria-expanded={open}>
-          {head}
-        </button>
-      ) : (
-        <div className="grid items-baseline gap-x-3 max-[560px]:!grid-cols-[1.4em_1fr_1.2em]" style={grid}>{head}</div>
-      )}
-      {open && children}
-    </div>
-  );
-}
-
-function MatchDetail({ m }: { m: ContentMatch }) {
-  return (
-    <div className="mt-3 border-l-2 border-line pl-3">
-      <p className="text-[14px] font-semibold text-ink">「{m.question}」</p>
-      <table className="mt-1.5 w-full text-[14px] leading-snug">
-        <tbody>
-          <tr>
-            <td className="w-[6.5em] py-1 align-top text-ink3">你最接近的</td>
-            <td className="py-1 text-ink2">
-              {m.pageUrl ? (
-                <a href={m.pageUrl} target="_blank" rel="noopener noreferrer" className="break-all">{m.pageTitle || readableUrl(m.pageUrl)}</a>
-              ) : "（沒有）"}
-              <span className="ml-2 whitespace-nowrap font-semibold" style={{ color: GATE_COLOR[m.verdict === "yes" ? "pass" : m.verdict === "partial" ? "partial" : "fail"] }}>{VERDICT_LABEL[m.verdict]}</span>
-            </td>
-          </tr>
-          {m.missing.length > 0 && (
-            <tr>
-              <td className="py-1 align-top text-ink3">你頁面上沒有</td>
-              <td className="py-1">
-                <span className="flex flex-wrap gap-1.5">
-                  {m.missing.map((w) => (
-                    <span key={w} className="rounded-full border border-line px-2 py-0.5 text-[14px] text-ink">{w}</span>
-                  ))}
-                </span>
-              </td>
-            </tr>
-          )}
-          {m.peerPages.length > 0 && (
-            <tr>
-              <td className="py-1 align-top text-ink3">AI 引的同業</td>
-              <td className="py-1">
-                <ul className="space-y-0.5">
-                  {m.peerPages.map((p) => (
-                    <li key={p.url} className="text-ink2">
-                      <a href={p.url} target="_blank" rel="noopener noreferrer" className="break-all">{p.title || readableUrl(p.url)}</a>
-                    </li>
-                  ))}
-                </ul>
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 function DiagnosisBlock({ d }: { d: Diagnosis }) {
+  const rc = d.recognition;
   return (
     <div className="rounded-[10px] border border-line bg-card p-6">
       <p className="text-lg font-bold text-ink">{d.conclusion}</p>
-      <div className="mt-3">
-        <GateRow n={1} state={d.gate1.state} line={d.gate1.line} />
-        <GateRow n={2} state={d.gate2.state} line={d.gate2.line}>
-          {d.gate2.matches.length > 0 ? (
-            <div className="mb-1">{d.gate2.matches.map((m) => <MatchDetail key={m.question} m={m} />)}</div>
-          ) : undefined}
-        </GateRow>
-        <GateRow n={3} state={d.gate3.state} line={d.gate3.line}>
-          <p className="mt-2 max-w-[38em] border-l-2 border-line pl-3 text-[14px] leading-relaxed text-ink2">
-            問「推薦誰」的時候，AI 比較信別人寫的推薦（接案平台、推薦文、論壇），比較不信公司自己說自己好。
-            這一關查不到，所以要前兩關都沒問題，才會把原因算到這裡。
-          </p>
-        </GateRow>
+      <p className="mt-1.5 text-[15px] text-ink2">
+        <span className="mono mr-1.5 font-bold" style={{ color: GATE_COLOR[rc.state] }}>{GATE_SYMBOL[rc.state]}</span>
+        {rc.line}
+      </p>
+      <div className="mt-4 overflow-x-auto rounded-xl border border-line">
+        <table className="w-full min-w-[40em] text-[15px]">
+          <thead>
+            <tr className="border-b border-line bg-inset/60 text-left text-[14px] text-ink3">
+              <th className="px-4 py-2.5 font-medium">推薦題</th>
+              <th className="w-[7.5em] px-3 py-2.5 font-medium">AI 推你</th>
+              <th className="w-[30%] px-3 py-2.5 font-medium">你網站上最接近的頁</th>
+              <th className="w-[22%] px-3 py-2.5 font-medium">AI 推了誰</th>
+            </tr>
+          </thead>
+          <tbody>
+            {d.rows.map((r) => {
+              const st = r.match ? VERDICT_STATE[r.match.verdict] : "unknown";
+              return (
+                <tr key={r.question} className="border-b border-line align-top last:border-0">
+                  <td className="px-4 py-3 text-ink">{r.question}</td>
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    <span className={`font-semibold ${r.named > 0 ? "text-ok" : "text-fail"}`}>{r.named > 0 ? "✓" : "✗"} </span>
+                    <span className="mono text-ink">{r.named}/{r.total}</span>
+                    <span className="text-[14px] text-ink3"> 次</span>
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className="mono mr-1.5 font-bold" style={{ color: GATE_COLOR[st] }}>{GATE_SYMBOL[st]}</span>
+                    <span className="text-[14px] text-ink2">{r.match ? VERDICT_LABEL[r.match.verdict] : "這題沒比對出來"}</span>
+                    {r.match?.pageUrl && (
+                      <a href={r.match.pageUrl} target="_blank" rel="noopener noreferrer" className="mt-0.5 block break-all text-[14px]">
+                        {r.match.pageTitle || readableUrl(r.match.pageUrl)}
+                      </a>
+                    )}
+                  </td>
+                  <td className="px-3 py-3 text-[14px] text-ink2">{r.rivals.length ? r.rivals.join("、") : "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
-      <p className="mt-3 text-[14px] text-ink3">{d.recencyNote}</p>
+      <p className="mt-3 text-[14px] text-ink3">{d.thirdPartyNote}</p>
+      <p className="mt-1 text-[14px] text-ink3">{d.recencyNote}</p>
     </div>
   );
 }
@@ -4183,7 +4146,7 @@ export default function HomeClient({
 
             {diagnosis && (
               <div className="mt-12">
-                <DashSection id="why" title="未被推薦原因" desc="從官網引用、內容對應、第三方推薦三方面檢查">
+                <DashSection id="why" title="未被推薦原因" desc="每一題 AI 推你幾次、你網站上最接近的頁，以及 AI 推了誰">
                   <DiagnosisBlock d={diagnosis} />
                 </DashSection>
               </div>

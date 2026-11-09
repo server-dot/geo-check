@@ -1,7 +1,7 @@
 import type { AuditJob } from './geo-audit-jobs';
 import { buildCategories5, computeOverallScore } from './geo-score';
 import { tallyCitedDomains } from './geo-cited-domains';
-import { buildDiagnosis, GATE_SYMBOL, VERDICT_LABEL } from './geo-diagnosis';
+import { buildDiagnosis, GATE_SYMBOL, VERDICT_LABEL, VERDICT_STATE } from './geo-diagnosis';
 import { sortByOrder } from './geo-audit-rules';
 import { SITE_NAME } from '@/lib/site';
 
@@ -155,21 +155,22 @@ export function buildReportMarkdown(job: AuditJob): string {
     out.push('## AI 推不推薦你（自動問的推薦題）');
     out.push('');
 
-    // 三關判斷，跟網頁版同一套（lib/geo-diagnosis.ts）
+    // 未被推薦原因，跟網頁版同一套（lib/geo-diagnosis.ts）
     const d = buildDiagnosis(job.engine?.brandVisibility ?? [], rec);
-    out.push(`### AI 為什麼沒推薦你：${d.conclusion}`);
+    out.push(`### 未被推薦原因：${d.conclusion}`);
     out.push('');
-    out.push(`1. ${GATE_SYMBOL[d.gate1.state]} AI 認得你嗎：${d.gate1.line}`);
-    out.push(`2. ${GATE_SYMBOL[d.gate2.state]} 有沒有一頁在回答：${d.gate2.line}`);
-    out.push(`3. ${GATE_SYMBOL[d.gate3.state]} 別人有沒有推薦你：${d.gate3.line}`);
+    out.push(`${GATE_SYMBOL[d.recognition.state]} ${d.recognition.line}`);
     out.push('');
-    for (const m of d.gate2.matches) {
-      out.push(`- 「${esc(m.question)}」${VERDICT_LABEL[m.verdict]}`);
-      out.push(`  - 你最接近的頁面：${m.pageUrl ? `${esc(m.pageTitle)} ${m.pageUrl}` : '（沒有）'}`);
-      if (m.missing.length > 0) out.push(`  - 你頁面上沒有的字：${m.missing.join('、')}`);
-      if (m.peerPages.length > 0) out.push(`  - AI 引的同業頁面：${m.peerPages.map((p) => `${esc(p.title)} ${p.url}`).join('；')}`);
+    out.push('| 推薦題 | AI 推你 | 你網站上最接近的頁 | AI 推了誰 |');
+    out.push('|---|---|---|---|');
+    for (const r of d.rows) {
+      const page = r.match
+        ? `${GATE_SYMBOL[VERDICT_STATE[r.match.verdict]]} ${VERDICT_LABEL[r.match.verdict]}${r.match.pageUrl ? `：${esc(r.match.pageTitle || r.match.pageUrl)} ${r.match.pageUrl}` : ''}`
+        : '? 沒比對出來';
+      out.push(`| ${esc(r.question)} | ${r.named > 0 ? '✓' : '✗'} ${r.named}/${r.total} 次 | ${page} | ${r.rivals.join('、') || '—'} |`);
     }
-    if (d.gate2.matches.length > 0) out.push('');
+    out.push('');
+    out.push(d.thirdPartyNote);
     out.push(d.recencyNote);
     out.push('');
     out.push(
