@@ -3160,9 +3160,10 @@ function ResponsesExplorer({
         <table className="w-full text-[15px]">
           <thead>
             <tr className="border-b border-line bg-inset/60 text-left text-[14px] text-ink3">
+              {compact && <th className="w-[130px] px-4 py-2.5 font-medium">平台</th>}
               {!compact && <th className="w-[110px] px-4 py-2.5 font-medium">類型</th>}
-              <th className={`${compact ? "px-4" : "px-3"} py-2.5 font-medium`}>{compact ? "問法" : "推薦題"}</th>
-              <th className="w-[150px] px-3 py-2.5 font-medium">平台</th>
+              <th className="px-3 py-2.5 font-medium">{compact ? "問法" : "推薦題"}</th>
+              {!compact && <th className="w-[150px] px-3 py-2.5 font-medium">平台</th>}
               <th className="w-[110px] px-3 py-2.5 font-medium">已提及</th>
               <th className="w-[26%] px-3 py-2.5 font-medium">其他提及品牌</th>
               {!compact && <th className="w-[80px] px-3 py-2.5 text-right font-medium">引用</th>}
@@ -3172,8 +3173,9 @@ function ResponsesExplorer({
             {shown.map((row) => (
               <tr key={row.id} onClick={() => setOpen(row)} className="cursor-pointer border-b border-line align-top last:border-0 hover:bg-inset/50">
                 {!compact && <td className="px-4 py-3 text-[14px] text-ink3">{row.kind === "推薦題" ? `第 ${(row.qi ?? 0) + 1} 題` : row.kind}</td>}
-                <td className={`${compact ? "px-4" : "px-3"} py-3 text-ink`}>{row.question}</td>
-                <td className="px-3 py-3 text-ink2">{row.engine}</td>
+                {compact && <td className="px-4 py-3 font-semibold text-ink">{row.engine}</td>}
+                <td className="px-3 py-3 text-ink">{row.question}</td>
+                {!compact && <td className="px-3 py-3 text-ink2">{row.engine}</td>}
                 <td className="px-3 py-3">{row.named ? <span className="font-semibold text-ok">✓ 有</span> : <span className="font-semibold text-fail">✗ 沒有</span>}</td>
                 <td className="px-3 py-3 text-[14px] text-ink2">{row.brands.length ? row.brands.slice(0, 4).join("、") + (row.brands.length > 4 ? ` 等 ${row.brands.length} 個` : "") : "—"}</td>
                 {!compact && <td className="mono px-3 py-3 text-right text-[14px] text-ink2">{row.r.citations.length}</td>}
@@ -3189,7 +3191,10 @@ function ResponsesExplorer({
             <div className="min-w-0 flex-1 overflow-y-auto p-8">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-[14px] text-ink3">推薦題</p>
+                  <p className="text-[15px] font-semibold text-ink">
+                    {open.engine} 的回答
+                    {open.kind === "推薦題" && <span className={`ml-2 ${open.named ? "text-ok" : "text-fail"}`}>{open.named ? "✓ 有提到你" : "✗ 沒提到你"}</span>}
+                  </p>
                   <p className="mt-1 text-[19px] font-bold text-ink">{open.question}</p>
                 </div>
                 <button type="button" onClick={() => setOpen(null)} className="rounded-lg border border-line px-3 py-1.5 text-[14px] text-ink2 hover:bg-inset">
