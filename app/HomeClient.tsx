@@ -3091,12 +3091,17 @@ function ResponsesExplorer({
   table,
   brandChecks,
   selfName,
+  onlyQi,
 }: {
   rec: RecommendVisibility;
   table: BrandTable;
   brandChecks: VisibilityCardData[];
   selfName: string;
+  // 「推薦題表現」展開某一題時用：只列這題的回答，不顯示篩選列、類型欄、引用欄
+  // （那一頁只講「有沒有提到你」，引用另外在「引用來源」頁）
+  onlyQi?: number;
 }) {
+  const compact = onlyQi !== undefined;
   const [engineFilter, setEngineFilter] = useState("全部");
   const [namedFilter, setNamedFilter] = useState<"all" | "yes" | "no">("all");
   const [open, setOpen] = useState<ExplorerRow | null>(null);
@@ -3118,7 +3123,7 @@ function ResponsesExplorer({
     rows.push({ id: `v${ai}`, kind: "評價題", qi: null, question: a.query, engine: shortEngine(a.engine), r: { ...a, advice: "" }, named: true, brands: [] }),
   );
   const engines = ["全部", ...Array.from(new Set(rows.map((r) => r.engine)))];
-  const shown = rows.filter((r) => (engineFilter === "全部" || r.engine === engineFilter) && (namedFilter === "all" || (namedFilter === "yes" ? r.named : !r.named)));
+  const shown = rows.filter((r) => (!compact || (r.kind === "推薦題" && r.qi === onlyQi)) && (engineFilter === "全部" || r.engine === engineFilter) && (namedFilter === "all" || (namedFilter === "yes" ? r.named : !r.named)));
 
   const selfRe = new RegExp([selfName, ...(selfName.match(/[A-Za-z]{3,}/g) ?? [])].filter(Boolean).map(escapeRe).join("|"), "i");
   const rivalNames = table.rows.filter((b) => !b.isSelf && b.count > 0).map((b) => b.name);
@@ -3129,7 +3134,7 @@ function ResponsesExplorer({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className={compact ? "hidden" : "flex flex-wrap items-center gap-2"}>
         <span className="text-[14px] text-ink3">平台：</span>
         {engines.map((e) => (
           <button key={e} type="button" onClick={() => setEngineFilter(e)} className={chip(engineFilter === e)}>
@@ -3155,23 +3160,23 @@ function ResponsesExplorer({
         <table className="w-full text-[15px]">
           <thead>
             <tr className="border-b border-line bg-inset/60 text-left text-[14px] text-ink3">
-              <th className="w-[110px] px-4 py-2.5 font-medium">類型</th>
-              <th className="px-3 py-2.5 font-medium">推薦題</th>
+              {!compact && <th className="w-[110px] px-4 py-2.5 font-medium">類型</th>}
+              <th className={`${compact ? "px-4" : "px-3"} py-2.5 font-medium`}>{compact ? "問法" : "推薦題"}</th>
               <th className="w-[150px] px-3 py-2.5 font-medium">平台</th>
               <th className="w-[110px] px-3 py-2.5 font-medium">已提及</th>
               <th className="w-[26%] px-3 py-2.5 font-medium">其他提及品牌</th>
-              <th className="w-[80px] px-3 py-2.5 text-right font-medium">引用</th>
+              {!compact && <th className="w-[80px] px-3 py-2.5 text-right font-medium">引用</th>}
             </tr>
           </thead>
           <tbody>
             {shown.map((row) => (
               <tr key={row.id} onClick={() => setOpen(row)} className="cursor-pointer border-b border-line align-top last:border-0 hover:bg-inset/50">
-                <td className="px-4 py-3 text-[14px] text-ink3">{row.kind === "推薦題" ? `第 ${(row.qi ?? 0) + 1} 題` : row.kind}</td>
-                <td className="px-3 py-3 text-ink">{row.question}</td>
+                {!compact && <td className="px-4 py-3 text-[14px] text-ink3">{row.kind === "推薦題" ? `第 ${(row.qi ?? 0) + 1} 題` : row.kind}</td>}
+                <td className={`${compact ? "px-4" : "px-3"} py-3 text-ink`}>{row.question}</td>
                 <td className="px-3 py-3 text-ink2">{row.engine}</td>
                 <td className="px-3 py-3">{row.named ? <span className="font-semibold text-ok">✓ 有</span> : <span className="font-semibold text-fail">✗ 沒有</span>}</td>
                 <td className="px-3 py-3 text-[14px] text-ink2">{row.brands.length ? row.brands.slice(0, 4).join("、") + (row.brands.length > 4 ? ` 等 ${row.brands.length} 個` : "") : "—"}</td>
-                <td className="mono px-3 py-3 text-right text-[14px] text-ink2">{row.r.citations.length}</td>
+                {!compact && <td className="mono px-3 py-3 text-right text-[14px] text-ink2">{row.r.citations.length}</td>}
               </tr>
             ))}
           </tbody>
@@ -4129,7 +4134,7 @@ export default function HomeClient({
                   <QuestionTable
                     table={brandTable}
                     questions={recommend.questions}
-                    renderDetail={(qi) => recommend.questions[qi].results.map((r, i) => <BrandVisibilityCard key={`${r.engine}-${i}`} result={r} />)}
+                    renderDetail={(qi) => <ResponsesExplorer rec={recommend} table={brandTable} brandChecks={[]} selfName={reportBrand} onlyQi={qi} />}
                   />
                   <p className="mt-2 text-[14px] text-ink3">AI 每次回答都不太一樣，隔幾天再問，結果可能會變。</p>
                 </DashSection>

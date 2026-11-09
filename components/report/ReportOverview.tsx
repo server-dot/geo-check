@@ -596,7 +596,7 @@ export function QuestionTable({
                 <td colSpan={table.engines.length + 2} className="px-4 pb-3">
                   <details className="group">
                     <summary className="cursor-pointer list-none text-[14px] text-ink3 hover:text-ink">
-                      <span className="group-open:hidden">▸ 看 AI 的完整回答</span>
+                      <span className="group-open:hidden">▸ 看每一則回答</span>
                       <span className="hidden group-open:inline">▾ 收起</span>
                     </summary>
                     <div className="mt-3 space-y-3">{renderDetail(qi)}</div>
