@@ -56,7 +56,8 @@ export interface PageFacts {
   h1: number;
   h2: number;
   imgTotal: number;
-  imgAltEmpty: number;
+  imgAltEmpty: number; // 含 imgAltJunk
+  imgAltJunk?: number; // alt 有填但是檔名或「圖片」「banner」這類通用字，跟沒寫一樣（舊報告沒有這欄）
   imgAltEmptyNames: string[];
   imgLegacy: number;
   jsonLdTypes: string[];
@@ -150,7 +151,7 @@ function extractJsonLd(root: NHTMLElement): { types: string[]; nodes: Record<str
   return { types: [...types], nodes };
 }
 
-function extractPageFacts(html: string, url: string, depth: number, status: number, ok: boolean, origin: string, viaSitemap = false): PageFacts {
+export function extractPageFacts(html: string, url: string, depth: number, status: number, ok: boolean, origin: string, viaSitemap = false): PageFacts {
   const root = parse(html);
   const title = (root.querySelector('title')?.textContent ?? '').trim();
   const description = (root.querySelector('meta[name="description"]')?.getAttribute('content') ?? '').trim();
@@ -159,7 +160,22 @@ function extractPageFacts(html: string, url: string, depth: number, status: numb
     const role = (img.getAttribute('role') ?? '').toLowerCase();
     return role !== 'presentation' && img.getAttribute('aria-hidden') !== 'true';
   });
-  const emptyImgs = imgs.filter((img) => !(img.getAttribute('alt') ?? '').trim());
+  // 2026-11-10 只看 alt 有沒有填會放過「IMG_1234.jpg」「圖片」「banner」這種等於沒寫的說明
+  const junkAlt = (img: (typeof imgs)[number]) => {
+    const alt = (img.getAttribute('alt') ?? '').trim().toLowerCase();
+    if (!alt) return false;
+    const file = ((img.getAttribute('src') || img.getAttribute('data-src') || '').split('?')[0].split('/').pop() || '').toLowerCase();
+    const stem = file.replace(/\.[a-z0-9]+$/, '');
+    return (
+      /\.(jpe?g|png|gif|webp|avif|svg|bmp)$/.test(alt) ||
+      /^(img|dsc|dscn|dcim|image|photo|pic|screenshot|螢幕擷取畫面)[\s_-]*\d+/.test(alt) ||
+      /^\d+$/.test(alt) ||
+      (stem.length >= 4 && alt === stem) ||
+      /^(圖|圖片|圖示|照片|相片|示意圖|image|img|photo|picture|pic|banner|icon|logo|thumbnail|untitled|default|null|undefined|alt)$/.test(alt)
+    );
+  };
+  const junkImgs = imgs.filter(junkAlt);
+  const emptyImgs = imgs.filter((img) => !(img.getAttribute('alt') ?? '').trim() || junkAlt(img));
   const imgAltEmptyNames = [
     ...new Set(
       emptyImgs
@@ -232,6 +248,7 @@ function extractPageFacts(html: string, url: string, depth: number, status: numb
     h2: root.querySelectorAll('h2').length,
     imgTotal: imgs.length,
     imgAltEmpty: emptyImgs.length,
+    imgAltJunk: junkImgs.length,
     imgAltEmptyNames,
     imgLegacy: legacy,
     jsonLdTypes,

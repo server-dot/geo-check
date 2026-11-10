@@ -416,8 +416,10 @@ export async function aggregateAuditChecks(
     const totalImg = htmlPages.reduce((s, p) => s + p.imgTotal, 0);
     const emptyImg = htmlPages.reduce((s, p) => s + p.imgAltEmpty, 0);
     const emptyPages = htmlPages.filter((p) => p.imgAltEmpty > 0);
+    const junkImg = htmlPages.reduce((s, p) => s + (p.imgAltJunk ?? 0), 0);
+    const junkNote = junkImg ? `（其中 ${junkImg} 張有填，但填的是檔名或「圖片」「banner」這類字，跟沒寫一樣）` : '';
     out.push(emptyImg
-      ? { key: 'imgAlt', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '圖片有沒有文字說明', status: 'fail', advice: `全站 ${totalImg} 張圖裡有 ${emptyImg} 張沒有文字說明，分布在 ${emptyPages.length} 頁。`, impact: 'AI 讀的是文字，不是圖。你放的產品照、菜單、實績照片，只要沒有文字說明，對 AI 來說就是不存在的——照片裡的資訊完全傳達不出去。', technical: `這些 <img> 的 alt 屬性留空。補上描述圖片內容的文字。`, evidence: `${emptyImg}/${totalImg} 張沒有說明`, details: emptyPages.map((p) => ({ url: p.url, note: `${p.imgAltEmpty} 張圖沒有文字說明` })) }
+      ? { key: 'imgAlt', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '圖片有沒有文字說明', status: 'fail', advice: `全站 ${totalImg} 張圖裡有 ${emptyImg} 張沒有文字說明，分布在 ${emptyPages.length} 頁${junkNote}。`, impact: 'AI 讀的是文字，不是圖。你放的產品照、菜單、實績照片，只要沒有文字說明，對 AI 來說就是不存在的——照片裡的資訊完全傳達不出去。', technical: `這些 <img> 的 alt 屬性留空，或填了檔名、通用字。補上描述圖片內容的文字。`, evidence: `${emptyImg}/${totalImg} 張沒有說明`, details: emptyPages.map((p) => ({ url: p.url, note: `${p.imgAltEmpty} 張圖沒有文字說明${p.imgAltJunk ? `（${p.imgAltJunk} 張填的是檔名或通用字）` : ''}` })) }
       : { key: 'imgAlt', level: LEVEL.EFFICIENCY, category: CATEGORY.STRUCTURE, item: '圖片有沒有文字說明', status: 'ok', advice: `爬到的圖片都有文字說明（共 ${totalImg} 張）`, evidence: `0/${totalImg} 張沒有說明` });
   }
 
