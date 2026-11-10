@@ -231,6 +231,18 @@ function normalizeForMerge(name: string): string {
   return name.toLowerCase().replace(/[\s·・、,，.。（）()【】「」《》:：\-—–_]/g, '');
 }
 
+// 中英並列的品牌，不同批次會寫成不同順序（「婦潔 (VIGILL)」「VIGILL 婦潔」、「施巴 SEBAMED」「Sebamed 施巴」）
+// 或多帶一段系列名（「HH」「HH 草本新淨界」），子字串比對抓不到。拆成中文段＋英文字，
+// 短名的每一段都出現在長名裡就算同一個。
+function nameTokens(name: string): string[] {
+  return (name.toLowerCase().match(/[\u4e00-\u9fff]+|[a-z0-9]+/g) ?? []).filter(Boolean);
+}
+function tokenSubset(short: string, long: string): boolean {
+  const a = nameTokens(short);
+  const b = new Set(nameTokens(long));
+  return a.length > 0 && a.every((t) => b.has(t));
+}
+
 export async function extractRecommendedNames(
   answers: { engine: string; question: string; answer: string; citations: { url: string; isSelf: boolean }[] }[],
   brandName: string,
@@ -238,10 +250,29 @@ export async function extractRecommendedNames(
   apiKey: string,
 ): Promise<RecommendedName[]> {
   if (answers.length === 0) return [];
-  // 三個引擎 × 3 題＝9 份回答，每個名字又多帶 type，800 會被截斷、JSON 解析失敗、整份名單變空
-  const raw = await askJson(buildNamePrompt(answers, brandName, domain), apiKey, 1600);
-  const parsed = parseJson<{ answers?: { index?: number; names?: unknown }[] }>(raw);
-  const rows = Array.isArray(parsed?.answers) ? parsed!.answers : [];
+  // 2026-11-10 每題加了第二種問法後一次是 15 份回答，整包丟給模型會把所有名字塞進 index 0
+  // （Relove：40 個名字全部 count 1、answers [0]，排名變成照字母排，大牌跟小牌一樣 1 次）。
+  // 改成每 5 份一批平行抽，index 再加回批次起點；某一批失敗只少那幾份，不會整份名單變空。
+  const BATCH = 5;
+  const batches: number[] = [];
+  for (let s = 0; s < answers.length; s += BATCH) batches.push(s);
+  const rows = (
+    await Promise.all(
+      batches.map(async (start) => {
+        try {
+          const raw = await askJson(buildNamePrompt(answers.slice(start, start + BATCH), brandName, domain), apiKey, 1600);
+          const parsed = parseJson<{ answers?: { index?: number; names?: unknown }[] }>(raw);
+          const got = Array.isArray(parsed?.answers) ? parsed!.answers : [];
+          const size = Math.min(BATCH, answers.length - start);
+          return got
+            .filter((r) => typeof r.index === 'number' && r.index >= 0 && r.index < size) // 超出這批範圍的不要算到別批頭上
+            .map((r) => ({ ...r, index: (r.index as number) + start }));
+        } catch {
+          return [];
+        }
+      }),
+    )
+  ).flat();
 
   // 先逐筆收集，count 用「出現在哪幾個回答」的集合大小算，不是出現次數累加——
   // 合併同義名稱時才不會把同一個回答裡的兩種寫法算成兩次。
@@ -299,7 +330,7 @@ export async function extractRecommendedNames(
   const sortedByLength = [...entries].sort((a, b) => a.norm.length - b.norm.length);
   const merged: Entry[] = [];
   for (const e of sortedByLength) {
-    const host = merged.find((m) => m.norm.length >= 3 && e.norm.includes(m.norm));
+    const host = merged.find((m) => (m.norm.length >= 3 && e.norm.includes(m.norm)) || tokenSubset(m.name, e.name));
     if (host) {
       for (const i of e.answers) host.answers.add(i);
       for (const g of e.engines) host.engines.add(g);
