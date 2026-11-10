@@ -3075,6 +3075,7 @@ type ExplorerRow = {
   id: string;
   kind: "推薦題" | "用名字問" | "評價題";
   qi: number | null;
+  alt?: boolean; // 同一題的第二種問法（每題用兩種說法各問一次，畫面上要標出來，不然看起來像重複問）
   question: string;
   engine: string;
   r: VisibilityCardData;
@@ -3112,7 +3113,7 @@ function ResponsesExplorer({
   rec.questions.forEach((q, qi) =>
     q.results.forEach((r, ri) => {
       const i = fi++;
-      rows.push({ id: `q${qi}-${ri}`, kind: "推薦題", qi, question: r.query || q.question, engine: shortEngine(r.engine), r, named: !!r.namedSelf, brands: brandsAt(i) });
+      rows.push({ id: `q${qi}-${ri}`, kind: "推薦題", qi, alt: !!q.altQuestion && r.query === q.altQuestion, question: r.query || q.question, engine: shortEngine(r.engine), r, named: !!r.namedSelf, brands: brandsAt(i) });
     }),
   );
   brandChecks.forEach((b, bi) =>
@@ -3174,7 +3175,10 @@ function ResponsesExplorer({
               <tr key={row.id} onClick={() => setOpen(row)} className="cursor-pointer border-b border-line align-top last:border-0 hover:bg-inset/50">
                 {!compact && <td className="px-4 py-3 text-[14px] text-ink3">{row.kind === "推薦題" ? `第 ${(row.qi ?? 0) + 1} 題` : row.kind}</td>}
                 {compact && <td className="px-4 py-3 font-semibold text-ink">{row.engine}</td>}
-                <td className="px-3 py-3 text-ink">{row.question}</td>
+                <td className="px-3 py-3 text-ink">
+                  {row.alt && <span className="mr-1.5 whitespace-nowrap rounded bg-inset px-1.5 py-0.5 text-[13px] text-ink2">換個說法</span>}
+                  {row.question}
+                </td>
                 {!compact && <td className="px-3 py-3 text-ink2">{row.engine}</td>}
                 <td className="px-3 py-3">{row.named ? <span className="font-semibold text-ok">✓ 有</span> : <span className="font-semibold text-fail">✗ 沒有</span>}</td>
                 <td className="px-3 py-3 text-[14px] text-ink2">{row.brands.length ? row.brands.slice(0, 4).join("、") + (row.brands.length > 4 ? ` 等 ${row.brands.length} 個` : "") : "—"}</td>
