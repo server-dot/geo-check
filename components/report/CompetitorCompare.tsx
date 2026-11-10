@@ -6,7 +6,7 @@
 // 2. AI 怎麼形容你、怎麼形容它（定位差在哪）
 // 3. AI 推了它、沒推你的那幾次，看的是哪些網頁（你缺席的地方）
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { brandSlugs, classifySource, SOURCE_LABEL } from "@/lib/geo-source-type";
 import type { BrandTable } from "./ReportOverview";
 
@@ -24,6 +24,11 @@ interface PositioningLike {
 
 function tokens(name: string): string[] {
   return [...new Set(name.toLowerCase().match(/[a-z0-9]{2,}|[一-鿿]{2,}/g) ?? [])];
+}
+
+// 跟 lib/geo-compare.ts 的 plainBrand 一樣（那支檔案有 server 端呼叫，不能 import 進 client）
+function plainBrand(name: string): string {
+  return name.replace(/[（(][^）)]*[）)]/g, "").trim() || name;
 }
 
 function sameBrand(a: string, b: string): boolean {
@@ -155,19 +160,43 @@ export function CompetitorCompare({
   positioning,
   selfName,
   compare,
+  compares,
 }: {
   table: BrandTable;
   questions: { question: string; results: ResultLike[] }[];
   positioning?: PositioningLike[] | null;
   selfName: string;
-  compare?: CompareLike | null; // 直接比較題（健檢時只問了排名第一的那一家），選擇器預設跟它一致
+  compare?: CompareLike | null; // 健檢時就問的直接比較（排名第一的那一家），選擇器預設跟它一致
+  compares?: Record<string, CompareLike>; // 之後切到別家才問的，key 是 plainBrand(對手)
 }) {
   const defaultRival = compare?.rival;
+  // 切到沒比過的對手就去問（/api/geo/compare，問完存回檢測紀錄）
+  const [asked, setAsked] = useState<Record<string, CompareLike | "loading" | { error: string }>>({});
   const rivals = table.rows.filter((r) => !r.isSelf && r.count > 0 && r.hits).slice(0, 6);
   const self = table.rows.find((r) => r.isSelf);
   const initial = (defaultRival && rivals.find((r) => sameBrand(r.name, defaultRival))?.name) || rivals[0]?.name || "";
   const [pick, setPick] = useState(initial);
   const rival = rivals.find((r) => r.name === pick) ?? rivals[0];
+  const rivalKey = rival ? plainBrand(rival.name) : "";
+  const known: CompareLike | undefined =
+    (compare && compare.verdicts.length > 0 && (plainBrand(compare.rival) === rivalKey || (rival && sameBrand(rival.name, compare.rival))) ? compare : undefined) ??
+    compares?.[rivalKey];
+  const state = known ?? asked[rivalKey];
+  useEffect(() => {
+    if (!rival || known || asked[rivalKey]) return;
+    const id = new URLSearchParams(window.location.search).get("report");
+    if (!id) {
+      setAsked((m) => ({ ...m, [rivalKey]: { error: "這份報告沒有存檔，沒辦法另外比較這一家。" } }));
+      return;
+    }
+    setAsked((m) => ({ ...m, [rivalKey]: "loading" }));
+    fetch("/api/geo/compare", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, rival: rival.name }) })
+      .then(async (r) => {
+        const d = (await r.json()) as { compare?: CompareLike; error?: string };
+        setAsked((m) => ({ ...m, [rivalKey]: d.compare ?? { error: d.error ?? "比較失敗，請稍後再試。" } }));
+      })
+      .catch(() => setAsked((m) => ({ ...m, [rivalKey]: { error: "比較失敗，請稍後再試。" } })));
+  }, [rival, rivalKey, known, asked]);
   if (!self || !rival) return <p className="text-[15px] text-ink3">這次 AI 沒有點名其他品牌，沒有對手可以比。</p>;
 
   const flatResults = questions.flatMap((q) => q.results);
@@ -226,16 +255,16 @@ export function CompetitorCompare({
         ))}
       </div>
 
-      {/* 2026-11-10 直接比較題原本放在選擇器上方、固定是健檢時問的那一家，切換對手它不會跟著換，
-          看起來像切了沒反應；搬進來，只在選到那一家時顯示，其他家講清楚沒問過 */}
-      {compare && compare.verdicts.length > 0 &&
-        (sameBrand(rival.name, compare.rival) ? (
-          <HeadToHead selfName={selfName} cmp={compare} />
-        ) : (
-          <p className="rounded-[10px] border border-line bg-card px-4 py-3 text-[14px] text-ink3">
-            「{selfName} 跟 {rival.name} 哪個好」這題這次沒有問 AI，健檢只直接比較推薦次數最多的 {compare.rival}。下面是推薦題裡兩家被提到的情況。
-          </p>
-        ))}
+      {/* 2026-11-10 直接比較題：健檢時只問第一名，切到別家當場問那家（約 30 秒），問完存起來 */}
+      {state === "loading" ? (
+        <p className="rounded-[10px] border border-line bg-card px-4 py-3 text-[14px] text-ink2">
+          正在問 Perplexity、ChatGPT、Google「{selfName} 跟 {plainBrand(rival.name)} 哪個好」，大約 30 秒…
+        </p>
+      ) : state && "error" in state ? (
+        <p className="rounded-[10px] border border-line bg-card px-4 py-3 text-[14px] text-fail">{state.error}</p>
+      ) : state ? (
+        <HeadToHead selfName={selfName} cmp={state} />
+      ) : null}
 
       <p className="flex items-center gap-4 text-[14px] text-ink3">
         <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-lime" />你</span>

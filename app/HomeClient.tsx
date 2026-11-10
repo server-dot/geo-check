@@ -213,12 +213,15 @@ interface RecommendVisibility {
     reviewAnswers?: { engine: string; query: string; answer: string; citedSelf: boolean; citations: { url: string; title: string; isSelf: boolean }[] }[];
   } | null;
   positioning?: { brand: string; isSelf: boolean; traits: { text: string; quote: string; engine: string }[] }[] | null;
-  compare?: {
-    rival: string;
-    query: string;
-    verdicts: { engine: string; favors: "self" | "rival" | "tie"; reason: string; quote: string }[];
-    dimensions: { name: string; winner: "self" | "rival" | "tie"; quote: string; engine: string }[];
-  } | null;
+  compare?: CompareShape | null;
+  compares?: Record<string, CompareShape>;
+}
+
+interface CompareShape {
+  rival: string;
+  query: string;
+  verdicts: { engine: string; favors: "self" | "rival" | "tie"; reason: string; quote: string }[];
+  dimensions: { name: string; winner: "self" | "rival" | "tie"; quote: string; engine: string }[];
 }
 
 interface LlmsTxtLink {
@@ -4123,7 +4126,7 @@ export default function HomeClient({
               <div className="mt-12">
                 <DashSection id="competitors" title="競爭對手分析" desc={`${reportBrand} 與競品的推薦次數、品牌定位與引用來源比較`}>
                   <div className="space-y-4">
-                    <CompetitorCompare table={brandTable} questions={recommend.questions} positioning={recommend.positioning} selfName={reportBrand} compare={recommend.compare} />
+                    <CompetitorCompare table={brandTable} questions={recommend.questions} positioning={recommend.positioning} selfName={reportBrand} compare={recommend.compare} compares={recommend.compares} />
                   </div>
                 </DashSection>
               </div>

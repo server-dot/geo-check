@@ -69,6 +69,8 @@ export interface RecommendVisibility {
   positioning?: BrandPositioning[] | null;
   // 「你 跟 第一名對手 哪個好」的直接比較（見 geo-compare.ts）
   compare?: CompareResult | null;
+  // 報告上切到其他對手時才問的直接比較，key 是 plainBrand(對手名)（見 app/api/geo/compare）
+  compares?: Record<string, CompareResult>;
   profile?: BrandProfile | null;
 }
 
