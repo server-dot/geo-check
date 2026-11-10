@@ -108,29 +108,38 @@ export function HeadToHead({ selfName, cmp }: { selfName: string; cmp: CompareLi
         })}
       </div>
       {cmp.dimensions.length > 0 && (
-        <div className="mt-4">
-          <div className="mb-1 grid grid-cols-[1fr_auto_1fr] text-[14px] text-ink3">
-            <span className="font-semibold text-ink">← {selfName} 較好</span>
-            <span>比較標準</span>
-            <span className="text-right font-semibold text-ink">{cmp.rival} 較好 →</span>
-          </div>
-          {cmp.dimensions.map((d) => (
-            <div key={d.name} className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-t border-line py-2 first:border-t-0">
-              <div className="flex h-3 justify-end overflow-hidden rounded-l-full bg-inset">
-                {d.winner === "self" && <div className="w-full rounded-l-full bg-lime" />}
-                {d.winner === "tie" && <div className="w-1/2 bg-ink3/30" />}
-              </div>
-              <span className="w-[84px] text-center text-[14px] font-medium text-ink" title={`${d.engine}：「${d.quote}」`}>
-                {d.name}
-              </span>
-              <div className="flex h-3 overflow-hidden rounded-r-full bg-inset">
-                {d.winner === "rival" && <div className="w-full rounded-r-full bg-ink/70" />}
-                {d.winner === "tie" && <div className="w-1/2 bg-ink3/30" />}
-              </div>
-            </div>
-          ))}
-          <p className="mt-1 text-[14px] text-ink3">滑鼠移到標準上可以看 AI 的原句。</p>
-        </div>
+        // 2026-11-10 原本是左右拔河條，但每個標準只有「誰較好」一個結果，條不是全滿就是全空，
+        // 看起來像壞掉的圖表、也沒有程度可言；改成表格，AI 原句直接攤開（原本藏在 hover）。
+        <table className="mt-4 w-full border-collapse text-[14px]">
+          <thead>
+            <tr className="border-b border-line text-left text-ink3">
+              <th className="py-2 pr-3 font-medium">比較標準</th>
+              <th className="py-2 pr-3 font-medium">AI 說誰較好</th>
+              <th className="py-2 font-medium">AI 原句</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cmp.dimensions.map((d) => {
+              const w =
+                d.winner === "self"
+                  ? { t: selfName, cls: "bg-lime text-ink" }
+                  : d.winner === "rival"
+                    ? { t: cmp.rival, cls: "bg-ink text-paper" }
+                    : { t: "看需求", cls: "bg-inset text-ink2" };
+              return (
+                <tr key={d.name} className="border-b border-line align-top last:border-b-0">
+                  <td className="whitespace-nowrap py-2 pr-3 font-medium text-ink">{d.name}</td>
+                  <td className="whitespace-nowrap py-2 pr-3">
+                    <span className={`rounded-full px-2 py-0.5 font-semibold ${w.cls}`}>{w.t}</span>
+                  </td>
+                  <td className="py-2 text-ink2">
+                    <span className="text-ink3">{d.engine}：</span>「{d.quote}」
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       )}
     </div>
   );
