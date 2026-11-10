@@ -114,14 +114,18 @@ export function HeadToHead({ selfName, cmp }: { selfName: string; cmp: CompareLi
           <thead>
             <tr className="border-b border-line text-left text-ink3">
               <th className="py-2 pr-3 font-medium">比較標準</th>
-              <th className="py-2 pr-3 font-medium">AI 說誰較好</th>
+              <th className="py-2 pr-3 font-medium">AI 怎麼說</th>
               <th className="py-2 font-medium">AI 原句</th>
             </tr>
           </thead>
           <tbody>
             {cmp.dimensions.map((d) => {
-              const w =
-                d.winner === "self"
+              // 2026-11-10 抽取模型常把「只介紹其中一家」的句子判成那家贏（例：恆遠「不外包」→ 團隊規模恆遠勝），
+              // 但 AI 根本沒拿兩家比；原句沒有比較字眼就只標「只講到 X」，不給輸贏。
+              const compared = /比|更|較|勝|優於|不如|適合/.test(d.quote);
+              const w = !compared && d.winner !== "tie"
+                ? { t: `只講到${d.winner === "self" ? selfName : cmp.rival}`, cls: "border border-line text-ink2" }
+                : d.winner === "self"
                   ? { t: selfName, cls: "bg-lime text-ink" }
                   : d.winner === "rival"
                     ? { t: cmp.rival, cls: "bg-ink text-paper" }
