@@ -153,13 +153,16 @@ export function CompetitorCompare({
   table,
   questions,
   positioning,
-  defaultRival,
+  selfName,
+  compare,
 }: {
   table: BrandTable;
   questions: { question: string; results: ResultLike[] }[];
   positioning?: PositioningLike[] | null;
-  defaultRival?: string; // 直接比較題比的那一家，選擇器預設跟它一致
+  selfName: string;
+  compare?: CompareLike | null; // 直接比較題（健檢時只問了排名第一的那一家），選擇器預設跟它一致
 }) {
+  const defaultRival = compare?.rival;
   const rivals = table.rows.filter((r) => !r.isSelf && r.count > 0 && r.hits).slice(0, 6);
   const self = table.rows.find((r) => r.isSelf);
   const initial = (defaultRival && rivals.find((r) => sameBrand(r.name, defaultRival))?.name) || rivals[0]?.name || "";
@@ -222,6 +225,17 @@ export function CompetitorCompare({
           </button>
         ))}
       </div>
+
+      {/* 2026-11-10 直接比較題原本放在選擇器上方、固定是健檢時問的那一家，切換對手它不會跟著換，
+          看起來像切了沒反應；搬進來，只在選到那一家時顯示，其他家講清楚沒問過 */}
+      {compare && compare.verdicts.length > 0 &&
+        (sameBrand(rival.name, compare.rival) ? (
+          <HeadToHead selfName={selfName} cmp={compare} />
+        ) : (
+          <p className="rounded-[10px] border border-line bg-card px-4 py-3 text-[14px] text-ink3">
+            「{selfName} 跟 {rival.name} 哪個好」這題這次沒有問 AI，健檢只直接比較推薦次數最多的 {compare.rival}。下面是推薦題裡兩家被提到的情況。
+          </p>
+        ))}
 
       <p className="flex items-center gap-4 text-[14px] text-ink3">
         <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-lime" />你</span>

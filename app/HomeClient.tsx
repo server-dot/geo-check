@@ -33,7 +33,7 @@ interface MeResponse {
   loginAvailable: boolean;
 }
 
-import { CompetitorCompare, HeadToHead } from "@/components/report/CompetitorCompare";
+import { CompetitorCompare } from "@/components/report/CompetitorCompare";
 import { OverviewBoard } from "@/components/report/OverviewBoard";
 import { type BrandTable, BrandRankTable, buildBrandTable, buildCitedPages, ChannelList, CitationTable, CitedPagesSection, DashSection, OverviewKpis, QuestionTable, ReportNav, SentimentSection, ShareDonut, shortEngine } from "@/components/report/ReportOverview";
 
@@ -4123,8 +4123,7 @@ export default function HomeClient({
               <div className="mt-12">
                 <DashSection id="competitors" title="競爭對手分析" desc={`${reportBrand} 與競品的推薦次數、品牌定位與引用來源比較`}>
                   <div className="space-y-4">
-                    {recommend.compare && recommend.compare.verdicts.length > 0 && <HeadToHead selfName={reportBrand} cmp={recommend.compare} />}
-                    <CompetitorCompare table={brandTable} questions={recommend.questions} positioning={recommend.positioning} defaultRival={recommend.compare?.rival} />
+                    <CompetitorCompare table={brandTable} questions={recommend.questions} positioning={recommend.positioning} selfName={reportBrand} compare={recommend.compare} />
                   </div>
                 </DashSection>
               </div>
