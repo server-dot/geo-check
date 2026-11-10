@@ -1,4 +1,5 @@
 import { runVisibilityQueries, hostnameOf, isSameSite, type VisibilityAnswer } from './geo-brand-visibility';
+import { findRealQuestions, type RealQuestionSource } from './geo-real-questions';
 import { SITE_URL } from '@/lib/site';
 import type { ContentMatch } from './geo-content-match';
 import { fetchGoogleAio } from './geo-google-aio';
@@ -26,6 +27,8 @@ export interface RecommendQuestionResult {
   // 同一個意思的另一種問法（2026-11-03 數字要穩又不想每天問：每題換兩種問法一起問，
   // 樣本加倍，也才測得出「客戶不管怎麼問 AI 都會推你」）。舊結果沒有這欄。
   altQuestion?: string;
+  // 題目取自網友在論壇真的問過的問題（見 geo-real-questions.ts）；沒有＝AI 猜的或使用者自己改的
+  source?: RealQuestionSource;
   results: RecommendAnswer[];
 }
 
@@ -88,7 +91,7 @@ export interface RecommendInput {
 const MODEL = 'openai/gpt-4.1-mini';
 const QUESTION_COUNT = 3;
 
-export async function askJson(prompt: string, apiKey: string, maxTokens: number): Promise<string> {
+export async function askJson(prompt: string, apiKey: string, maxTokens: number, model = MODEL): Promise<string> {
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -98,7 +101,7 @@ export async function askJson(prompt: string, apiKey: string, maxTokens: number)
       'X-Title': 'GEO Check Recommend Query',
     },
     body: JSON.stringify({
-      model: MODEL,
+      model,
       messages: [{ role: 'user', content: prompt }],
       max_tokens: maxTokens,
       temperature: 0.3,
@@ -109,7 +112,7 @@ export async function askJson(prompt: string, apiKey: string, maxTokens: number)
   if (!res.ok) {
     const body = await res.text();
     noteOpenRouterFailure(res.status, body);
-    throw new Error(`OpenRouter 錯誤（${MODEL}）：${body}`);
+    throw new Error(`OpenRouter 錯誤（${model}）：${body}`);
   }
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
   return data.choices?.[0]?.message?.content ?? '';
@@ -416,13 +419,21 @@ export async function runRecommendVisibility(
   if (!apiKey || !input.brandName) return null;
 
   let questions: string[];
+  const sources = new Map<string, RealQuestionSource>();
   if (customQuestions && customQuestions.length > 0) {
     questions = customQuestions;
   } else {
-    try {
-      questions = await generateRecommendQuestions(input, apiKey);
-    } catch {
-      return null;
+    // 先用網友真的問過的問題，不夠 3 題再讓 AI 猜補滿
+    const real = await findRealQuestions(input, QUESTION_COUNT, apiKey);
+    for (const r of real) sources.set(r.question, r.source);
+    questions = real.map((r) => r.question);
+    if (questions.length < QUESTION_COUNT) {
+      try {
+        const guessed = await generateRecommendQuestions(input, apiKey);
+        questions = [...questions, ...guessed.filter((q) => !questions.includes(q))].slice(0, QUESTION_COUNT);
+      } catch {
+        if (questions.length === 0) return null;
+      }
     }
   }
   if (questions.length === 0) return null;
@@ -450,7 +461,8 @@ export async function runRecommendVisibility(
         const named = mentionsSelf(a.answer, input.brandName, domain, a.citations);
         return { ...a, query: q, namedSelf: named, advice: adviceFor(a, named) };
       });
-      return { question, ...(alt ? { altQuestion: alt } : {}), results };
+      const source = sources.get(question);
+      return { question, ...(alt ? { altQuestion: alt } : {}), ...(source ? { source } : {}), results };
     }),
   );
   const questionsWithAnswers = perQuestion.filter((q) => q.results.length > 0);

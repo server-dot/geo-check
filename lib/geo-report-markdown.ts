@@ -174,8 +174,10 @@ export function buildReportMarkdown(job: AuditJob): string {
     out.push(d.recencyNote);
     out.push('');
     out.push(
-      `這 ${rec.questions.length} 題是 AI 讀過首頁後猜「一般人找這類服務時會怎麼問」寫出來的，題目裡沒有品牌名。` +
-        `題目是推估，不是真實搜尋量。提問時間：${rec.askedAt}。`,
+      (rec.questions.some((q) => q.source)
+        ? `附出處的題目取自網友在論壇真的問過的問題，其餘是 AI 讀過首頁後猜的；題目裡沒有品牌名。`
+        : `這 ${rec.questions.length} 題是 AI 讀過首頁後猜「一般人找這類服務時會怎麼問」寫出來的，題目裡沒有品牌名。`) +
+        `知道有人這樣問，不代表很多人這樣問，不是搜尋量。提問時間：${rec.askedAt}。`,
     );
     out.push('');
     out.push(`- ${rec.totalAnswers} 次回答中，有 ${rec.namedSelfCount} 次把你寫進答案。`);
@@ -195,6 +197,10 @@ export function buildReportMarkdown(job: AuditJob): string {
     for (const q of rec.questions) {
       out.push(`### 「${esc(q.question)}」`);
       out.push('');
+      if (q.source) {
+        out.push(`出自 ${q.source.site} 網友：[「${esc(q.source.title)}」](${q.source.link})`);
+        out.push('');
+      }
       for (const r of q.results) {
         out.push(
           `**${r.engine}**：推薦 ${r.namedSelf ? '🟢 答案裡推薦了你' : '🔴 答案裡沒推薦你'}｜引用 ${r.citedSelf ? '有你的網站' : '沒有你的網站'}`,

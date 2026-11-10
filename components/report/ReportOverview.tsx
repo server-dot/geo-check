@@ -522,6 +522,7 @@ export function ShareDonut({ table }: { table: BrandTable }) {
 interface QuestionLike {
   question: string;
   altQuestion?: string;
+  source?: { site: string; title: string; link: string }; // 取自網友在論壇真的問過的問題
   results: { engine: string; namedSelf?: boolean; citedSelf: boolean }[];
 }
 
@@ -572,6 +573,14 @@ export function QuestionTable({
               <tr>
                 <td className="px-4 pt-3 pb-1 align-top text-ink">
                   {q.question}
+                  {q.source && (
+                    <p className="mt-1 text-[14px] text-ink3">
+                      出自 {q.source.site} 網友：
+                      <a href={q.source.link} target="_blank" rel="noopener noreferrer" className="report-table-link">
+                        「{q.source.title}」↗
+                      </a>
+                    </p>
+                  )}
                   {q.altQuestion && <p className="mt-1 text-[14px] text-ink3">另一種問法：{q.altQuestion}</p>}
                 </td>
                 {table.engines.map((e) => {

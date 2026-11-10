@@ -197,7 +197,7 @@ interface RecommendedName {
 }
 interface RecommendVisibility {
   brandName: string;
-  questions: { question: string; altQuestion?: string; results: VisibilityCardData[] }[];
+  questions: { question: string; altQuestion?: string; source?: { site: string; title: string; link: string }; results: VisibilityCardData[] }[];
   names: RecommendedName[];
   askedAt: string;
   totalAnswers: number;
@@ -4145,7 +4145,7 @@ export default function HomeClient({
                 <DashSection
                   id="questions"
                   title="推薦題表現"
-                  desc={`${recommend.customQuestions ? "題目是你自己改的" : "題目是 AI 讀你的首頁猜的"}。${recommend.questions.some((q) => q.altQuestion) ? "Perplexity、ChatGPT 每題用兩種問法各問一次，Google 問一次" : `每題各問 ${brandTable.engines.join("、")} 一次`}`}
+                  desc={`${recommend.customQuestions ? "題目是你自己改的" : recommend.questions.every((q) => q.source) ? "題目取自網友在 Dcard、PTT 等論壇真的問過的問題（知道有人這樣問，不代表很多人這樣問）" : recommend.questions.some((q) => q.source) ? "有附出處的題目取自網友在論壇真的問過的問題，其餘是 AI 讀你的首頁猜的" : "題目是 AI 讀你的首頁猜的"}。${recommend.questions.some((q) => q.altQuestion) ? "Perplexity、ChatGPT 每題用兩種問法各問一次，Google 問一次" : `每題各問 ${brandTable.engines.join("、")} 一次`}`}
                   right={<EditQuestions key={recommend.askedAt} jobId={reportJobId} current={recommend.questions.map((q) => q.question)} onDone={setRecommendOverride} />}
                 >
                   <QuestionTable
