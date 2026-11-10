@@ -270,7 +270,18 @@ export async function POST(req: NextRequest) {
   let engine: EngineResult;
   const startedAt = Date.now(); // 額度不足偵測從這裡算起：品牌題在 runEngineChecks 就會打 AI
   try {
-    engine = await runEngineChecks(origin, kind === 'geo');
+    try {
+      engine = await runEngineChecks(origin, kind === 'geo');
+    } catch (err) {
+      // 不少台灣站的憑證只簽了 www（例：foreverrelove.com.tw），使用者打裸網域就連不上。
+      // 2026-11-10 原本只回「試試改成 www」，但錯誤訊息常沒被看到、使用者以為按鈕壞了；直接幫他改成 www 再試一次。
+      if (!/certificate|altnames|ERR_TLS/i.test(String((err as { cause?: { code?: string; message?: string } })?.cause?.code ?? '') + String((err as { cause?: { message?: string } })?.cause?.message ?? '')) || host.startsWith('www.')) throw err;
+      const www = new URL(origin);
+      www.hostname = `www.${www.hostname}`;
+      engine = await runEngineChecks(www.origin, kind === 'geo');
+      origin = www.origin;
+      host = www.host;
+    }
   } catch (err) {
     releaseAuditSlot();
     await releaseAudit(user.email, kind).catch(() => {});

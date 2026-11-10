@@ -3877,6 +3877,12 @@ export default function HomeClient({
                   {loading ? "檢測中…" : "開始檢測"}
                 </button>
                 </div>
+                {/* 2026-11-10 錯誤原本只印在整頁行銷內容最底下，按了沒反應、看不到原因（例：憑證跟網域不符要加 www） */}
+                {error && !reportReady && (
+                  <p role="alert" className="mt-3 rounded-lg bg-white px-3.5 py-2.5 text-[14px] font-medium text-fail">
+                    {error}
+                  </p>
+                )}
               </form>
               {/* 11.5px 的細字疊在光軌上，用 #a2acbd 實測只有 4.22:1（量法：把文字層
                   visibility:hidden 後截圖，取這一帶最亮的背景像素）。提亮到 #c6cdda 才過 4.5。 */}
@@ -3969,7 +3975,7 @@ export default function HomeClient({
       </div>
 
       <div className={reportReady ? "min-w-[1280px]" : "mx-auto max-w-3xl px-4 py-16"}>
-        {error && <p className="mt-4 text-center text-fail">{error}</p>}
+        {error && reportReady && <p className="mt-4 text-center text-fail">{error}</p>}
 
         {/* 小積木反饋：檢測過程中途只想看到單一進度動畫，不要一部分結果先跑出來、
             一部分還在轉圈——「全部判斷完再列出結果」。所以下面整塊結果只在
