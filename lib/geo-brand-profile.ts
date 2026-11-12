@@ -7,10 +7,10 @@ import { askJson, parseJson } from './geo-recommend-visibility';
 
 export const PROFILE_FIELDS = [
   { key: 'category', label: '品類' },
-  { key: 'products', label: '主力產品' },
+  { key: 'products', label: '主力產品／服務' },
   { key: 'features', label: '品牌特色' },
   { key: 'price', label: '價格帶' },
-  { key: 'channels', label: '通路' },
+  { key: 'channels', label: '通路／管道' },
 ] as const;
 
 export type ProfileFieldKey = (typeof PROFILE_FIELDS)[number]['key'];
@@ -51,13 +51,16 @@ function shortEngine(e: string): string {
   return e.split(/[（(]/)[0].trim();
 }
 
+// 11-12 改成中性問法：原本問「是什麼品牌？產品類別、主力產品、價格帶、販售通路」是零售品牌的框架，
+// 接案／顧問／服務業（aiqkangber）三家 AI 第一句都在糾正題目「它不是消費品牌，而是…」，
+// Google 還因為「品牌」兩字扯到同名早午餐店。改完還沒花錢實測，下次有人健檢時順便看。
 export function profileQuery(brand: string): string {
-  return `「${brand}」是什麼品牌？請介紹它的產品類別、主力產品、品牌特色、價格帶、販售通路，每項一兩句就好，並附上官方網站。`;
+  return `「${brand}」是做什麼的？請介紹它的類別、主力產品或服務、特色、價格帶、在哪裡買或怎麼找到它，每項一兩句就好，並附上官方網站。`;
 }
 
 // Google 只吃搜尋字串，長問句反而不出 AI 摘要
 export function profileGoogleQuery(brand: string): string {
-  return `${brand} 是什麼品牌`;
+  return `${brand} 是什麼`;
 }
 
 const norm = (t: string) => t.replace(/[\s*_`#>|[\]()【】「」]/g, '');
@@ -74,7 +77,7 @@ function verifiedQuote(text: string, quote: string): string | null {
 // 一段回答各自整理：三段一起丟給模型時，它常整格漏掉（2026-11-03 實測 ChatGPT 那段五項都寫了，只抽出兩項）
 async function extractOne(brand: string, answer: string, apiKey: string): Promise<Partial<Record<ProfileFieldKey, { value: string; quote: string }>>> {
   const fieldList = PROFILE_FIELDS.map((f) => `${f.key}（${f.label}）`).join('、');
-  const prompt = `下面是一個 AI 介紹「${brand}」的回答。請整理它對這個品牌的描述：${fieldList}。
+  const prompt = `下面是一個 AI 介紹「${brand}」的回答。請整理它對這個品牌的描述：${fieldList}。賣商品的看商品、通路；做服務的（接案、顧問、診所…）主力產品寫服務項目，通路寫怎麼找到或委託它（官網、接案平台、LINE）。
 
 - value 用短中文（20 字內）寫回答怎麼說，例如「私密清潔、私密保養」「藥妝店、官網」。只寫回答裡有的，不要補。
 - 每一項都仔細找；回答完全沒提到的項目就不要列。

@@ -1,12 +1,13 @@
 "use client";
 
 // ── 競爭對手分析 ───────────────────────────────────────────
-// 只比「被點名幾次」是拙劣的分析（2026-11-02 小積木）。這區回答三件事：
-// 1. 你跟這個對手各被推幾次（只寫次數；一題 3 個回答，差 1 次是雜訊，不判輸贏）
-// 2. AI 怎麼形容你、怎麼形容它（定位差在哪）
-// 3. AI 推了它、沒推你的那幾次，看的是哪些網頁（你缺席的地方）
+// 只比「被點名幾次」是拙劣的分析（2026-11-02 小積木）。這區回答兩件事：
+// 1. AI 怎麼形容你、怎麼形容它（定位差在哪）
+// 2. AI 推了它、沒推你的那幾次，看的是哪些網頁（你缺席的地方）
+// 11-12 拿掉：推薦次數 vs、各平台蝴蝶圖、逐題比較（一題 3 個回答，次數跟「品牌推薦排名」重複又是雜訊），
+// 以及「你跟它哪個好」的直接比較（只有切到的那家會問，其他家沒問，畫面不一致；答案多半是「看需求」）。
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { brandSlugs, classifySource, SOURCE_LABEL } from "@/lib/geo-source-type";
 import type { BrandTable } from "./ReportOverview";
 
@@ -24,11 +25,6 @@ interface PositioningLike {
 
 function tokens(name: string): string[] {
   return [...new Set(name.toLowerCase().match(/[a-z0-9]{2,}|[一-鿿]{2,}/g) ?? [])];
-}
-
-// 跟 lib/geo-compare.ts 的 plainBrand 一樣（那支檔案有 server 端呼叫，不能 import 進 client）
-function plainBrand(name: string): string {
-  return name.replace(/[（(][^）)]*[）)]/g, "").trim() || name;
 }
 
 function sameBrand(a: string, b: string): boolean {
@@ -59,144 +55,20 @@ function TraitList({ title, traits, highlight }: { title: string; traits: Positi
   );
 }
 
-// 蝴蝶圖一列：你在左（金）、對手在右（深灰），長度＝次數
-function Butterfly({ label, me, them, max, sub }: { label: string; me: number; them: number; max: number; sub?: string }) {
-  const w = (n: number) => `${(n / Math.max(1, max)) * 100}%`;
-  return (
-    <div className="grid grid-cols-[1fr_minmax(0,1.3fr)_1fr] items-center gap-3 py-1.5">
-      <div className="flex items-center justify-end gap-2">
-        <span className={`mono text-[14px] tabular-nums ${me > them ? "font-bold text-ink" : "text-ink2"}`}>{me}</span>
-        <div className="flex h-3 w-full justify-end overflow-hidden rounded-l-full bg-inset">
-          <div className="rounded-l-full bg-lime" style={{ width: w(me) }} />
-        </div>
-      </div>
-      <div className="min-w-0 text-center">
-        <p className="truncate text-[14px] text-ink">{label}</p>
-        {sub && <p className="text-[14px] text-ink3">{sub}</p>}
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="flex h-3 w-full overflow-hidden rounded-r-full bg-inset">
-          <div className="rounded-r-full bg-ink/70" style={{ width: w(them) }} />
-        </div>
-        <span className={`mono text-[14px] tabular-nums ${them > me ? "font-bold text-ink" : "text-ink2"}`}>{them}</span>
-      </div>
-    </div>
-  );
-}
-
-interface CompareLike {
-  rival: string;
-  query: string;
-  verdicts: { engine: string; favors: "self" | "rival" | "tie"; reason: string; quote: string }[];
-  dimensions: { name: string; winner: "self" | "rival" | "tie"; quote: string; engine: string }[];
-}
-
-// 直接比較題：每家 AI 偏向誰＋每個比較標準誰勝（拔河條）
-export function HeadToHead({ selfName, cmp }: { selfName: string; cmp: CompareLike }) {
-  const favor = (f: "self" | "rival" | "tie") =>
-    f === "self" ? { t: `偏向你`, cls: "bg-lime text-ink" } : f === "rival" ? { t: `偏向${cmp.rival}`, cls: "bg-ink text-paper" } : { t: "看需求，不分高下", cls: "bg-inset text-ink2" };
-  return (
-    <div className="rounded-[10px] border border-line bg-card p-5">
-      <p className="text-[15px] font-bold text-ink">直接比較：{cmp.query}？</p>
-      <div className="mt-3 grid gap-2 grid-cols-3">
-        {cmp.verdicts.map((v) => {
-          const f = favor(v.favors);
-          return (
-            <div key={v.engine} className="rounded-lg border border-line p-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[14px] text-ink2">{v.engine}</span>
-                <span className={`rounded-full px-2 py-0.5 text-[14px] font-semibold ${f.cls}`}>{f.t}</span>
-              </div>
-              <p className="mt-1.5 text-[14px] text-ink">{v.reason}</p>
-            </div>
-          );
-        })}
-      </div>
-      {cmp.dimensions.length > 0 && (
-        // 2026-11-10 原本是左右拔河條，但每個標準只有「誰較好」一個結果，條不是全滿就是全空，
-        // 看起來像壞掉的圖表、也沒有程度可言；改成表格，AI 原句直接攤開（原本藏在 hover）。
-        <table className="mt-4 w-full border-collapse text-[14px]">
-          <thead>
-            <tr className="border-b border-line text-left text-ink3">
-              <th className="py-2 pr-3 font-medium">比較標準</th>
-              <th className="py-2 pr-3 font-medium">AI 怎麼說</th>
-              <th className="py-2 font-medium">AI 原句</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cmp.dimensions.map((d) => {
-              // 2026-11-10 抽取模型常把「只介紹其中一家」的句子判成那家贏（例：恆遠「不外包」→ 團隊規模恆遠勝），
-              // 但 AI 根本沒拿兩家比；原句沒有比較字眼就只標「只講到 X」，不給輸贏。
-              const compared = /比|更|較|勝|優於|不如|適合/.test(d.quote);
-              const w = !compared && d.winner !== "tie"
-                ? { t: `只講到${d.winner === "self" ? selfName : cmp.rival}`, cls: "border border-line text-ink2" }
-                : d.winner === "self"
-                  ? { t: selfName, cls: "bg-lime text-ink" }
-                  : d.winner === "rival"
-                    ? { t: cmp.rival, cls: "bg-ink text-paper" }
-                    : { t: "看需求", cls: "bg-inset text-ink2" };
-              return (
-                <tr key={d.name} className="border-b border-line align-top last:border-b-0">
-                  <td className="whitespace-nowrap py-2 pr-3 font-medium text-ink">{d.name}</td>
-                  <td className="whitespace-nowrap py-2 pr-3">
-                    <span className={`rounded-full px-2 py-0.5 font-semibold ${w.cls}`}>{w.t}</span>
-                  </td>
-                  <td className="py-2 text-ink2">
-                    <span className="text-ink3">{d.engine}：</span>「{d.quote}」
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
-}
-
 export function CompetitorCompare({
   table,
   questions,
   positioning,
-  selfName,
-  compare,
-  compares,
 }: {
   table: BrandTable;
   questions: { question: string; results: ResultLike[] }[];
   positioning?: PositioningLike[] | null;
-  selfName: string;
-  compare?: CompareLike | null; // 健檢時就問的直接比較（排名第一的那一家），選擇器預設跟它一致
-  compares?: Record<string, CompareLike>; // 之後切到別家才問的，key 是 plainBrand(對手)
 }) {
-  const defaultRival = compare?.rival;
-  // 切到沒比過的對手就去問（/api/geo/compare，問完存回檢測紀錄）
-  const [asked, setAsked] = useState<Record<string, CompareLike | "loading" | { error: string }>>({});
-  const rivals = table.rows.filter((r) => !r.isSelf && r.count > 0 && r.hits).slice(0, 6);
+  // 只列前 4 家：定位描述只整理前 4 名（lib/geo-positioning MAX_RIVALS），列更多的話後面幾家會是空的
+  const rivals = table.rows.filter((r) => !r.isSelf && r.count > 0 && r.hits).slice(0, 4);
   const self = table.rows.find((r) => r.isSelf);
-  const initial = (defaultRival && rivals.find((r) => sameBrand(r.name, defaultRival))?.name) || rivals[0]?.name || "";
-  const [pick, setPick] = useState(initial);
+  const [pick, setPick] = useState(rivals[0]?.name ?? "");
   const rival = rivals.find((r) => r.name === pick) ?? rivals[0];
-  const rivalKey = rival ? plainBrand(rival.name) : "";
-  const known: CompareLike | undefined =
-    (compare && compare.verdicts.length > 0 && (plainBrand(compare.rival) === rivalKey || (rival && sameBrand(rival.name, compare.rival))) ? compare : undefined) ??
-    compares?.[rivalKey];
-  const state = known ?? asked[rivalKey];
-  useEffect(() => {
-    if (!rival || known || asked[rivalKey]) return;
-    const id = new URLSearchParams(window.location.search).get("report");
-    if (!id) {
-      setAsked((m) => ({ ...m, [rivalKey]: { error: "這份報告沒有存檔，沒辦法另外比較這一家。" } }));
-      return;
-    }
-    setAsked((m) => ({ ...m, [rivalKey]: "loading" }));
-    fetch("/api/geo/compare", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, rival: rival.name }) })
-      .then(async (r) => {
-        const d = (await r.json()) as { compare?: CompareLike; error?: string };
-        setAsked((m) => ({ ...m, [rivalKey]: d.compare ?? { error: d.error ?? "比較失敗，請稍後再試。" } }));
-      })
-      .catch(() => setAsked((m) => ({ ...m, [rivalKey]: { error: "比較失敗，請稍後再試。" } })));
-  }, [rival, rivalKey, known, asked]);
   if (!self || !rival) return <p className="text-[15px] text-ink3">這次 AI 沒有點名其他品牌，沒有對手可以比。</p>;
 
   const flatResults = questions.flatMap((q) => q.results);
@@ -226,14 +98,6 @@ export function CompetitorCompare({
   const rivalSlugs = brandSlugs(table.rows.filter((r) => !r.isSelf).map((r) => r.name)).filter((x) => !selfSlugs.includes(x));
   const gapPages = [...pages.values()].sort((a, b) => b.n - a.n).slice(0, 6);
 
-  const perQ = (hits: number[] | null, qi: number) => (hits ?? []).filter((i) => table.flat[i]?.qi === qi).length;
-  const rows = questions.map((q, qi) => ({
-    q: q.question,
-    me: perQ(self.hits, qi),
-    them: perQ(rival.hits, qi),
-    total: table.flat.filter((f) => f.qi === qi).length,
-  }));
-
   const selfPos = positioning?.find((p) => p.isSelf) ?? positioning?.find((p) => sameBrand(p.brand, self.name));
   const rivalPos = positioning?.find((p) => !p.isSelf && sameBrand(p.brand, rival.name));
 
@@ -255,51 +119,7 @@ export function CompetitorCompare({
         ))}
       </div>
 
-      {/* 2026-11-10 直接比較題：健檢時只問第一名，切到別家當場問那家（約 30 秒），問完存起來 */}
-      {state === "loading" ? (
-        <p className="rounded-[10px] border border-line bg-card px-4 py-3 text-[14px] text-ink2">
-          正在問 Perplexity、ChatGPT、Google「{selfName} 跟 {plainBrand(rival.name)} 哪個好」，大約 30 秒…
-        </p>
-      ) : state && "error" in state ? (
-        <p className="rounded-[10px] border border-line bg-card px-4 py-3 text-[14px] text-fail">{state.error}</p>
-      ) : state ? (
-        <HeadToHead selfName={selfName} cmp={state} />
-      ) : null}
-
-      <p className="flex items-center gap-4 text-[14px] text-ink3">
-        <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-lime" />你</span>
-        <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-ink/70" />{rival.name}</span>
-      </p>
-
-      {/* 1. 次數 */}
-      <div className="grid gap-3 grid-cols-3">
-        <div className="rounded-[10px] border border-line bg-card px-5 py-4">
-          <p className="text-[14px] text-ink2">推薦次數</p>
-          <p className="mt-1.5 text-[26px] font-bold leading-none text-ink tabular-nums">
-            {self.count}
-            <span className="mx-2 text-base font-normal text-ink3">vs</span>
-            {rival.count}
-          </p>
-          <p className="mt-1.5 text-[14px] text-ink3">
-            你 vs {rival.name}（{table.total} 次回答中）
-          </p>
-        </div>
-        <div className="rounded-[10px] border border-line bg-card px-5 py-4">
-          <p className="text-[14px] text-ink2">競品獨占回答</p>
-          <p className={`mt-1.5 text-[26px] font-bold leading-none tabular-nums ${rivalOnly.length > 0 ? "text-fail" : "text-ink"}`}>
-            {rivalOnly.length}
-            <span className="ml-1.5 text-base font-normal text-ink3">次回答</span>
-          </p>
-        </div>
-        <div className="rounded-[10px] border border-line bg-card px-4 py-3">
-          <p className="mb-1 text-[14px] text-ink2">各平台推薦次數</p>
-          {table.engines.map((e) => (
-            <Butterfly key={e} label={e} me={self.byEngine?.[e] ?? 0} them={rival.byEngine?.[e] ?? 0} max={table.engineTotals[e] ?? 3} />
-          ))}
-        </div>
-      </div>
-
-      {/* 2. 定位 */}
+      {/* 1. 定位 */}
       {positioning && (
         <div>
           <p className="mb-2 text-[15px] font-bold text-ink">品牌定位比較</p>
@@ -310,7 +130,7 @@ export function CompetitorCompare({
         </div>
       )}
 
-      {/* 3. 缺席的地方 */}
+      {/* 2. 缺席的地方 */}
       <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
         <p className="border-b border-line px-4 py-2.5 text-[15px] font-bold text-ink">
           競品獨占回答的引用來源
@@ -339,18 +159,6 @@ export function CompetitorCompare({
         )}
       </div>
 
-      {/* 逐題：蝴蝶圖，不判輸贏 */}
-      <div className="rounded-[10px] border border-line bg-card px-4 py-3">
-        <div className="mb-1 grid grid-cols-[1fr_minmax(0,1.3fr)_1fr] text-[14px] text-ink3">
-          <span className="text-right font-semibold text-ink">你</span>
-          <span className="text-center">推薦題</span>
-          <span className="font-semibold text-ink">{rival.name}</span>
-        </div>
-        {rows.map((r, i) => (
-          <Butterfly key={r.q} label={`第 ${i + 1} 題`} sub={r.q} me={r.me} them={r.them} max={r.total} />
-        ))}
-        <p className="mt-1 border-t border-line pt-2 text-[14px] text-ink3">每題的回答不多，差 1 次可能只是剛好。</p>
-      </div>
     </div>
   );
 }

@@ -50,6 +50,13 @@ export function KeywordCloud({ keywords, total, size = "lg" }: { keywords: Profi
   );
 }
 
+// AI 開頭常先糾正題目：「Q kangber 不是傳統意義上的消費性品牌，而是一位…」。前半句不是 AI 對你的認知，
+// 只留「而是」後面那段（原文照抄，前面補「…」表示有刪），引號裡仍然是原句
+function skipNegation(s: string): string {
+  const m = s.match(/^.{0,40}?(?:不是|並非)[^。！？]{0,40}?[，,、]?\s*而是\s*(.+)$/);
+  return m ? `…${m[1]}` : s;
+}
+
 export function BrandProfileView({
   profile,
   brandChecks,
@@ -106,7 +113,7 @@ export function BrandProfileView({
                 </span>
               </div>
               {profile.intros?.[i] && (
-                <blockquote className="mx-5 mt-4 rounded-lg bg-inset px-4 py-3 text-[15px] leading-relaxed text-ink">「{profile.intros[i]}」</blockquote>
+                <blockquote className="mx-5 mt-4 rounded-lg bg-inset px-4 py-3 text-[15px] leading-relaxed text-ink">「{skipNegation(profile.intros[i])}」</blockquote>
               )}
               <dl className="space-y-3.5 px-5 py-4">
                 {profile.rows.map((r) => {

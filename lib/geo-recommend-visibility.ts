@@ -5,7 +5,6 @@ import type { ContentMatch } from './geo-content-match';
 import { fetchGoogleAio } from './geo-google-aio';
 import type { SentimentResult } from './geo-sentiment';
 import type { BrandPositioning } from './geo-positioning';
-import type { CompareResult } from './geo-compare';
 import type { BrandProfile } from './geo-brand-profile';
 import { noteOpenRouterFailure } from './openrouter-health';
 
@@ -31,6 +30,9 @@ export interface RecommendQuestionResult {
   source?: RealQuestionSource;
   // 題目從哪來：forum＝網友問過、ai＝AI 讀首頁產生、custom＝使用者自己寫。11-11 前的結果沒有這欄
   origin?: QuestionOrigin;
+  // Google 這題的狀態：absent＝Google 真的沒給 AI 摘要（很多題本來就不出）、failed＝查詢失敗（逾時、額度）。
+  // 原本兩種都只顯示「—」，看不出是沒有還是壞了（11-12 aiqkangber 第一題）。11-12 前的結果沒有這欄
+  google?: 'present' | 'absent' | 'failed';
   results: RecommendAnswer[];
 }
 
@@ -92,10 +94,8 @@ export interface RecommendVisibility {
   sentiment?: SentimentResult | null;
   // AI 怎麼定位你跟前幾名對手（見 geo-positioning.ts）
   positioning?: BrandPositioning[] | null;
-  // 「你 跟 第一名對手 哪個好」的直接比較（見 geo-compare.ts）
-  compare?: CompareResult | null;
-  // 報告上切到其他對手時才問的直接比較，key 是 plainBrand(對手名)（見 app/api/geo/compare）
-  compares?: Record<string, CompareResult>;
+  // 11-12 拿掉「你跟某對手哪個好」的直接比較（只問得到一家、其他家沒問，畫面不一致；答案多半是「看需求」）。
+  // 舊紀錄裡的 compare／compares 欄位留著不讀。
   profile?: BrandProfile | null;
 }
 
@@ -285,6 +285,7 @@ ${SPREAD_SERVICES}
 ${PRODUCT_NOT_CONTENT}
 - 不能有品牌名「${input.brandName}」或任何品牌名、型號；不要行銷形容詞。
 - 每個 4 到 16 字，結尾是「推薦」（服務業可用「推薦」或「哪裡好」）。
+- 這個網站是接案、客製、顧問、工作室這類「找人幫你做」的服務時，關鍵字要帶出「找人做」：用「接案」「代做」「顧問」「工作室」「外包」這類字（例如「n8n 接案推薦」「LINE 機器人開發外包推薦」「AI 自動化顧問推薦」），不要只寫「客服自動回覆推薦」「電商訂單自動化推薦」——那種問法 AI 推的是現成軟體（ERP、客服系統），不是同業。
 - 不要重複同一個品項。
 
 只回傳 JSON：{"keywords":["…","…"]}`;
@@ -361,12 +362,12 @@ ${questions.map((q, i) => `[${i}] ${q}`).join('\n')}
 // 是客觀的，但 youtube.com、vocus.cc 這種平台網域看不出 AI 到底推了誰——
 // 回答正文裡寫的「AI 說人話」「雷蒙」才是客戶會記得的名字，這一步就是抓那個。
 // 主觀判斷，所以畫面上要保留回答原文讓人核對。
-function buildNamePrompt(answers: { engine: string; question: string; answer: string }[], brandName: string, domain: string): string {
+function buildNamePrompt(answers: { engine: string; question: string; answer: string }[], brandName: string, domain: string, about: string): string {
   const blocks = answers
     .map((a, i) => `[${i}] 引擎：${a.engine}\n問題：${a.question}\n回答：\n${a.answer.slice(0, 2500)}`)
     .join('\n\n---\n\n');
   return `我們在幫「${brandName}」（${domain}）做檢測：拿推薦類問題去問 AI，看 AI 推了誰。下面是幾個 AI 搜尋引擎的回答。請從每個回答裡，抽出「被具體推薦或點名的對象」，並標出它是哪一種。
-
+${about ? `\n${brandName} 的官網這樣介紹自己（用來判斷誰跟它是同一類）：\n${about}\n` : ''}
 兩種類型：
 - "brand"：跟「${brandName}」賣同一類東西、提供同一類服務，客人會「選它而不選 ${brandName}」的對手。可能是品牌、商品的牌子、公司、工作室、診所、顧問、講師、課程、YouTube 頻道——但前提是它跟 ${brandName} 做的是同一件事。
 - "channel"：不是對手的其他對象。例如：電商平台（蝦皮、momo、PChome）、連鎖通路或藥妝店（屈臣氏、康是美、寶雅）、百貨、評論或比價網站（@cosme、mybest）、媒體、論壇、社群平台、接案平台，以及被當成「可以去問」的醫師、專家、網紅（除非 ${brandName} 自己就是做這一行）。
@@ -409,6 +410,7 @@ export async function extractRecommendedNames(
   brandName: string,
   domain: string,
   apiKey: string,
+  about = '',
 ): Promise<RecommendedName[]> {
   if (answers.length === 0) return [];
   // 2026-11-10 每題加了第二種問法後一次是 15 份回答，整包丟給模型會把所有名字塞進 index 0
@@ -421,7 +423,7 @@ export async function extractRecommendedNames(
     await Promise.all(
       batches.map(async (start) => {
         try {
-          const raw = await askJson(buildNamePrompt(answers.slice(start, start + BATCH), brandName, domain), apiKey, 1600);
+          const raw = await askJson(buildNamePrompt(answers.slice(start, start + BATCH), brandName, domain, about), apiKey, 1600);
           const parsed = parseJson<{ answers?: { index?: number; names?: unknown }[] }>(raw);
           const got = Array.isArray(parsed?.answers) ? parsed!.answers : [];
           const size = Math.min(BATCH, answers.length - start);
@@ -474,7 +476,9 @@ export async function extractRecommendedNames(
       const isSelf =
         tokens.some((t) => key.includes(t) || (key.length >= 3 && t.includes(key))) ||
         isSameSite(hostnameOf(name.startsWith('http') ? name : `https://${name}`), domain) ||
-        (!lineNamesSelf && selfMarks.some((m) => lineWithName.includes(m)));
+        // 只有品牌才看引用標記：工具／平台（n8n、蝦皮）那一行引用你的頁，是 AI 拿你的文章當出處介紹那個工具，
+        // 不是在推你（11-12 aiqkangber「n8n 自動化流程…台灣廠商範例[4]」，[4] 是你的服務頁，n8n 被當成你）
+        (kind === 'brand' && !lineNamesSelf && selfMarks.some((m) => lineWithName.includes(m)));
       let entry = byNorm.get(norm);
       if (!entry) {
         entry = { name, norm, answers: new Set(), engines: new Set(), isSelf, kind };
@@ -551,11 +555,20 @@ export function mentionsSelf(
   domain: string,
   citations: { url: string; isSelf: boolean }[],
 ): boolean {
+  return namesSelfInText(answer, brandName, domain) || citedSelfMark(answer, citations);
+}
+
+// 正文有「[n]」指到你的網址。只代表 AI 拿你的頁當出處，那一行推的可能是別人（工具、平台），
+// 所以抽完名字後要再對一次：那一份回答裡有被認成你的品牌名才算點名你。
+function citedSelfMark(answer: string, citations: { url: string; isSelf: boolean }[]): boolean {
+  return citations.some((c, i) => c.isSelf && new RegExp(`\\[${i + 1}\\]`).test(answer));
+}
+
+function namesSelfInText(answer: string, brandName: string, domain: string): boolean {
   const text = answer.toLowerCase();
   if (brandTokens(brandName).some((t) => text.includes(t))) return true;
   const root = domain.toLowerCase().replace(/^www\./, '');
-  if (root.length >= 4 && text.includes(root)) return true;
-  return citations.some((c, i) => c.isSelf && new RegExp(`\\[${i + 1}\\]`).test(answer));
+  return root.length >= 4 && text.includes(root);
 }
 
 // 使用者自己改的題目：長度跟品牌名的規則跟 AI 生的題目一樣。含品牌名就變成「AI 認不認得你」，不是「推不推你」。
@@ -602,7 +615,8 @@ export async function runRecommendVisibility(
         return { ...a, query: q, namedSelf: named, advice: adviceFor(a, named) };
       });
       const p = byQuestion.get(question);
-      return { question, ...(p?.source ? { source: p.source } : {}), origin: p?.origin ?? 'custom', results };
+      const googleState: 'present' | 'absent' | 'failed' = google?.status ?? 'failed';
+      return { question, ...(p?.source ? { source: p.source } : {}), origin: p?.origin ?? 'custom', google: googleState, results };
     }),
   );
   const questionsWithAnswers = perQuestion.filter((q) => q.results.length > 0);
@@ -613,9 +627,26 @@ export async function runRecommendVisibility(
   );
   let names: RecommendedName[] = [];
   try {
-    names = await extractRecommendedNames(flat, input.brandName, domain, apiKey);
+    // 告訴抽名字的模型這個站在賣什麼：11-12 aiqkangber（接案做自動化）問「電商訂單自動化推薦」，
+    // 鼎新 A1、91APP、CYBERBIZ 這些賣現成系統的全被當成對手，競爭對手表看起來對手超強
+    const about = [input.title, input.description, input.services?.slice(0, 400)].filter(Boolean).join('\n').slice(0, 700);
+    names = await extractRecommendedNames(flat, input.brandName, domain, apiKey, about);
   } catch {
     names = []; // 抽名字失敗不影響前面的結果，畫面上還有引用網域可看
+  }
+  // 只靠引用標記算「點名你」的回答，用抽出來的名字再確認一次（抽名字失敗就維持原判斷）
+  if (names.length > 0) {
+    const selfAnswers = new Set(names.filter((n) => n.isSelf).flatMap((n) => n.answers));
+    let i = 0;
+    for (const q of questionsWithAnswers) {
+      for (const r of q.results) {
+        const idx = i++;
+        if (r.namedSelf && !namesSelfInText(r.answer, input.brandName, domain) && !selfAnswers.has(idx)) {
+          r.namedSelf = false;
+          r.advice = adviceFor(r, false);
+        }
+      }
+    }
   }
 
   return {

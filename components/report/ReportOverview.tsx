@@ -25,7 +25,7 @@ interface NameLike {
 
 export interface RecommendLike {
   brandName: string;
-  questions: { question: string; results: AnswerLike[] }[];
+  questions: { question: string; google?: "present" | "absent" | "failed"; results: AnswerLike[] }[];
   names: NameLike[];
   totalAnswers: number;
   namedSelfCount: number;
@@ -99,8 +99,6 @@ export interface BrandTable {
   total: number;
   flat: { qi: number; engine: string; namedSelf: boolean }[];
   selfRank: number | null; // 沒被點名就是 null
-  // 通路（電商、藥妝連鎖、評論網站、媒體）：AI 叫客人去哪裡買，不是對手，不進排名
-  channels: { name: string; count: number }[];
 }
 
 export function buildBrandTable(rec: RecommendLike): BrandTable {
@@ -122,7 +120,8 @@ export function buildBrandTable(rec: RecommendLike): BrandTable {
   const selfName =
     rec.names.find((n) => isSelfName(n.name))?.name ??
     rec.brandName.match(/^[A-Za-z0-9][A-Za-z0-9\-]{2,}/)?.[0] ??
-    rec.brandName.split(/[\s|｜]/)[0];
+    // 第一段太短就用全名：「Q kangber」切出來只剩「Q」（11-12 aiqkangber 問完 AI 標題變成 Q）
+    ((first) => ([...first].length >= 2 ? first : rec.brandName.trim()))(rec.brandName.split(/[\s|｜]/)[0]);
   const self: BrandRow = {
     name: selfName,
     isSelf: true,
@@ -136,9 +135,10 @@ export function buildBrandTable(rec: RecommendLike): BrandTable {
   const merged = mergeSpellings(rec.names);
 
   const others: BrandRow[] = merged
+    // 11-12 小積木：不分「對手／通路」，題目問對了，AI 點名推薦的就全部列出來（Tasker、蝦皮也照列）。
     // 不能直接用 n.isSelf 濾：抽名字時「那一行引用了你的網址」也會被標成 isSelf，
     // 結果 AI 在同一行推的施巴、豐傑生醫都被當成你，從表裡消失。這裡只認名字對得上的。
-    .filter((n) => !isSelfName(n.name) && n.kind !== "channel")
+    .filter((n) => !isSelfName(n.name))
     .map((n) => ({
       name: n.name,
       isSelf: false,
@@ -153,12 +153,7 @@ export function buildBrandTable(rec: RecommendLike): BrandTable {
   const rows = at === -1 ? [...others, self] : [...others.slice(0, at), self, ...others.slice(at)];
   const selfRank = self.count > 0 ? others.filter((o) => o.count > self.count).length + 1 : null;
 
-  const channels = merged
-    .filter((n) => n.kind === "channel" && !isSelfName(n.name))
-    .map((n) => ({ name: n.name, count: n.answers ? n.answers.length : n.count }))
-    .sort((a, b) => b.count - a.count);
-
-  return { rows, engines, engineTotals, total: flat.length, flat, selfRank, channels };
+  return { rows, engines, engineTotals, total: flat.length, flat, selfRank };
 }
 
 // ── 共用模板 ───────────────────────────────────────────────
@@ -526,6 +521,7 @@ interface QuestionLike {
   question: string;
   altQuestion?: string;
   source?: { site: string; title: string; link: string }; // 取自網友在論壇真的問過的問題
+  google?: "present" | "absent" | "failed";
   results: { engine: string; namedSelf?: boolean; citedSelf: boolean }[];
 }
 
@@ -592,6 +588,10 @@ export function QuestionTable({
                     <td key={e} className="px-3 pt-3 pb-1 align-top text-[14px]">
                       {rs.length > 0 ? (
                         <Verdict named={rs.filter((r) => r.namedSelf).length} total={rs.length} />
+                      ) : e === "Google AI 摘要" && q.google === "absent" ? (
+                        <span className="text-ink3">沒出 AI 摘要</span>
+                      ) : e === "Google AI 摘要" && q.google === "failed" ? (
+                        <span className="text-ink3">沒查到（查詢失敗）</span>
                       ) : (
                         <span className="text-ink3">—</span>
                       )}
@@ -682,26 +682,6 @@ export function CitationTable({ domains, max = 10 }: { domains: DomainLike[]; ma
       {domains.length <= rows.length && selfIdx === -1 && (
         <p className="border-t border-line px-4 py-2.5 text-[14px] text-ink3">你的網站不在 AI 引用的名單裡。</p>
       )}
-    </div>
-  );
-}
-
-// 非對手一行帶過：通路、媒體、被建議去問的專家，不算進排名，但列出來有參考價值
-export function ChannelList({ table }: { table: BrandTable }) {
-  if (table.channels.length === 0) return null;
-  return (
-    <div className="rounded-[10px] border border-line bg-card px-4 py-3 text-[14px]">
-      <span className="font-medium text-ink2">其他提及對象</span>
-      <span className="ml-2 text-[14px] text-ink3">（通路、媒體、專家，不算進排名）</span>
-      <p className="mt-1.5 leading-relaxed text-ink2">
-        {table.channels.map((c, i) => (
-          <span key={c.name}>
-            {i > 0 && "、"}
-            {c.name}
-            <span className="mono ml-0.5 text-[14px] text-ink3">×{c.count}</span>
-          </span>
-        ))}
-      </p>
     </div>
   );
 }

@@ -36,7 +36,7 @@ interface MeResponse {
 import { CompetitorCompare } from "@/components/report/CompetitorCompare";
 import { OverviewBoard } from "@/components/report/OverviewBoard";
 import { MAX_PICK, QuestionPicker, type QuestionCandidates } from "@/components/report/QuestionPicker";
-import { type BrandTable, BrandRankTable, buildBrandTable, buildCitedPages, ChannelList, CitationTable, CitedPagesSection, DashSection, OverviewKpis, QuestionTable, ReportNav, SentimentSection, ShareDonut, shortEngine } from "@/components/report/ReportOverview";
+import { type BrandTable, BrandRankTable, buildBrandTable, buildCitedPages, CitationTable, CitedPagesSection, DashSection, OverviewKpis, QuestionTable, ReportNav, SentimentSection, ShareDonut, shortEngine } from "@/components/report/ReportOverview";
 
 // 首頁 hero 下面的三格數字帶，掛載時跑一次 1100ms 的 ease-out-cubic count-up
 // （跟設計稿 dc-runtime 的 componentDidMount 那段動畫邏輯一致）。
@@ -214,15 +214,6 @@ interface RecommendVisibility {
     reviewAnswers?: { engine: string; query: string; answer: string; citedSelf: boolean; citations: { url: string; title: string; isSelf: boolean }[] }[];
   } | null;
   positioning?: { brand: string; isSelf: boolean; traits: { text: string; quote: string; engine: string }[] }[] | null;
-  compare?: CompareShape | null;
-  compares?: Record<string, CompareShape>;
-}
-
-interface CompareShape {
-  rival: string;
-  query: string;
-  verdicts: { engine: string; favors: "self" | "rival" | "tie"; reason: string; quote: string }[];
-  dimensions: { name: string; winner: "self" | "rival" | "tie"; quote: string; engine: string }[];
 }
 
 interface LlmsTxtLink {
@@ -4102,7 +4093,6 @@ export default function HomeClient({
                   <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-5">
                     <div className="min-w-0 space-y-3">
                       <BrandRankTable table={brandTable} />
-                      <ChannelList table={brandTable} />
                     </div>
                     <ShareDonut table={brandTable} />
                   </div>
@@ -4112,9 +4102,9 @@ export default function HomeClient({
 
             {recommend && brandTable && brandTable.rows.some((r) => !r.isSelf && r.count > 0) && (
               <div className="mt-12">
-                <DashSection id="competitors" title="競爭對手分析" desc={`${reportBrand} 與競品的推薦次數、品牌定位與引用來源比較`}>
+                <DashSection id="competitors" title="競爭對手分析" desc={`${reportBrand} 與競品的品牌定位、引用來源比較`}>
                   <div className="space-y-4">
-                    <CompetitorCompare table={brandTable} questions={recommend.questions} positioning={recommend.positioning} selfName={reportBrand} compare={recommend.compare} compares={recommend.compares} />
+                    <CompetitorCompare table={brandTable} questions={recommend.questions} positioning={recommend.positioning} />
                   </div>
                 </DashSection>
               </div>
@@ -4212,7 +4202,7 @@ export default function HomeClient({
 
             {engine.brandVisibility.length > 0 && (
               <div className="mt-12">
-                <DashSection id="brand-check" title="品牌輪廓" desc={`AI 平台介紹 ${reportBrand} 時的品牌認知：品類、主力產品、品牌特色、價格帶、通路`}>
+                <DashSection id="brand-check" title="品牌輪廓" desc={`AI 平台介紹 ${reportBrand} 時的品牌認知：品類、主力產品／服務、品牌特色、價格帶、通路／管道`}>
                   {profile && (
                     <div className="mb-8">
                       <BrandProfileView profile={profile} brandChecks={engine.brandVisibility} brandName={reportBrand || reportHost} />
