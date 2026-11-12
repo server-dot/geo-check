@@ -35,6 +35,7 @@ interface MeResponse {
 
 import { CompetitorCompare } from "@/components/report/CompetitorCompare";
 import { OverviewBoard } from "@/components/report/OverviewBoard";
+import { MAX_PICK, QuestionPicker, type QuestionCandidates } from "@/components/report/QuestionPicker";
 import { type BrandTable, BrandRankTable, buildBrandTable, buildCitedPages, ChannelList, CitationTable, CitedPagesSection, DashSection, OverviewKpis, QuestionTable, ReportNav, SentimentSection, ShareDonut, shortEngine } from "@/components/report/ReportOverview";
 
 // 首頁 hero 下面的三格數字帶，掛載時跑一次 1100ms 的 ease-out-cubic count-up
@@ -69,7 +70,7 @@ const HOME_CHECKS = [
   { name: "內容使用授權（Content Signals）", why: "search / ai-input / ai-train 三項的表態" },
   { name: "llms.txt", why: "有沒有、格式完不完整、連結解不解得開" },
   { name: "AI 認不認得你（實際去問）", why: "送出提問給 Perplexity 與 ChatGPT，原話與引用來源照貼" },
-  { name: "AI 推不推薦你（自動問推薦題）", why: "三個不含品牌名的推薦題，看 AI 點名推薦了誰、有沒有你" },
+  { name: "AI 推不推薦你（推薦題）", why: "參考網友在論壇問過的問題產生 10 題、加 5 個短關鍵字，勾最多三題，看 AI 點名推薦了誰、有沒有你" },
   { name: "多頁 SEO + GEO 深度健檢", why: "結構化資料、索引、網站健康、外部權威等 21 項" },
 ];
 
@@ -197,7 +198,7 @@ interface RecommendedName {
 }
 interface RecommendVisibility {
   brandName: string;
-  questions: { question: string; altQuestion?: string; source?: { site: string; title: string; link: string }; results: VisibilityCardData[] }[];
+  questions: { question: string; altQuestion?: string; source?: { site: string; title: string; link: string }; origin?: "forum" | "ai" | "keyword" | "custom"; results: VisibilityCardData[] }[];
   names: RecommendedName[];
   askedAt: string;
   totalAnswers: number;
@@ -303,8 +304,12 @@ interface StatusResponse {
   schemaCards?: SchemaTypeCard[];
   // 逐頁可讀字數（爬取順序），健檢報告圖的累積曲線用
   pageWords?: number[];
-  // 推薦題自動查詢，完成才有；null 代表沒跑（沒 API key 或失敗）
+  // 推薦題查詢結果。2026-11-11 起健檢不自動問：使用者勾題按「問 AI」之後才有，沒問過是 null
   recommendVisibility?: RecommendVisibility | null;
+  // 推薦候選題（網友問過的＋AI 產生的），給使用者勾
+  recommendCandidates?: QuestionCandidates | null;
+  // 不用推薦題就算得出來的評價、品牌輪廓
+  brandInsights?: { sentiment: RecommendVisibility["sentiment"]; profile: RecommendVisibility["profile"] } | null;
   aiCreditShort?: boolean; // 有 AI 步驟因額度不足失敗
   error?: string;
 }
@@ -3014,61 +3019,15 @@ function DiagnosisBlock({ d }: { d: Diagnosis }) {
 }
 
 // 改題目重問：AI 猜的題目可能不是客戶真的會問的，題目錯了，三關判斷全都跟著錯。
-function EditQuestions({ jobId, current, onDone }: { jobId: string | null; current: string[]; onDone: (r: RecommendVisibility) => void }) {
-  const [open, setOpen] = useState(false);
-  const [drafts, setDrafts] = useState<string[]>(() => [...current, "", "", ""].slice(0, 3));
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  if (!jobId) return null;
-  async function submit() {
-    setBusy(true);
-    setErr("");
-    try {
-      const res = await fetch("/api/geo/recommend", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId, questions: drafts.map((q) => q.trim()).filter(Boolean) }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "重問失敗");
-      track("recommend_rerun", { questions: drafts.filter((q) => q.trim()).length });
-      onDone(data.recommendVisibility as RecommendVisibility);
-      setOpen(false);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "重問失敗");
-    } finally {
-      setBusy(false);
-    }
-  }
-  if (!open) {
-    return (
-      <button type="button" onClick={() => setOpen(true)} className="mt-2 text-[15px] font-semibold text-ink underline underline-offset-2">
-        題目不對？改成客戶真的會問的
-      </button>
-    );
-  }
-  return (
-    <div className="mt-3 space-y-2">
-      {drafts.map((q, i) => (
-        <input
-          key={i}
-          value={q}
-          onChange={(e) => setDrafts((prev) => prev.map((p, j) => (j === i ? e.target.value : p)))}
-          placeholder={`第 ${i + 1} 題（8～80 字，不要寫你的品牌名）`}
-          className="w-full rounded-lg border border-line bg-paper px-3 py-2 text-[15px] text-ink"
-          maxLength={80}
-          disabled={busy}
-        />
-      ))}
-      <div className="flex items-center gap-3">
-        <button type="button" onClick={submit} disabled={busy} className="rounded-lg bg-ink px-4 py-2 text-[15px] font-semibold text-paper disabled:opacity-50">
-          {busy ? "問 AI 中，約 30～60 秒…" : "用這幾題重問"}
-        </button>
-        <button type="button" onClick={() => setOpen(false)} disabled={busy} className="text-[15px] text-ink3">取消</button>
-      </div>
-      {err && <p className="text-[15px]" style={{ color: STATUS_COLOR.fail }}>✗ {err}</p>}
-    </div>
-  );
+// 推薦題表現的說明：這次問了哪幾題、從多少候選題裡勾的。
+// 11-11 小積木看到「網友問過 1 題」以為論壇只找到 1 題——問的題數跟找到的題數要分開講。
+// 11-11 前的舊結果沒有 origin，用 source 判斷
+function questionOriginNote(rv: RecommendVisibility, cand: QuestionCandidates | null): string {
+  const n = { forum: 0, ai: 0, keyword: 0, custom: 0 };
+  for (const q of rv.questions) n[q.origin ?? (q.source ? "forum" : rv.customQuestions ? "custom" : "ai")]++;
+  const parts = [n.forum && `網友問過的 ${n.forum} 題`, n.ai && `AI 產生的 ${n.ai} 題`, n.keyword && `短關鍵字 ${n.keyword} 個`, n.custom && `自己寫的 ${n.custom} 題`].filter(Boolean);
+  const pool = cand ? `（從 AI 產生的 ${cand.ai.length} 題${cand.keywords?.length ? `、短關鍵字 ${cand.keywords.length} 個` : ""}裡勾${cand.forum.length ? `，題目參考網友在論壇問過的 ${cand.forum.length} 則問題` : ""}）` : "";
+  return `這次問了 ${rv.questions.length} 題：${parts.join("、")}${pool}`;
 }
 
 // ── 原始回答（參考 WorkDuo「資料檢視 → 回覆」）──────────────
@@ -3521,6 +3480,8 @@ export default function HomeClient({
   const [keywordLoading, setKeywordLoading] = useState(false);
   const [keywordError, setKeywordError] = useState("");
   const [recommendOverride, setRecommendOverride] = useState<RecommendVisibility | null>(null);
+  // 問過推薦題之後按「換題目重問」：在結果上方打開勾選清單
+  const [repick, setRepick] = useState(false);
   const [kind, setKind] = useState<AuditKind>("geo");
   const [reportPage, setReportPage] = useState("overview");
   const [me, setMe] = useState<MeResponse | null>(null);
@@ -3603,6 +3564,7 @@ export default function HomeClient({
     setError("");
     setStatus(null);
     setRecommendOverride(null);
+    setRepick(false);
     if (window.location.search.includes("report=")) window.history.replaceState(null, "", "/");
     track("audit_start", { kind: k, domain: target.replace(/^https?:\/\//, "").replace(/\/.*$/, "") });
     try {
@@ -3747,6 +3709,10 @@ export default function HomeClient({
   // 使用者改題目重問過，就用重問的結果蓋掉健檢時自動問的那份
   const recommend = recommendOverride ?? status?.recommendVisibility ?? null;
   const brandTable = recommend ? buildBrandTable(recommend) : null;
+  const candidates = status?.recommendCandidates ?? null;
+  // 評價、品牌輪廓健檢時就有（brandInsights）；問過推薦題後用 recommend 裡重算過的那份
+  const sentiment = recommend?.sentiment ?? status?.brandInsights?.sentiment ?? null;
+  const profile = recommend?.profile ?? status?.brandInsights?.profile ?? null;
   const reportHost = (() => {
     try {
       return engine ? new URL(engine.origin).hostname.replace(/^www\./, "") : "";
@@ -3754,7 +3720,13 @@ export default function HomeClient({
       return "";
     }
   })();
-  const reportBrand = brandTable?.rows.find((r) => r.isSelf)?.name ?? "";
+  // 還沒問推薦題時沒有名單，用健檢猜到的站名縮短（「Relove私密及全身保養 官方網站」→「Relove」，同 lib/geo-sentiment selfShortName）
+  const guessedBrand = (() => {
+    const name = candidates?.input?.brandName?.trim() ?? "";
+    const short = name.match(/^[A-Za-z0-9][A-Za-z0-9&.'\-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&.'\-]*)*/)?.[0]?.trim() || name.split(/[\s|｜\-–—:：]/)[0]?.trim() || name;
+    return short.length >= 2 ? short : name;
+  })();
+  const reportBrand = brandTable?.rows.find((r) => r.isSelf)?.name ?? guessedBrand;
   const citedPagesAll = recommend && brandTable ? buildCitedPages(recommend, brandTable) : [];
   function goPage(id: string) {
     setReportPage(id);
@@ -4048,8 +4020,8 @@ export default function HomeClient({
                 { id: "overview", label: "總覽" },
                 ...(brandTable ? [{ id: "brands", label: "品牌推薦排名" }] : []),
                 ...(brandTable ? [{ id: "competitors", label: "競爭對手分析" }] : []),
-                ...(recommend?.sentiment ? [{ id: "sentiment", label: "品牌評價" }] : []),
-                ...(recommend ? [{ id: "questions", label: "推薦題表現" }] : []),
+                ...(sentiment ? [{ id: "sentiment", label: "品牌評價" }] : []),
+                ...(recommend || candidates ? [{ id: "questions", label: "推薦題表現" }] : []),
                 ...(recommend ? [{ id: "responses", label: "AI 回答紀錄" }] : []),
                 ...(diagnosis ? [{ id: "why", label: "未被推薦原因" }] : []),
                 ...(citedDomains.length > 0 ? [{ id: "citations", label: "引用來源" }] : []),
@@ -4098,13 +4070,29 @@ export default function HomeClient({
                   table={brandTable}
                   questions={recommend.questions}
                   brandChecks={engine.brandVisibility}
-                  sentiment={recommend.sentiment}
-                  profile={recommend.profile ?? null}
+                  sentiment={sentiment}
+                  profile={profile}
                   citedPages={citedPagesAll}
                   onGo={goPage}
                 />
               ) : (
-                <OverviewKpis table={brandTable} namedSelf={recommend?.namedSelfCount ?? 0} brandChecks={engine.brandVisibility} score={null} />
+                <>
+                  <OverviewKpis
+                    table={brandTable}
+                    namedSelf={recommend?.namedSelfCount ?? 0}
+                    brandChecks={engine.brandVisibility}
+                    score={null}
+                    sentiment={sentiment ? { pos: sentiment.themes.filter((t) => t.polarity === "positive").length, neg: sentiment.themes.filter((t) => t.polarity === "negative").length } : null}
+                  />
+                  {candidates && (
+                    <p className="mt-4 rounded-lg border border-line bg-card px-5 py-4 text-[16px] text-ink">
+                      推薦排名、競爭對手、未被推薦原因要先選題目問 AI。
+                      <button type="button" onClick={() => goPage("questions")} className="ml-2 font-semibold underline underline-offset-2">
+                        去選題目 →
+                      </button>
+                    </p>
+                  )}
+                </>
               )}
             </DashSection>
 
@@ -4132,22 +4120,42 @@ export default function HomeClient({
               </div>
             )}
 
-            {recommend?.sentiment && (
+            {sentiment && (
               <div className="mt-12">
-                <DashSection id="sentiment" title="品牌評價" desc={`AI 回答中對 ${reportBrand} 的正面與負面描述`}>
-                  <SentimentSection themes={recommend.sentiment.themes} answerCount={recommend.sentiment.answerCount} reviewQuery={recommend.sentiment.reviewQuery} />
+                <DashSection id="sentiment" title="品牌評價" desc={`AI 回答中對 ${reportBrand || reportHost} 的正面與負面描述`}>
+                  <SentimentSection themes={sentiment.themes} answerCount={sentiment.answerCount} reviewQuery={sentiment.reviewQuery} />
                 </DashSection>
               </div>
             )}
 
-            {recommend && brandTable && (
+            {recommend && brandTable ? (
               <div className="mt-12">
                 <DashSection
                   id="questions"
                   title="推薦題表現"
-                  desc={`${recommend.customQuestions ? "題目是你自己改的" : recommend.questions.every((q) => q.source) ? "題目取自網友在 Dcard、PTT 等論壇真的問過的問題（知道有人這樣問，不代表很多人這樣問）" : recommend.questions.some((q) => q.source) ? "有附出處的題目取自網友在論壇真的問過的問題，其餘是 AI 讀你的首頁猜的" : "題目是 AI 讀你的首頁猜的"}。${recommend.questions.some((q) => q.altQuestion) ? "Perplexity、ChatGPT 每題用兩種問法各問一次，Google 問一次" : `每題各問 ${brandTable.engines.join("、")} 一次`}`}
-                  right={<EditQuestions key={recommend.askedAt} jobId={reportJobId} current={recommend.questions.map((q) => q.question)} onDone={setRecommendOverride} />}
+                  desc={`${questionOriginNote(recommend, candidates)}。${recommend.questions.some((q) => q.altQuestion) ? "Perplexity、ChatGPT 每題用兩種問法各問一次，Google 問一次" : `每題各問 ${brandTable.engines.join("、")} 一次`}`}
+                  right={
+                    !repick && (
+                      <button type="button" onClick={() => setRepick(true)} className="mt-2 text-[15px] font-semibold text-ink underline underline-offset-2">
+                        換題目重問
+                      </button>
+                    )
+                  }
                 >
+                  {repick && (
+                    <div className="mb-5">
+                      <QuestionPicker<RecommendVisibility>
+                        jobId={reportJobId}
+                        candidates={candidates}
+                        initial={recommend.questions.map((q) => q.question)}
+                        onDone={(r) => {
+                          setRecommendOverride(r);
+                          setRepick(false);
+                        }}
+                        onCancel={() => setRepick(false)}
+                      />
+                    </div>
+                  )}
                   <QuestionTable
                     table={brandTable}
                     questions={recommend.questions}
@@ -4156,6 +4164,18 @@ export default function HomeClient({
                   <p className="mt-2 text-[14px] text-ink3">AI 每次回答都不太一樣，隔幾天再問，結果可能會變。</p>
                 </DashSection>
               </div>
+            ) : (
+              candidates && (
+                <div className="mt-12">
+                  <DashSection
+                    id="questions"
+                    title="推薦題表現"
+                    desc={`勾最多 ${MAX_PICK} 題問 Perplexity、ChatGPT、Google AI 摘要，看 AI 推薦誰。網友問過＝有人這樣問，不代表很多人問`}
+                  >
+                    <QuestionPicker<RecommendVisibility> jobId={reportJobId} candidates={candidates} onDone={(r) => setRecommendOverride(r)} />
+                  </DashSection>
+                </div>
+              )
             )}
 
             {recommend && brandTable && (
@@ -4193,12 +4213,12 @@ export default function HomeClient({
             {engine.brandVisibility.length > 0 && (
               <div className="mt-12">
                 <DashSection id="brand-check" title="品牌輪廓" desc={`AI 平台介紹 ${reportBrand} 時的品牌認知：品類、主力產品、品牌特色、價格帶、通路`}>
-                  {recommend?.profile && (
+                  {profile && (
                     <div className="mb-8">
-                      <BrandProfileView profile={recommend.profile} brandChecks={engine.brandVisibility} brandName={reportBrand} />
+                      <BrandProfileView profile={profile} brandChecks={engine.brandVisibility} brandName={reportBrand || reportHost} />
                     </div>
                   )}
-                  {recommend?.profile && <p className="mb-3 text-[16px] font-semibold text-ink">各平台回答原文</p>}
+                  {profile && <p className="mb-3 text-[16px] font-semibold text-ink">各平台回答原文</p>}
                   <div className="grid gap-4 grid-cols-3">
                     {engine.brandVisibility.map((r) => (
                       <CompactAnswerCard key={r.engine} result={r} />

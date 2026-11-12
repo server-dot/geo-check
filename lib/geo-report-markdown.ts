@@ -151,8 +151,14 @@ export function buildReportMarkdown(job: AuditJob): string {
 
   // ── 推薦題（AI 推不推你）──
   const rec = job.recommendVisibility;
+  if (!rec && job.recommendCandidates) {
+    out.push('## AI 推不推薦你（推薦題）');
+    out.push('');
+    out.push('推薦題還沒問：要在網頁版報告的「推薦題表現」選題目問 AI，才會有推薦排名、競爭對手和未被推薦原因。');
+    out.push('');
+  }
   if (rec) {
-    out.push('## AI 推不推薦你（自動問的推薦題）');
+    out.push('## AI 推不推薦你（推薦題）');
     out.push('');
 
     // 未被推薦原因，跟網頁版同一套（lib/geo-diagnosis.ts）
@@ -174,9 +180,7 @@ export function buildReportMarkdown(job: AuditJob): string {
     out.push(d.recencyNote);
     out.push('');
     out.push(
-      (rec.questions.some((q) => q.source)
-        ? `附出處的題目取自網友在論壇真的問過的問題，其餘是 AI 讀過首頁後猜的；題目裡沒有品牌名。`
-        : `這 ${rec.questions.length} 題是 AI 讀過首頁後猜「一般人找這類服務時會怎麼問」寫出來的，題目裡沒有品牌名。`) +
+      `這 ${rec.questions.length} 題是使用者從候選題勾的：附出處的是網友在論壇問過的問題，其他是 AI 讀首頁產生的或使用者自己寫的；題目裡沒有品牌名。` +
         `知道有人這樣問，不代表很多人這樣問，不是搜尋量。提問時間：${rec.askedAt}。`,
     );
     out.push('');

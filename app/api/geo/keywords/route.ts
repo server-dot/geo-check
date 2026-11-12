@@ -7,7 +7,7 @@ import { getSessionUser, isAdmin } from '@/lib/auth';
 // 關鍵字 AI 能見度：使用者自己選好要測哪些關鍵字後才觸發，不是每次健檢自動跑——
 // 一個關鍵字要查兩個引擎，關鍵字越多花的 API 額度越多，這裡刻意做成按需查詢，
 // 讓使用者自己決定要花多少額度，不是幫他決定。
-export const maxDuration = 30;
+export const maxDuration = 150; // 11-11 ChatGPT 換原生搜尋＋推理，一題 25～50 秒
 
 const MAX_KEYWORDS_PER_REQUEST = 8;
 

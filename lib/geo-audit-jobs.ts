@@ -5,7 +5,9 @@ import type { WafHint } from './geo-waf-fingerprint';
 import type { BrandVisibilityResult } from './geo-brand-visibility';
 import type { LlmsTxtQuality } from './geo-llms-txt';
 import type { SchemaTypeCard } from './geo-schema-check';
-import type { RecommendVisibility, RecommendInput } from './geo-recommend-visibility';
+import type { RecommendVisibility, RecommendInput, RecommendCandidates } from './geo-recommend-visibility';
+import type { SentimentResult } from './geo-sentiment';
+import type { BrandProfile } from './geo-brand-profile';
 import type { MatchPage } from './geo-content-match';
 import type { AuditKind } from './quota';
 import { saveAuditHistory } from './audit-history';
@@ -49,9 +51,14 @@ export interface AuditJob {
   schemaCards?: SchemaTypeCard[];
   // 逐頁可讀字數，依爬取順序。健檢報告圖的累積曲線用這個畫。
   pageWords?: number[];
-  // 推薦題自動查詢（3 題 × 各引擎 + 被點名的名單）。跟爬蟲並行跑，完成才有；
-  // null 代表沒設 API key 或整段失敗，前端就不顯示這一塊。
+  // 推薦題查詢結果（勾的題 × 各引擎 + 被點名的名單）。2026-11-11 起健檢不自動問，
+  // 使用者在報告上勾題按「問 AI」才有（/api/geo/recommend）；沒問過就是 null。
   recommendVisibility?: RecommendVisibility | null;
+  // 候選題：網友在論壇問過的＋AI 產生的，健檢時準備好給使用者勾
+  recommendCandidates?: RecommendCandidates | null;
+  // 不需要推薦題就能算的：品牌評價（直接問評價題＋品牌題的回答）、品牌輪廓。
+  // 問過推薦題之後 recommendVisibility 裡也會帶一份（評價會加入推薦題回答重算）
+  brandInsights?: { sentiment: SentimentResult | null; profile: BrandProfile | null } | null;
   // 這次健檢有 AI 步驟因為 OpenRouter 額度不足失敗（報告會缺幾塊），前端要標出來
   aiCreditShort?: boolean;
   error?: string;
@@ -120,6 +127,8 @@ export function auditJobPayload(job: AuditJob) {
     schemaCards: done ? job.schemaCards : undefined,
     pageWords: done ? job.pageWords : undefined,
     recommendVisibility: done ? job.recommendVisibility : undefined,
+    recommendCandidates: done ? job.recommendCandidates : undefined,
+    brandInsights: done ? job.brandInsights : undefined,
     aiCreditShort: done ? job.aiCreditShort || undefined : undefined,
     error: job.error,
   };
@@ -135,6 +144,8 @@ export interface AuditJobContext {
   origin: string;
   recommendInput: RecommendInput;
   pages: MatchPage[];
+  // 官網連出去的外部連結：判斷哪些引用來源是品牌自己的帳號
+  siteExternalLinks: string[];
 }
 
 const contexts = new Map<string, AuditJobContext>();

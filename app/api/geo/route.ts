@@ -12,16 +12,14 @@ import { analyzeContentVisibility, type ContentVisibility } from '@/lib/geo-cont
 import { detectWaf, type WafHint } from '@/lib/geo-waf-fingerprint';
 import { probeBotAccess, type ProbeResult } from '@/lib/geo-bot-probe';
 import { checkBrandVisibility, guessBrandName } from '@/lib/geo-brand-visibility';
-import { runRecommendVisibility } from '@/lib/geo-recommend-visibility';
-import { matchQuestionsToPages } from '@/lib/geo-content-match';
+import { buildRecommendCandidates } from '@/lib/geo-real-questions';
+import { resolveBrandName, type RecommendInput } from '@/lib/geo-recommend-visibility';
 import { extractProfile } from '@/lib/geo-brand-profile';
 import { extractSentiment, fetchReviewAnswers, selfShortName, sentimentInputs } from '@/lib/geo-sentiment';
-import { detectOwnedSources, markOwned, markOwnedQuestions } from '@/lib/geo-owned-sources';
+import { detectOwnedSources, markOwned } from '@/lib/geo-owned-sources';
 import { creditFailedSince } from '@/lib/openrouter-health';
-import { extractPositioning, topRivals } from '@/lib/geo-positioning';
-import { extractCompare, fetchCompareAnswers } from '@/lib/geo-compare';
 import { analyzeLlmsTxt } from '@/lib/geo-llms-txt';
-import { createAuditJob, updateAuditJob, setAuditJobContext, type EngineResult } from '@/lib/geo-audit-jobs';
+import { createAuditJob, updateAuditJob, setAuditJobContext, type AuditJob, type EngineResult } from '@/lib/geo-audit-jobs';
 import { readTextCapped, crawlSite } from '@/lib/geo-audit-crawler';
 import { aggregateAuditChecks } from '@/lib/geo-audit-aggregate';
 import { buildSchemaTypeCards } from '@/lib/geo-schema-check';
@@ -176,7 +174,7 @@ async function runEngineChecks(origin: string, withBrand: boolean): Promise<Engi
   const toVerify = policyResults.filter((r) => r.status === 'allowed');
   const [probes, brandVisibility] = await Promise.all([
     toVerify.length > 0 ? probeBotAccess(origin, toVerify.map((r) => r.ua)) : Promise.resolve(new Map<string, ProbeResult>()),
-    withBrand ? checkBrandVisibility(visibility?.title ?? '', origin, visibility?.orgName) : Promise.resolve([]),
+    withBrand ? checkBrandVisibility(guessBrandName(visibility?.title ?? '', visibility?.orgName), origin) : Promise.resolve([]),
   ]);
 
   const results = policyResults.map((r) => {
@@ -268,17 +266,19 @@ export async function POST(req: NextRequest) {
   // 先跑一次快速的連線檢查：robots.txt 連線層都失敗代表整個網站連不上，
   // 沒有必要開一個註定失敗的背景 job 讓使用者空等。連不上不算用掉次數。
   let engine: EngineResult;
-  const startedAt = Date.now(); // 額度不足偵測從這裡算起：品牌題在 runEngineChecks 就會打 AI
+  // 額度不足偵測從這裡算起。品牌題 11-11 起移到背景（runGeo）：ChatGPT 換成原生搜尋＋推理後一題要 25～50 秒，
+  // 放在這裡會讓「開始檢測」卡住，使用者看不到進度
+  const startedAt = Date.now();
   try {
     try {
-      engine = await runEngineChecks(origin, kind === 'geo');
+      engine = await runEngineChecks(origin, false);
     } catch (err) {
       // 不少台灣站的憑證只簽了 www（例：foreverrelove.com.tw），使用者打裸網域就連不上。
       // 2026-11-10 原本只回「試試改成 www」，但錯誤訊息常沒被看到、使用者以為按鈕壞了；直接幫他改成 www 再試一次。
       if (!/certificate|altnames|ERR_TLS/i.test(String((err as { cause?: { code?: string; message?: string } })?.cause?.code ?? '') + String((err as { cause?: { message?: string } })?.cause?.message ?? '')) || host.startsWith('www.')) throw err;
       const www = new URL(origin);
       www.hostname = `www.${www.hostname}`;
-      engine = await runEngineChecks(www.origin, kind === 'geo');
+      engine = await runEngineChecks(www.origin, false);
       origin = www.origin;
       host = www.host;
     }
@@ -342,15 +342,34 @@ async function runSeo(jobId: string, origin: string, startedAt: number) {
   });
 }
 
-// GEO 健檢：問 AI 推薦題、品牌評價、對手比較。爬蟲還是要跑——「未被推薦原因」要比對你的頁面
-// 有沒有在回答這些題目——但不跑 23 項規則（那是 SEO 健檢）。
+// GEO 健檢：準備推薦候選題、品牌評價、品牌輪廓。2026-11-11 起推薦題不在這裡問：
+// 健檢只列出候選題（網友在論壇問過的＋AI 產生的），使用者在報告上勾完才問（/api/geo/recommend），
+// 推薦排名、競爭對手、未被推薦原因都在那之後才算。爬蟲還是要跑——第 2 關要比對你的頁面。
+// 服務／產品頁：網址或標題有「服務、產品、商品、方案、價目」的頁（中文網址要先 decode 才比對得到），
+// 最多兩頁、每頁 1000 字。給出題用，題目才會分散到各項服務，不會只問首頁最常出現的那一項
+function serviceText(pages: { url: string; title: string; ok: boolean; nonHtml?: boolean; isHome: boolean; mainText: string }[]): string {
+  const re = /服務|產品|商品|方案|價目|收費|service|product|solution|pricing|shop/i;
+  const hits = pages.filter((p) => {
+    if (!p.ok || p.nonHtml || p.isHome || !p.mainText) return false;
+    let path = p.url;
+    try {
+      path = decodeURIComponent(new URL(p.url).pathname);
+    } catch {}
+    // 只看網址第一層（/services、/產品），文章頁標題常帶「服務」二字但不是服務頁
+    const first = path.split('/').filter(Boolean)[0] ?? '';
+    return re.test(first) || (path.split('/').filter(Boolean).length <= 1 && re.test(p.title));
+  });
+  return hits.slice(0, 2).map((p) => `${p.title}\n${p.mainText.slice(0, 1000)}`).join('\n\n');
+}
+
 async function runGeo(jobId: string, origin: string, engine: EngineResult, startedAt: number) {
-  // 推薦題查詢跟爬蟲互不相依，先開跑；要等結果時再 await。
-  // 這段自己吞錯（回 null），不能讓它把整個健檢弄成 failed。
   const vis = engine.visibility;
-  const recommendInput = vis
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  // 標題／機構名是「主頁」這種通用字時，請 AI 從首頁判斷真正的品牌名（康寶 knorr.com/tw）
+  const brandName = vis ? await resolveBrandName(vis, origin, apiKey) : '';
+  const recommendInput: RecommendInput | null = vis
     ? {
-        brandName: guessBrandName(vis.title, vis.orgName),
+        brandName,
         title: vis.title,
         description: vis.description,
         h1: vis.h1,
@@ -358,67 +377,56 @@ async function runGeo(jobId: string, origin: string, engine: EngineResult, start
         preview: vis.preview,
       }
     : null;
-  const recommendPromise = recommendInput
-    ? runRecommendVisibility(recommendInput, origin).catch(() => null)
-    : Promise.resolve(null);
+  const ready = !!(recommendInput?.brandName && apiKey);
+  // 評價題、品牌題跟爬蟲互不相依，先開跑；自己吞錯，不能讓它把整個健檢弄成 failed。
+  // 候選題要等爬蟲：要讀服務／產品頁（11-11 aiqkangber.com 首頁只講 n8n，題目全擠在 n8n）
+  const reviewPromise = ready ? fetchReviewAnswers(recommendInput!.brandName, origin).catch(() => null) : Promise.resolve(null);
+  const brandPromise = brandName ? checkBrandVisibility(brandName, origin).catch(() => []) : Promise.resolve([]);
   const crawl = await crawlWithProgress(jobId, origin);
-  updateAuditJob(jobId, { status: 'analyzing', message: '等 AI 回答推薦題…' });
-  let recommendVisibility = await recommendPromise;
+  updateAuditJob(jobId, { status: 'analyzing', message: '整理網友問過的問題、AI 對你的評價…' });
+  engine = { ...engine, brandVisibility: await brandPromise };
   const matchPages = crawl.pages
     .filter((p) => p.ok && !p.nonHtml)
     .map((p) => ({ url: p.url, title: p.title, text: p.mainText }));
-  if (recommendInput) setAuditJobContext(jobId, { origin, recommendInput, pages: matchPages });
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (recommendVisibility && apiKey) {
-    updateAuditJob(jobId, { status: 'analyzing', message: '比對你的頁面有沒有在回答這些題目…' });
-    // 哪些來源是品牌自己的（官網、姊妹購物站、官網連出去的帳號、作者是品牌的文章）。
-    // 推薦題、品牌辨識的「引用你」都改用這份判斷，不只看同網域（11-09 Relove 的 reloveshop.com.tw 被當成別人）；
-    // 評價抽取也用它排除轉述自己文章的負評。
-    const selfName0 = selfShortName(recommendVisibility.brandName);
-    const siteExternalLinks = [...crawl.pages].sort((a, b) => Number(b.isHome) - Number(a.isHome)).flatMap((p) => p.externalLinks ?? []);
-    const ownedRec = await detectOwnedSources({
-      brandNames: [recommendVisibility.brandName, selfName0],
+  const siteExternalLinks = [...crawl.pages].sort((a, b) => Number(b.isHome) - Number(a.isHome)).flatMap((p) => p.externalLinks ?? []);
+  if (recommendInput) {
+    const services = serviceText(crawl.pages);
+    if (services) recommendInput.services = services;
+    setAuditJobContext(jobId, { origin, recommendInput, pages: matchPages, siteExternalLinks });
+  }
+  const candidatesPromise = ready ? buildRecommendCandidates(recommendInput!, apiKey!).catch(() => null) : Promise.resolve(null);
+
+  let brandInsights: AuditJob['brandInsights'] = null;
+  if (ready) {
+    const review = await reviewPromise;
+    const reviewAnswers = review?.answers ?? [];
+    const selfName = selfShortName(recommendInput!.brandName);
+    // 哪些來源是品牌自己的（官網、姊妹購物站、官網連出去的帳號、作者是品牌的文章）：
+    // 品牌題的「引用你」用這份判斷；評價抽取也用它排除轉述自己文章的負評
+    const owned = await detectOwnedSources({
+      brandNames: [recommendInput!.brandName, selfName],
       domain: origin,
       siteExternalLinks,
-      citations: [...recommendVisibility.questions.flatMap((q) => q.results.flatMap((r) => r.citations)), ...engine.brandVisibility.flatMap((b) => b.citations)],
+      citations: [...engine.brandVisibility.flatMap((b) => b.citations), ...reviewAnswers.flatMap((a) => a.citations ?? [])],
     }).catch(() => new Set<string>());
-    recommendVisibility = { ...recommendVisibility, ...markOwnedQuestions(recommendVisibility.questions, ownedRec) };
-    engine = { ...engine, brandVisibility: engine.brandVisibility.map((b) => markOwned(b, ownedRec)) };
-    const rv = recommendVisibility;
-    const [contentMatch, extras] = await Promise.all([
-      matchQuestionsToPages(rv.questions, matchPages, apiKey).catch(() => null),
-      (async () => {
-        const selfName = selfShortName(rv.brandName);
-        const rivals = topRivals(rv.names);
-        const [review, cmp] = await Promise.all([
-          fetchReviewAnswers(rv.brandName, origin),
-          rivals[0] ? fetchCompareAnswers(selfName, rivals[0], origin).catch(() => null) : Promise.resolve(null),
-        ]);
-        const all = rv.questions.flatMap((q) => q.results.map((r) => ({ engine: r.engine, answer: r.answer })));
-        const sentimentAnswers = [...sentimentInputs(rv, engine.brandVisibility), ...review.answers];
-        // 哪些來源是品牌自己的（官網、官網連出去的帳號、作者是品牌的文章）：評價抽取要排除轉述自己文章的負評
-        const owned = await detectOwnedSources({
-          brandNames: [rv.brandName, selfName],
-          domain: origin,
-          siteExternalLinks,
-          citations: sentimentAnswers.flatMap((a) => a.citations ?? []),
-        }).catch(() => new Set<string>());
-        const [s, positioning, compare, profile] = await Promise.all([
-          extractSentiment(rv.brandName, sentimentAnswers, apiKey, owned).catch(() => null),
-          extractPositioning(selfName, rivals, [...all, ...review.answers, ...(cmp?.answers ?? [])], apiKey).catch(() => null),
-          cmp ? extractCompare(selfName, cmp.rival, cmp.query, cmp.answers, apiKey).catch(() => null) : Promise.resolve(null),
-          extractProfile(selfName, engine.brandVisibility, apiKey, matchPages).catch(() => null),
-        ]);
-        // 評價題的回答全文也要存：報告上的負評引文要追得到出處（11-04 小積木：「是哪裡說到的我沒看到」）
-        return { sentiment: s ? { ...s, reviewQuery: review.query, reviewAnswers: review.answers.map(({ engine, query, answer, citedSelf, citations }) => ({ engine, query, answer, citedSelf, citations })) } : null, positioning, compare, profile };
-      })().catch(() => ({ sentiment: null, positioning: null, compare: null, profile: null })),
+    engine = { ...engine, brandVisibility: engine.brandVisibility.map((b) => markOwned(b, owned)) };
+    const [s, profile] = await Promise.all([
+      extractSentiment(recommendInput!.brandName, [...sentimentInputs({ questions: [] }, engine.brandVisibility), ...reviewAnswers], apiKey!, owned).catch(() => null),
+      extractProfile(selfName, engine.brandVisibility, apiKey!, matchPages).catch(() => null),
     ]);
-    recommendVisibility = { ...rv, contentMatch, ...extras };
+    // 評價題的回答全文也要存：報告上的負評引文要追得到出處（11-04 小積木：「是哪裡說到的我沒看到」）
+    const sentiment = s && review
+      ? { ...s, reviewQuery: review.query, reviewAnswers: review.answers.map(({ engine, query, answer, citedSelf, citations }) => ({ engine, query, answer, citedSelf, citations })) }
+      : s;
+    brandInsights = { sentiment, profile };
   }
+  const recommendCandidates = await candidatesPromise;
   updateAuditJob(jobId, {
     status: 'completed',
     engine,
-    recommendVisibility,
+    recommendVisibility: null,
+    recommendCandidates,
+    brandInsights,
     aiCreditShort: creditFailedSince(startedAt),
     pageWords: crawl.pages.filter((p) => p.ok && !p.nonHtml).map((p) => p.mainTextLength),
     message: `完成，爬取 ${crawl.pages.length} 頁`,

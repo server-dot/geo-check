@@ -1,5 +1,5 @@
-import { runVisibilityQueries, hostnameOf, isSameSite, type VisibilityAnswer } from './geo-brand-visibility';
-import { findRealQuestions, type RealQuestionSource } from './geo-real-questions';
+import { runVisibilityQueries, hostnameOf, isSameSite, guessBrandName, type VisibilityAnswer } from './geo-brand-visibility';
+import type { RealQuestionSource } from './geo-real-questions';
 import { SITE_URL } from '@/lib/site';
 import type { ContentMatch } from './geo-content-match';
 import { fetchGoogleAio } from './geo-google-aio';
@@ -15,11 +15,11 @@ import { noteOpenRouterFailure } from './openrouter-health';
 // 點關鍵字才會跑——實際上大多數人不會點，報告就停在「AI 認得你」，看不到最關鍵
 // 的那一頁：客戶問「有沒有推薦的 XX」時，AI 推的是誰、有沒有你。
 //
-// 這裡把那一步自動化：先叫一個便宜模型讀首頁內容，猜 3 個「一般人會拿去問 AI 的
-// 推薦題」，再拿去問即時搜尋引擎，最後從回答裡把「被點名推薦的名字」抽出來彙總。
-// 題目是猜的，不是真實需求量——這點要在畫面上講清楚，不能包裝成「客戶都這樣問」。
+// 2026-11-11 改成三步：健檢時列出候選題（網友在論壇問過的全部列出＋AI 讀首頁產生的，見 geo-real-questions.ts），
+// 使用者在報告上勾最多 3 題（或自己寫），勾完才拿去問即時搜尋引擎，再從回答裡把「被點名推薦的名字」抽出來彙總。
+// 網友問過＝知道有人這樣問，不知道多少人問；AI 產生的是推估——都不能包裝成需求量。
 //
-// 成本：每次健檢多 1 次生題 + 3 題 × 2 引擎 + 1 次抽名字，全部走 OpenRouter。
+// 成本：每題 Perplexity、ChatGPT、Google 各問一次（11-12 起不換說法），加 1 次抽名字。
 // 沒設 API key 或任一步失敗時回 null，健檢照常完成，不因為這段掛掉整份報告。
 
 export interface RecommendQuestionResult {
@@ -27,9 +27,31 @@ export interface RecommendQuestionResult {
   // 同一個意思的另一種問法（2026-11-03 數字要穩又不想每天問：每題換兩種問法一起問，
   // 樣本加倍，也才測得出「客戶不管怎麼問 AI 都會推你」）。舊結果沒有這欄。
   altQuestion?: string;
-  // 題目取自網友在論壇真的問過的問題（見 geo-real-questions.ts）；沒有＝AI 猜的或使用者自己改的
+  // 題目取自網友在論壇真的問過的問題（見 geo-real-questions.ts）；沒有＝AI 產生的或使用者自己寫的
   source?: RealQuestionSource;
+  // 題目從哪來：forum＝網友問過、ai＝AI 讀首頁產生、custom＝使用者自己寫。11-11 前的結果沒有這欄
+  origin?: QuestionOrigin;
   results: RecommendAnswer[];
+}
+
+// keyword＝短關鍵字（「私密清潔凝露推薦」），11-11 加：ChatGPT 長句題都不推 Relove，問到主力品項的短關鍵字才排第一
+export type QuestionOrigin = 'forum' | 'ai' | 'keyword' | 'custom';
+
+// 使用者在報告上勾的題目（2026-11-11 起健檢不再自動問推薦題，先列候選題讓人勾）
+export interface PickedQuestion {
+  question: string;
+  origin: QuestionOrigin;
+  source?: RealQuestionSource;
+}
+
+// 健檢時先準備好的候選題：網友在論壇問過的（全部列出，只給人看、不能勾）＋ AI 參考網友問題與首頁產生的（給人勾）
+export interface RecommendCandidates {
+  forum: { question: string; source: RealQuestionSource }[];
+  ai: string[];
+  // 短關鍵字：從首頁商品／服務分類抓「品項＋推薦」，一般人打進搜尋框的那種。11-11 前的紀錄沒有這欄
+  keywords?: string[];
+  // 從檢測紀錄打開的報告也要能勾題來問：問題要拿品牌名、首頁資訊當原料，跟著存進紀錄
+  input: RecommendInput;
 }
 
 export interface RecommendAnswer extends VisibilityAnswer {
@@ -86,10 +108,25 @@ export interface RecommendInput {
   // 首頁純文字開頭。電商站的 <title> 常是「XX 線上購物」這種空話，靠標題猜出來的
   // 題目會變成「有沒有推薦的線上購物平台」；商品分類名多半在正文裡，要一起餵。
   preview: string;
+  // 服務／產品頁的內文。11-11 aiqkangber.com：首頁幾乎都在講 n8n，題目全擠在 n8n，
+  // LINE 機器人、AI Agent、遊戲開發這些服務只寫在服務頁。爬蟲跑完才有，舊紀錄沒有
+  services?: string;
 }
 
+// 出題三處共用：服務頁內文
+export function servicesBlock(input: RecommendInput): string {
+  return input.services ? `\n【服務／產品頁】\n${input.services.slice(0, 2000)}\n` : '';
+}
+
+// 出題三處共用：題目要分散到不同服務
+export const SPREAD_SERVICES = `- 這個網站如果有好幾種服務或產品線，題目要平均分到各項（看服務／產品頁），同一個服務、工具或品項最多佔三分之一，不要全擠在首頁最常出現的那一項。`;
+
 const MODEL = 'openai/gpt-4.1-mini';
-const QUESTION_COUNT = 3;
+// 一次最多勾幾題：每題要問 Perplexity、ChatGPT、Google 各一次，題目多了等太久也太貴
+export const MAX_PICKED_QUESTIONS = 3;
+// AI 產生的候選題數量（使用者從中勾）
+const AI_CANDIDATE_COUNT = 10;
+const KEYWORD_COUNT = 5;
 
 export async function askJson(prompt: string, apiKey: string, maxTokens: number, model = MODEL): Promise<string> {
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -104,10 +141,11 @@ export async function askJson(prompt: string, apiKey: string, maxTokens: number,
       model,
       messages: [{ role: 'user', content: prompt }],
       max_tokens: maxTokens,
-      temperature: 0.3,
+      // 推理模型（gpt-5.x）不吃 temperature，推理要時間
+      ...(model.startsWith('openai/gpt-5') ? { reasoning: { effort: 'low' } } : { temperature: 0.3 }),
       response_format: { type: 'json_object' },
     }),
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(model.startsWith('openai/gpt-5') ? 60000 : 30000),
   });
   if (!res.ok) {
     const body = await res.text();
@@ -130,10 +168,19 @@ export function parseJson<T>(text: string): T | null {
 
 // 題目一定不能含品牌名——含了就變成「AI 認不認得你」，不是「AI 推不推你」。
 // 三種題型分開要求，避免模型三題都生「有沒有推薦的 XX」這種同型題。
-function buildQuestionPrompt(input: RecommendInput): string {
+function buildQuestionPrompt(input: RecommendInput, count: number, forum: string[]): string {
   const lead = input.leadParagraphs.slice(0, 3).join('\n');
-  return `下面是一個網站的資訊。請站在「還不認識這個網站的一般台灣消費者」的角度，寫出 ${QUESTION_COUNT} 個他們在找這類服務或資源時，會拿去問 ChatGPT 的問題。
+  const ref = forum.length
+    ? `
+【台灣網友在論壇真的問過的問題（參考用）】
+${forum.map((q) => `- ${q}`).join('\n')}
 
+這些是真人問過的。跟網站服務對得上的網友問題，要優先延伸：保留網友在意的條件（洗感、預算、在哪買、想換品牌、症狀、族群…）和他們的用字，不要換成網站的商品名或成分名。
+網友沒問到的服務也要出題，不能因為網友只問了其中一項，題目就全擠在那一項。網友的條件比題型規則優先：題型分配可以不平均。
+`
+    : '';
+  return `下面是一個網站的資訊。請站在「還不認識這個網站的一般台灣消費者」的角度，寫出 ${count} 個他們在找這類服務或資源時，會拿去問 ChatGPT 的問題。
+${ref}
 【網站標題】${input.title || '（無）'}
 【網站描述】${input.description || '（無）'}
 【主標題】${input.h1.join('／') || '（無）'}
@@ -141,12 +188,13 @@ function buildQuestionPrompt(input: RecommendInput): string {
 ${lead || '（無）'}
 【首頁純文字開頭】
 ${input.preview.slice(0, 800) || '（無）'}
-
+${servicesBlock(input)}
 規則：
 - 問題裡絕對不可以出現這個品牌的名稱「${input.brandName}」、網址，或任何能指向這個網站的字眼。要問的是「這一類」，不是「這一家」。
-- 每一題都必須是在找「人、公司、網站、頻道、課程或服務」——也就是 AI 回答時會列出一串名字的那種問題。不要問技術怎麼做、工具怎麼選（例如「A 跟 B 該怎麼選」「怎麼設定 X」），那種題目 AI 只會講方法，不會推薦任何人。
+- 每一題都必須是在找「人、公司、網站、頻道、課程或服務」——也就是 AI 回答時會列出一串名字的那種問題。不要問技術怎麼做、工具怎麼選、服務要怎麼挑（例如「A 跟 B 該怎麼選」「怎麼設定 X」「XX 服務要怎麼挑」），那種題目 AI 只會講方法，不會推薦任何人。
+${SPREAD_SERVICES}
 - 用台灣人的口語，像真的在跟 AI 聊天，每題 15 到 40 字。
-- 三題題型要不同：
+- 題型平均分配成三種，每種 ${Math.ceil(count / 3)} 題左右；同一種題型也要問不同的需求或情境，不要只換幾個字：
   1. 推薦型：「有沒有推薦的…」
   2. 選擇型：「台灣哪幾個…比較好」「…要怎麼挑」
   3. 情境型：「我是…（一個具體身分或處境），想…，有什麼推薦」
@@ -156,12 +204,15 @@ ${input.preview.slice(0, 800) || '（無）'}
   - 公司或店家提供的服務（餐廳、診所、代理商、系統商…）：問「哪幾家／哪間」。
   - 看不出來就用「哪些」「有什麼推薦」這種不限型態的說法。
 - 主題要貼著這個網站實際在賣、在做的東西（看內文與商品分類，不要只看標題），不要泛到「AI 工具推薦」「線上購物平台」這種太大的題。
+${PRODUCT_NOT_CONTENT}
+- 上面網友的問題如果在問食譜、做法、心得，跟這個網站賣的東西無關，就不要跟著問。
 
-只回傳 JSON：{"questions":["問題一","問題二","問題三"]}`;
+只回傳 JSON：{"questions":["問題一","問題二","…"]}`;
 }
 
-export async function generateRecommendQuestions(input: RecommendInput, apiKey: string): Promise<string[]> {
-  const raw = await askJson(buildQuestionPrompt(input), apiKey, 400);
+// forum：網友在論壇問過的問題，給 AI 參考（11-11 小積木：網友題只列出來看，勾的是 AI 參考它們產生的題目）
+export async function generateRecommendQuestions(input: RecommendInput, apiKey: string, count = AI_CANDIDATE_COUNT, forum: string[] = []): Promise<string[]> {
+  const raw = await askJson(buildQuestionPrompt(input, count, forum), apiKey, 2000);
   const parsed = parseJson<{ questions?: unknown }>(raw);
   const list = Array.isArray(parsed?.questions) ? parsed!.questions : [];
   const brand = input.brandName.toLowerCase();
@@ -170,32 +221,137 @@ export async function generateRecommendQuestions(input: RecommendInput, apiKey: 
     .map((q) => q.trim())
     .filter((q) => q.length >= 8 && q.length <= 80)
     // 模型偶爾還是會把品牌名塞進去，塞了就丟掉這題，不要拿去問
-    .filter((q) => !brand || !q.toLowerCase().includes(brand))
-    .slice(0, QUESTION_COUNT);
+    .filter((q) => !brand || !brandTokens(input.brandName).some((t) => q.toLowerCase().includes(t)))
+    // 只問「怎麼挑／怎麼選」、沒要名單的題，AI 只會講方法（規則寫了模型還是會出，11-11 aiqkangber 兩題）
+    .filter((q) => !/(怎麼|如何|要怎樣)(挑|選)/.test(q) || /推薦|哪(幾|些|家|間|個|裡)|誰/.test(q))
+    .filter((q, i, arr) => arr.indexOf(q) === i)
+    .slice(0, count);
+}
+
+// 品牌官網常放大量食譜、文章、教學（康寶首頁幾乎都是食譜），那是行銷內容，不是它賣的東西。
+// 11-11 康寶實測：題目全變成「家常菜食譜網站推薦」「洋蔥切法推薦」，AI 當然不會推一個調味料品牌。出題三處共用這條
+export const PRODUCT_NOT_CONTENT = `- 品牌官網上的食譜、文章、教學、部落格、實測心得是行銷內容，不是它賣的東西（例如網站寫了一篇「AI 短劇怎麼做」，不代表它賣 AI 短劇製作）。要找的是這個品牌實際販售的商品或服務類別（看選單或分類裡的「產品」「商品」「服務」，以及商品名，例如調味料品牌→「雞粉」「高湯塊」「濃湯」，不是「家常菜食譜」）。`;
+
+// 品牌名：先用標題／機構名猜；猜到的是「主頁」這種通用字（或空的）才請 AI 讀首頁判斷。
+// 回「中文名 英文名」（康寶 Knorr）：AI 回答多半寫中文，只給英文會比對不到「有沒有推薦你」
+export async function resolveBrandName(
+  vis: { title: string; orgName?: string; description: string; h1: string[]; preview: string },
+  origin: string,
+  apiKey: string | undefined,
+): Promise<string> {
+  const guess = guessBrandName(vis.title, vis.orgName);
+  if (guess || !apiKey) return guess || hostnameOf(origin).split('.')[0];
+  const prompt = `下面是一個網站首頁的資訊。這個網站是哪個品牌、公司或店家的？
+
+【網址】${origin}
+【網站標題】${vis.title || '（無）'}
+【網站描述】${vis.description || '（無）'}
+【主標題】${vis.h1.join('／') || '（無）'}
+【首頁純文字開頭】
+${vis.preview.slice(0, 800) || '（無）'}
+
+規則：
+- 回一般台灣人怎麼稱呼這個品牌。有中文名也有英文名就寫「中文 英文」（例如「康寶 Knorr」），只有一種就寫一種。
+- 不要加「官網」「官方網站」「台灣」這類字，不要寫標語。
+
+只回傳 JSON：{"brand":"…"}`;
+  try {
+    const parsed = parseJson<{ brand?: unknown }>(await askJson(prompt, apiKey, 100));
+    const b = typeof parsed?.brand === 'string' ? parsed.brand.trim().slice(0, 30) : '';
+    return b || hostnameOf(origin).split('.')[0];
+  } catch {
+    return hostnameOf(origin).split('.')[0];
+  }
+}
+
+// 短關鍵字：一般人在 Google、ChatGPT 打的「品項＋推薦」。要抓網站實際在賣的具體品項（凝露、慕斯、植牙），
+// 不要大類（保養品、清潔用品）——11-11 實測 ChatGPT 問「私密保養品推薦」不推 Relove，問「私密清潔凝露推薦」排第一。
+export async function generateKeywordQuestions(input: RecommendInput, apiKey: string, count = KEYWORD_COUNT): Promise<string[]> {
+  const prompt = `下面是一個網站的資訊。請列出 ${count} 個台灣人在 Google 或 ChatGPT 找這類東西時會直接打的短關鍵字，格式是「品項＋推薦」。
+
+【網站標題】${input.title || '（無）'}
+【網站描述】${input.description || '（無）'}
+【主標題】${input.h1.join('／') || '（無）'}
+【首頁內文摘錄】
+${input.leadParagraphs.slice(0, 3).join('\n') || '（無）'}
+【首頁純文字開頭】
+${input.preview.slice(0, 1200) || '（無）'}
+${servicesBlock(input)}
+規則：
+- 品項要是這個網站實際在賣、在做的具體東西（看商品分類、商品名裡的品項字，例如「私密清潔凝露」「私密處清潔慕斯」「台北植牙」），不要大類（「保養品」「清潔用品」「服務」）。
+- 用一般人會打的通稱：把商品名去掉品牌系列名、成分、功效字，只留「用途＋品項」。例如商品「胺基酸私密潔淨凝露」→「私密清潔凝露推薦」；「緊依偎私密修護精華」是系列名，不能用「緊依偎」。不要出現成分（胺基酸、益生菌、蛋白酵素…）。
+- 主力品項優先：服務／產品頁列的、首頁放最前面的那幾種。
+${SPREAD_SERVICES}
+${PRODUCT_NOT_CONTENT}
+- 不能有品牌名「${input.brandName}」或任何品牌名、型號；不要行銷形容詞。
+- 每個 4 到 16 字，結尾是「推薦」（服務業可用「推薦」或「哪裡好」）。
+- 不要重複同一個品項。
+
+只回傳 JSON：{"keywords":["…","…"]}`;
+  const parsed = parseJson<{ keywords?: unknown }>(await askJson(prompt, apiKey, 300));
+  const brand = input.brandName.toLowerCase();
+  return (Array.isArray(parsed?.keywords) ? parsed!.keywords : [])
+    .filter((k): k is string => typeof k === 'string')
+    .map((k) => k.replace(/[「」"']/g, '').trim())
+    .filter((k) => k.length >= 4 && k.length <= 20 && (!brand || !k.toLowerCase().includes(brand)))
+    .filter((k, i, arr) => arr.indexOf(k) === i)
+    .slice(0, count);
 }
 
 // 每題再生一種「意思一樣、說法不同」的問法。一次便宜呼叫；失敗就只用原本的問法。
+// 兩句最長的共同連續字數。換說法要真的換：11-11 小積木抓到「預算有限」→「預算不多」這種只換一兩個字的
+function longestCommonRun(a: string, b: string): number {
+  let best = 0;
+  for (let i = 0; i < a.length; i++) {
+    for (let j = 0; j < b.length; j++) {
+      let k = 0;
+      while (i + k < a.length && j + k < b.length && a[i + k] === b[j + k]) k++;
+      if (k > best) best = k;
+    }
+  }
+  return best;
+}
+const MAX_SHARED_RUN = 5; // 跟原句連續 6 字以上相同就算沒換
+const PARAPHRASE_MODEL = 'openai/gpt-5.6-luna';
+
 export async function paraphraseQuestions(questions: string[], brandName: string, apiKey: string): Promise<(string | null)[]> {
-  const prompt = `下面是幾個一般台灣消費者會拿去問 AI 的問題。請替每一題寫一個「意思一樣、但用字跟句型不同」的問法，像另一個人在問同一件事。
+  if (questions.length === 0) return [];
+  const prompt = `下面是幾個一般台灣消費者會拿去問 AI 的問題。請替每一題寫一個「意思一樣、但像另一個人問」的問法。
 
 規則：
-- 意思不能變：問的對象、條件（地區、族群、需求）都要保留。
-- 換說法：不要只換一兩個字，句型要不一樣（例如「有沒有推薦的…」改成「…哪個牌子比較好」）。
+- 意思不能變：問的對象、條件（地區、族群、預算、需求）都要保留。
+- 要真的換：
+  1. 主要名詞換一種說法（例如「清潔品」→「洗劑」，「預算有限」→「錢不多」，「平價」→「便宜」）
+  2. 句型換掉（「有沒有推薦的…」→「…哪個牌子好」；「我是學生…有推薦嗎」→「學生黨…用哪款」）
+  3. 跟原句不能有連續 6 個字一樣
 - 不能出現「${brandName}」或任何能指向特定品牌的字。
-- 台灣口語，15 到 40 字。
+- 台灣口語，10 到 40 字。
+
+例（別的領域，只示範換法）：
+原：我是上班族，預算有限，想找台北好的植牙診所，有推薦嗎？
+換：小資族在台北要做植牙，哪間診所便宜又不會踩雷？
 
 ${questions.map((q, i) => `[${i}] ${q}`).join('\n')}
 
 只回傳 JSON：{"alts":["…","…"]}，順序跟上面一樣。`;
-  try {
-    const parsed = parseJson<{ alts?: unknown }>(await askJson(prompt, apiKey, 600));
+  const brand = brandName.toLowerCase();
+  const ok = (q: string, a: string) =>
+    a.length >= 8 && a.length <= 80 && a !== q && !(brand && a.toLowerCase().includes(brand)) && longestCommonRun(q, a) <= MAX_SHARED_RUN;
+  const once = async (): Promise<(string | null)[]> => {
+    // gpt-4.1-mini 換說法只會換一兩個字（11-11 實測連「不能有連續 6 字相同」都做不到），用推理模型寫
+    const parsed = parseJson<{ alts?: unknown }>(await askJson(prompt, apiKey, 4000, PARAPHRASE_MODEL));
     const alts = Array.isArray(parsed?.alts) ? parsed!.alts : [];
-    const brand = brandName.toLowerCase();
     return questions.map((q, i) => {
       const a = typeof alts[i] === 'string' ? (alts[i] as string).trim() : '';
-      if (a.length < 8 || a.length > 80 || a === q || (brand && a.toLowerCase().includes(brand))) return null;
-      return a;
+      return ok(q, a) ? a : null;
     });
+  };
+  try {
+    // 沒換夠的再重寫一次（temperature 0.3，第二次會不一樣）；還是不夠就這題只問原問法
+    const first = await once();
+    if (first.every((a) => a !== null)) return first;
+    const second = await once().catch(() => questions.map(() => null));
+    return first.map((a, i) => a ?? second[i]);
   } catch {
     return questions.map(() => null);
   }
@@ -382,7 +538,10 @@ export function brandTokens(brandName: string): string[] {
   const latin = full.match(/^[a-z0-9][a-z0-9\-]{2,}/)?.[0];
   if (latin) out.add(latin);
   const head = full.split(/[\s|｜\-–—:：]/)[0]?.trim();
-  if (head && head.length >= 3) out.add(head);
+  // 中文兩個字就是完整品牌名（康寶、婦潔），英文兩個字母（HH）才會誤中一堆東西
+  if (head && (head.length >= 3 || (head.length === 2 && /^[\u4e00-\u9fff]{2}$/.test(head)))) out.add(head);
+  // 「康寶 Knorr」後面的英文名也要比
+  for (const w of full.match(/[a-z][a-z0-9\-]{3,}/g) ?? []) out.add(w);
   return [...out];
 }
 
@@ -405,64 +564,45 @@ export function sanitizeCustomQuestions(raw: unknown[], brandName: string): stri
   return raw
     .filter((q): q is string => typeof q === 'string')
     .map((q) => q.trim())
-    .filter((q) => q.length >= 8 && q.length <= 80)
-    .filter((q) => !brand || !q.toLowerCase().includes(brand))
-    .slice(0, QUESTION_COUNT);
+    .filter((q) => q.length >= 4 && q.length <= 80)
+    // 用拆開的品牌字比：「康寶 Knorr」整串比不到「康寶雞粉推薦」
+    .filter((q) => !brand || !brandTokens(brandName).some((t) => q.toLowerCase().includes(t)))
+    .slice(0, MAX_PICKED_QUESTIONS);
 }
 
+// 拿使用者勾好的題目去問 AI。2026-11-11 起健檢不自動問：題目由使用者從候選題（網友問過的、AI 產生的）勾，
+// 或自己寫，勾完才問。
 export async function runRecommendVisibility(
   input: RecommendInput,
   origin: string,
-  customQuestions?: string[],
+  picked: PickedQuestion[],
 ): Promise<RecommendVisibility | null> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey || !input.brandName) return null;
 
-  let questions: string[];
-  const sources = new Map<string, RealQuestionSource>();
-  if (customQuestions && customQuestions.length > 0) {
-    questions = customQuestions;
-  } else {
-    // 先用網友真的問過的問題，不夠 3 題再讓 AI 猜補滿
-    const real = await findRealQuestions(input, QUESTION_COUNT, apiKey);
-    for (const r of real) sources.set(r.question, r.source);
-    questions = real.map((r) => r.question);
-    if (questions.length < QUESTION_COUNT) {
-      try {
-        const guessed = await generateRecommendQuestions(input, apiKey);
-        questions = [...questions, ...guessed.filter((q) => !questions.includes(q))].slice(0, QUESTION_COUNT);
-      } catch {
-        if (questions.length === 0) return null;
-      }
-    }
-  }
+  const questions = picked.map((p) => p.question);
+  const byQuestion = new Map(picked.map((p) => [p.question, p]));
   if (questions.length === 0) return null;
 
   const askedAt = new Date().toISOString();
   const domain = hostnameOf(origin);
-  const alts = await paraphraseQuestions(questions, input.brandName, apiKey);
+  // 2026-11-12 拿掉「換個說法」：使用者已經自己勾了 3 題，每題再多問一個換句版本等於花兩倍錢，
+  // 小積木覺得沒用。只問勾的原句。（paraphraseQuestions 先留著不刪，舊紀錄的 altQuestion 畫面照常顯示）
   const ask = (q: string) => runVisibilityQueries(`${q} 請具體推薦幾個，並附上來源網址。`, origin, 900);
   const perQuestion = await Promise.all(
-    questions.map(async (question, qi) => {
-      const alt = alts[qi];
-      // Google 只問原本的問法：SerpApi 免費額度有限，而且 Google 同一題常有快取，換說法多問的價值低。
+    questions.map(async (question) => {
       // Google 用原題直接搜（一般人就是這樣打進 Google 的），不加「請附來源網址」那串
-      const [answers, altAnswers, google] = await Promise.all([
-        ask(question),
-        alt ? ask(alt) : Promise.resolve(null),
-        fetchGoogleAio(question, origin),
-      ]);
+      const [answers, google] = await Promise.all([ask(question), fetchGoogleAio(question, origin)]);
       const tagged = [
         ...(answers ?? []).map((a) => ({ a, q: question })),
-        ...(altAnswers ?? []).map((a) => ({ a, q: alt as string })),
         ...(google?.status === 'present' ? [{ a: google.answer, q: question }] : []),
       ];
       const results: RecommendAnswer[] = tagged.map(({ a, q }) => {
         const named = mentionsSelf(a.answer, input.brandName, domain, a.citations);
         return { ...a, query: q, namedSelf: named, advice: adviceFor(a, named) };
       });
-      const source = sources.get(question);
-      return { question, ...(alt ? { altQuestion: alt } : {}), ...(source ? { source } : {}), results };
+      const p = byQuestion.get(question);
+      return { question, ...(p?.source ? { source: p.source } : {}), origin: p?.origin ?? 'custom', results };
     }),
   );
   const questionsWithAnswers = perQuestion.filter((q) => q.results.length > 0);
@@ -486,6 +626,6 @@ export async function runRecommendVisibility(
     totalAnswers: flat.length,
     citedSelfCount: questionsWithAnswers.reduce((n, q) => n + q.results.filter((r) => r.citedSelf).length, 0),
     namedSelfCount: questionsWithAnswers.reduce((n, q) => n + q.results.filter((r) => r.namedSelf).length, 0),
-    customQuestions: !!customQuestions && customQuestions.length > 0,
+    customQuestions: picked.some((p) => p.origin === 'custom'),
   };
 }

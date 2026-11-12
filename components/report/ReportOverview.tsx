@@ -45,7 +45,10 @@ function selfTokens(brandName: string): string[] {
   const latin = full.match(/^[a-z0-9][a-z0-9\-]{2,}/)?.[0];
   if (latin) out.add(latin);
   const head = full.split(/[\s|｜\-–—:：]/)[0]?.trim();
-  if (head && head.length >= 3) out.add(head);
+  // 中文兩個字就是完整品牌名（康寶、婦潔），英文兩個字母（HH）才會誤中一堆東西
+  if (head && (head.length >= 3 || (head.length === 2 && /^[\u4e00-\u9fff]{2}$/.test(head)))) out.add(head);
+  // 「康寶 Knorr」後面的英文名也要比
+  for (const w of full.match(/[a-z][a-z0-9\-]{3,}/g) ?? []) out.add(w);
   return [...out];
 }
 
@@ -306,7 +309,7 @@ export function OverviewKpis({
           visual={<Ring part={namedSelf} whole={total} />}
         />
       ) : (
-        <Kpi label="AI 推薦你" value="—" note="這次沒問到推薦題" tone="none" />
+        <Kpi label="AI 推薦你" value="—" note="還沒選題目問 AI" tone="none" />
       )}
       {brandChecks.length > 0 ? (
         <Kpi
@@ -328,7 +331,7 @@ export function OverviewKpis({
           tone={rank === null ? "fail" : rank <= 3 ? "ok" : "warn"}
         />
       ) : (
-        <Kpi label="推薦排名" value="—" note="這次沒問到推薦題" tone="none" />
+        <Kpi label="推薦排名" value="—" note="還沒選題目問 AI" tone="none" />
       )}
       {sentiment && (
         <Kpi

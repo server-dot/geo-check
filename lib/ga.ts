@@ -6,7 +6,8 @@ export type GaEvent =
   | 'audit_fail'       // 健檢失敗或被擋（帶 reason）
   | 'keyword_query'    // 關鍵字查詢（帶 keyword_count）
   | 'pdf_download'     // 下載 PDF（帶 pages）
-  | 'recommend_rerun'; // 改推薦題重問（帶 questions）
+  | 'recommend_rerun' // 改推薦題重問（帶 questions）
+  | 'recommend_ask'; // 勾推薦題問 AI（帶 forum/ai/custom 各幾題）
 
 type Gtag = (command: 'event', name: string, params?: Record<string, string | number | boolean>) => void;
 

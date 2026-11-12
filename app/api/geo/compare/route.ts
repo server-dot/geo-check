@@ -10,7 +10,7 @@ import type { RecommendVisibility } from '@/lib/geo-recommend-visibility';
 // 2026-11-10 健檢時只直接比較排名第一的對手，報告上切到別家就沒有比較（小積木：「只用 AI 比一個對手超怪」）。
 // 切到哪家才問那家（每家約 US$0.05＋1 次 SerpApi），問完存回檢測紀錄，下次打開直接用。
 // 只能比這份報告裡 AI 真的推薦過的品牌，不能拿來問任意字串。
-export const maxDuration = 90;
+export const maxDuration = 180; // 11-11 ChatGPT 換原生搜尋＋推理，一題 25～50 秒
 
 export async function POST(req: NextRequest) {
   const user = getSessionUser(req);

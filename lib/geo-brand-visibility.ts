@@ -40,25 +40,42 @@ interface UrlCitation {
 // 所以可以共用同一套解析邏輯。Gemini 的 Google Search grounding 用的是不同的回應格式
 // （tools/groundingMetadata，不是 annotations），之後要加得另外處理，先不硬湊。
 //
-// ChatGPT 這條原本接的是 openai/gpt-4o-search-preview，但 OpenAI 已經棄用這個模型
-// （OpenRouter 型錄還留著，實際呼叫會 404）。改用通用的 `:online` web search 外掛
-// 掛在 gpt-4o 上，回應格式跟原生 search-preview 一樣是標準化的 annotations，親測可用。
-const ENGINES: { engine: string; model: string }[] = [
+// ChatGPT 這條 2026-11-11 前接的是 `openai/gpt-4o:online`——`:online` 是 OpenRouter 自己的搜尋外掛（Exa），
+// 不是 ChatGPT 的搜尋，找到的來源跟 chatgpt.com 不同。11-11 拿 Relove 三題在 chatgpt.com 實問比對：
+// 網頁版三題都沒推 Relove，gpt-4o:online 第一題卻推了；換成 OpenAI 原生搜尋（plugins web engine native）
+// 比了 gpt-5.6-terra／luna、gpt-5.5，luna 推的品牌跟網頁版重疊最多（3／2／2 個），一題約 US$0.03、27 秒。
+// 推理模型的推理也算在 max_tokens 裡，要另外加預算（REASONING_TOKENS），不然答案會被截斷。
+// 2026-11-12 搜尋內容量從預設（medium）調成 low：11-11 實際紀錄每題平均讀進 2.7 萬 token 搜尋結果、US$0.037，
+// 是成本大宗。low 沒另外花錢驗證跟網頁版的一致度，之後正常問題目時順便看。
+const ENGINES: { engine: string; model: string; extra?: Record<string, unknown>; reasoning?: boolean }[] = [
   { engine: 'Perplexity', model: 'perplexity/sonar' },
-  { engine: 'ChatGPT（GPT-4o＋即時搜尋）', model: 'openai/gpt-4o:online' },
+  {
+    engine: 'ChatGPT（GPT-5.6＋即時搜尋）',
+    model: 'openai/gpt-5.6-luna',
+    extra: {
+      plugins: [{ id: 'web', engine: 'native' }],
+      web_search_options: { search_context_size: 'low' },
+      reasoning: { effort: 'medium' },
+    },
+    reasoning: true,
+  },
 ];
+const REASONING_TOKENS = 6000;
 
 // 題目沒寫「台灣」時，兩家引擎的搜尋會抓進簡中、日本網站（2026-09-23 實測 Perplexity 引到
 // persol-group.co.jp、genee.jp）。system prompt 跟 web_search_options.user_location 對 Perplexity
 // 的搜尋都沒效——它只拿使用者訊息去搜——所以直接接在題目後面。報告上顯示的題目不含這句。
 const LOCALE_SUFFIX = '（我在台灣，請找台灣的資料，用繁體中文回答）';
 
+type EngineConfig = (typeof ENGINES)[number];
+
 async function askModel(
-  model: string,
+  cfg: EngineConfig,
   query: string,
   apiKey: string,
   maxTokens: number,
 ): Promise<{ content: string; citations: UrlCitation[] }> {
+  const model = cfg.model;
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -70,10 +87,12 @@ async function askModel(
     body: JSON.stringify({
       model,
       messages: [{ role: 'user', content: query + LOCALE_SUFFIX }],
-      max_tokens: maxTokens,
-      temperature: 0.2,
+      // 推理模型不吃 temperature；推理用掉的 token 也算在 max_tokens 裡，另外加預算
+      ...(cfg.reasoning ? { max_tokens: maxTokens + REASONING_TOKENS } : { max_tokens: maxTokens, temperature: 0.2 }),
+      ...cfg.extra,
     }),
-    signal: AbortSignal.timeout(30000),
+    // 原生搜尋＋推理一題約 25～50 秒
+    signal: AbortSignal.timeout(cfg.reasoning ? 120000 : 30000),
   });
   if (!res.ok) {
     const body = await res.text();
@@ -104,8 +123,7 @@ export function isSameSite(a: string, b: string): boolean {
 }
 
 async function runOne(
-  engine: string,
-  model: string,
+  cfg: EngineConfig,
   query: string,
   domain: string,
   apiKey: string,
@@ -114,7 +132,7 @@ async function runOne(
   let content: string;
   let rawCitations: UrlCitation[];
   try {
-    const r = await askModel(model, query, apiKey, maxTokens);
+    const r = await askModel(cfg, query, apiKey, maxTokens);
     content = r.content;
     rawCitations = r.citations;
   } catch {
@@ -130,7 +148,7 @@ async function runOne(
       isSelf: isSameSite(hostnameOf(c.url_citation.url!), domain),
     }));
 
-  return { engine, query, answer: content, citedSelf: citations.some((c) => c.isSelf), citations };
+  return { engine: cfg.engine, query, answer: content, citedSelf: citations.some((c) => c.isSelf), citations };
 }
 
 // 對每個接好的引擎並行查詢同一個問題，個別失敗不影響其他引擎——
@@ -146,7 +164,7 @@ export async function runVisibilityQueries(
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return null;
   const domain = hostnameOf(origin);
-  const results = await Promise.all(ENGINES.map((e) => runOne(e.engine, e.model, query, domain, apiKey, maxTokens)));
+  const results = await Promise.all(ENGINES.map((e) => runOne(e, query, domain, apiKey, maxTokens)));
   return results.filter((r): r is VisibilityAnswer => r !== null);
 }
 
@@ -161,12 +179,19 @@ function firstSegment(text: string): string {
 // 猜出來的「品牌名」其實是句廣告詞。JSON-LD 的 Organization/LocalBusiness.name 是站方明確
 // 標記給機器看的機構名，順序通常才是「品牌在前」，可信度高於 <title>，優先使用。
 export function guessBrandName(title: string, orgName?: string): string {
-  if (orgName?.trim()) return firstSegment(orgName);
-  return firstSegment(title);
+  const org = orgName?.trim() ? firstSegment(orgName) : '';
+  if (org && !isGenericName(org)) return org;
+  const t = firstSegment(title);
+  return isGenericName(t) ? '' : t;
 }
 
-export async function checkBrandVisibility(title: string, origin: string, orgName?: string): Promise<BrandVisibilityResult[]> {
-  const brandName = guessBrandName(title, orgName);
+// 「主頁」「首頁」「官方網站」不是品牌名。11-11 康寶 knorr.com/tw 的 <title> 跟機構名都只寫「主頁」，
+// 拿去問 AI 變成「主頁是什麼品牌」。這種要另外判斷（geo-recommend-visibility resolveBrandName）
+export function isGenericName(name: string): boolean {
+  return /^(主頁|首頁|首页|主页|home|home ?page|index|首頁 ?\/ ?home|官方網站|官方网站|官網|官网|網站首頁|welcome|歡迎光臨|untitled)$/i.test(name.trim());
+}
+
+export async function checkBrandVisibility(brandName: string, origin: string): Promise<BrandVisibilityResult[]> {
   if (!brandName) return [];
 
   // 問題改成要 AI 介紹品類、產品、特色、價格、通路（品牌輪廓用），Google 另外查一次 AI 摘要。
