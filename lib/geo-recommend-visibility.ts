@@ -7,6 +7,7 @@ import type { SentimentResult } from './geo-sentiment';
 import type { BrandPositioning } from './geo-positioning';
 import type { BrandProfile } from './geo-brand-profile';
 import { noteOpenRouterFailure } from './openrouter-health';
+import { paidFetch } from './paid-fetch';
 
 // ── GEO：推薦題自動查詢 ──────────────────────────────────
 // 品牌能見度（geo-brand-visibility.ts）問的是「AI 認不認得你」；關鍵字能見度
@@ -129,7 +130,7 @@ const AI_CANDIDATE_COUNT = 10;
 const KEYWORD_COUNT = 5;
 
 export async function askJson(prompt: string, apiKey: string, maxTokens: number, model = MODEL): Promise<string> {
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const res = await paidFetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,

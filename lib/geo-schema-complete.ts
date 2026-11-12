@@ -1,6 +1,7 @@
 import type { SchemaTypeCard } from './geo-schema-check';
 import { SITE_URL } from '@/lib/site';
 import { noteOpenRouterFailure } from './openrouter-health';
+import { paidFetch } from './paid-fetch';
 
 // ── GEO 深度健檢：Schema 缺欄位補完建議 ──────────────────
 // 「結構化資料」專區只做到「缺什麼」，這裡再往前一步：拿缺欄位所在那一頁的
@@ -30,7 +31,7 @@ const COMPOSE_FIELDS = new Set(['簡介']);
 const SKIP_FIELDS = new Set(['社群/外部連結']);
 
 async function askOpenRouter(prompt: string, apiKey: string): Promise<string> {
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const res = await paidFetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,

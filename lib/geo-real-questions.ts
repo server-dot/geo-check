@@ -8,6 +8,7 @@
 // 成本：需求詞 1 次 + Serper 約 30 次（每千次約 US$1）+ 整理 1 次。任何一步失敗或抓不到就回 []，畫面上只剩 AI 產生的題目。
 
 import { askJson, generateKeywordQuestions, generateRecommendQuestions, parseJson, PRODUCT_NOT_CONTENT, servicesBlock, SPREAD_SERVICES, type RecommendCandidates, type RecommendInput } from './geo-recommend-visibility';
+import { paidFetch } from './paid-fetch';
 
 // 論壇題最多列幾則（太多使用者也看不完）
 const MAX_FORUM_QUESTIONS = 15;
@@ -53,7 +54,7 @@ async function serper(q: string, key: string) {
   const wait = Math.max(0, serperNext - Date.now());
   serperNext = Date.now() + wait + 250;
   await new Promise((r) => setTimeout(r, wait));
-  const res = await fetch('https://google.serper.dev/search', {
+  const res = await paidFetch('https://google.serper.dev/search', {
     method: 'POST',
     headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
     body: JSON.stringify({ q, gl: 'tw', hl: 'zh-tw' }),

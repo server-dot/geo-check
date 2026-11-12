@@ -18,6 +18,7 @@ import { fetchGoogleAio } from "@/lib/geo-google-aio";
 import { profileGoogleQuery, profileQuery } from "@/lib/geo-brand-profile";
 import { selfShortName } from "@/lib/geo-sentiment";
 import { noteOpenRouterFailure } from './openrouter-health';
+import { paidFetch } from './paid-fetch';
 export interface VisibilityAnswer {
   engine: string;
   query: string;
@@ -76,7 +77,7 @@ async function askModel(
   maxTokens: number,
 ): Promise<{ content: string; citations: UrlCitation[] }> {
   const model = cfg.model;
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const res = await paidFetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,

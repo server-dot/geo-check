@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:replay": "GEO_REPLAY=1 next dev -p 5050",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

@@ -2,6 +2,7 @@ import { LEVEL, CATEGORY } from './geo-audit-rules';
 import type { CheckResult, CheckStatus } from './geo-audit-rules';
 import { SITE_URL } from '@/lib/site';
 import { noteOpenRouterFailure } from './openrouter-health';
+import { paidFetch } from './paid-fetch';
 
 // ── GEO 深度健檢：AI 語意判斷層 ──────────────────────────
 // 規則判不了的語意題，交給 AI（走 OpenRouter）：E-E-A-T 權威訊號足不足。
@@ -25,7 +26,7 @@ export type AiAuditInput = {
 };
 
 async function askOpenRouter(prompt: string, apiKey: string): Promise<string> {
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const res = await paidFetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,

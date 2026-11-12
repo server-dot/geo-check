@@ -1,4 +1,5 @@
 import { hostnameOf, isSameSite, type VisibilityAnswer } from './geo-brand-visibility';
+import { paidFetch } from './paid-fetch';
 
 // ── Google AI 摘要（AI Overview）────────────────────────────
 // Google 沒有官方 API，透過 SerpApi 查台灣 Google（google.com.tw、繁中）。
@@ -47,7 +48,7 @@ async function serp(params: Record<string, string>, key: string): Promise<Record
   const u = new URL('https://serpapi.com/search.json');
   for (const [k, v] of Object.entries({ ...params, api_key: key })) u.searchParams.set(k, v);
   try {
-    const res = await fetch(u, { signal: AbortSignal.timeout(45_000) });
+    const res = await paidFetch(u.toString(), { signal: AbortSignal.timeout(45_000) });
     if (!res.ok) return null; // 額度用完是 429，一律當成這次查不到
     return (await res.json()) as Record<string, unknown>;
   } catch {
