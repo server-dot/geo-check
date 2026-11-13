@@ -135,7 +135,7 @@ export function DiagnosisCards({ d, rec, table }: { d: Diagnosis; rec: Recommend
         const points = quote ? reasonPoints(quote.text) : [];
         advice = points.length
           ? `AI 推${rival}時講的是${points.map((x) => `「${x}」`).join("")}。可以在${page}把你自己這幾點寫清楚，讓 AI 拿得到同樣的資訊。`
-          : `可以在${page}寫清楚你的產品適合誰、成分或做法、有沒有媒體或專業人士推薦，讓 AI 有理由選你。`;
+          : `可以在${page}寫清楚適合誰、具體怎麼做、做過哪些案例或有誰推薦，讓 AI 有理由選你。`;
       }
       return { r, advice, total, selfPages, sites, rival, quote };
     });
