@@ -11,6 +11,7 @@ import AccountMenu, { AUTH_CHANGED_EVENT, openLogin } from "@/components/marketi
 import Section from "@/components/marketing/Section";
 import Footer from "@/components/marketing/Footer";
 import { tallyCitedDomains, type CitedDomain } from "@/lib/geo-cited-domains";
+import { DiagnosisCards } from "@/components/report/DiagnosisCards";
 import { buildDiagnosis, GATE_SYMBOL, VERDICT_LABEL, VERDICT_STATE, type Diagnosis, type GateState } from "@/lib/geo-diagnosis";
 import type { ContentMatch } from "@/lib/geo-content-match";
 import { buildCategories5, computeOverallScore, CATEGORY5_KEY_MAP, CATEGORY5_ORDER, type Category5 } from "@/lib/geo-score";
@@ -1822,7 +1823,15 @@ function KeywordBoard({ origin, data }: { origin: string; data: KeywordPageData 
                   const st: GateState = r.match ? VERDICT_STATE[r.match.verdict] : "unknown";
                   return (
                     <tr key={r.question}>
-                      <td style={{ ...cell, color: "var(--rb-ink)" }}>{r.question}</td>
+                      <td style={{ ...cell, color: "var(--rb-ink)" }}>
+                        {r.question}
+                        <div style={{ marginTop: 3, fontWeight: 700, color: GATE_COLOR[r.reason.state] }}>
+                          {GATE_SYMBOL[r.reason.state]} {r.reason.title}
+                        </div>
+                        <div style={{ color: "var(--rb-ink2)" }}>{r.reason.detail}</div>
+                        {r.reason.said && <div style={{ color: "var(--rb-ink2)" }}>最接近的頁「{r.match?.pageTitle.split(/[｜|]/)[0].trim()}」：{r.reason.said}</div>}
+                        {r.reason.advice && <div style={{ color: "var(--rb-ink)", fontWeight: 600 }}>建議：{r.reason.advice}</div>}
+                      </td>
                       <td className="mono" style={cell}>{r.named > 0 ? "✓" : "✗"} {r.named}/{r.total}</td>
                       <td style={cell}>
                         <span className="mono" style={{ fontWeight: 700, color: GATE_COLOR[st], marginRight: 4 }}>{GATE_SYMBOL[st]}</span>
@@ -2948,8 +2957,7 @@ function renderInlineMarkdown(text: string, citations: { url: string }[], hl?: H
 // 題目是模型從首頁內容猜的，畫面上要講明白，不能讓人以為是真實搜尋量。
 // 名單是從回答正文抽的專有名詞（主觀），所以每張卡都保留原文可以核對；
 // 客觀的「引用網域」彙總在下面另一塊，兩個一起看。
-// 「未被推薦原因」（判斷邏輯在 lib/geo-diagnosis.ts，三處共用）：一句結論＋一題一列。
-// 只列現象（推你幾次、最接近的頁、推了誰），不列缺的字或該補什麼。
+// 「未被推薦原因」PDF 版用的燈號顏色（網頁版在 components/report/DiagnosisCards.tsx）。
 // 燈號一律「符號＋顏色」，不靠顏色單獨表意（warn/fail 色盲下同色）。
 const GATE_COLOR: Record<GateState, string> = {
   pass: STATUS_COLOR.ok,
@@ -2957,58 +2965,6 @@ const GATE_COLOR: Record<GateState, string> = {
   fail: STATUS_COLOR.fail,
   unknown: "#4a5468",
 };
-
-function DiagnosisBlock({ d }: { d: Diagnosis }) {
-  const rc = d.recognition;
-  return (
-    <div className="rounded-[10px] border border-line bg-card p-6">
-      <p className="text-lg font-bold text-ink">{d.conclusion}</p>
-      <p className="mt-1.5 text-[15px] text-ink2">
-        <span className="mono mr-1.5 font-bold" style={{ color: GATE_COLOR[rc.state] }}>{GATE_SYMBOL[rc.state]}</span>
-        {rc.line}
-      </p>
-      <div className="mt-4 overflow-x-auto rounded-xl border border-line">
-        <table className="w-full min-w-[40em] text-[15px]">
-          <thead>
-            <tr className="border-b border-line bg-inset/60 text-left text-[14px] text-ink3">
-              <th className="px-4 py-2.5 font-medium">推薦題</th>
-              <th className="w-[7.5em] px-3 py-2.5 font-medium">AI 推你</th>
-              <th className="w-[30%] px-3 py-2.5 font-medium">你網站上最接近的頁</th>
-              <th className="w-[22%] px-3 py-2.5 font-medium">AI 推了誰</th>
-            </tr>
-          </thead>
-          <tbody>
-            {d.rows.map((r) => {
-              const st = r.match ? VERDICT_STATE[r.match.verdict] : "unknown";
-              return (
-                <tr key={r.question} className="border-b border-line align-top last:border-0">
-                  <td className="px-4 py-3 text-ink">{r.question}</td>
-                  <td className="px-3 py-3 whitespace-nowrap">
-                    <span className={`font-semibold ${r.named > 0 ? "text-ok" : "text-fail"}`}>{r.named > 0 ? "✓" : "✗"} </span>
-                    <span className="mono text-ink">{r.named}/{r.total}</span>
-                    <span className="text-[14px] text-ink3"> 次</span>
-                  </td>
-                  <td className="px-3 py-3">
-                    <span className="mono mr-1.5 font-bold" style={{ color: GATE_COLOR[st] }}>{GATE_SYMBOL[st]}</span>
-                    <span className="text-[14px] text-ink2">{r.match ? VERDICT_LABEL[r.match.verdict] : "這題沒比對出來"}</span>
-                    {r.match?.pageUrl && (
-                      <a href={r.match.pageUrl} target="_blank" rel="noopener noreferrer" className="mt-0.5 block break-all text-[14px]">
-                        {r.match.pageTitle || readableUrl(r.match.pageUrl)}
-                      </a>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 text-[14px] text-ink2">{r.rivals.length ? r.rivals.join("、") : "—"}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <p className="mt-3 text-[14px] text-ink3">{d.thirdPartyNote}</p>
-      <p className="mt-1 text-[14px] text-ink3">{d.recencyNote}</p>
-    </div>
-  );
-}
 
 // 改題目重問：AI 猜的題目可能不是客戶真的會問的，題目錯了，三關判斷全都跟著錯。
 // 推薦題表現的說明：這次問了哪幾題、從多少候選題裡勾的。
@@ -4170,10 +4126,10 @@ export default function HomeClient({
               </div>
             )}
 
-            {diagnosis && (
+            {diagnosis && recommend && brandTable && (
               <div className="mt-12">
-                <DashSection id="why" title="未被推薦原因" desc="每一題 AI 推你幾次、你網站上最接近的頁，以及 AI 推了誰">
-                  <DiagnosisBlock d={diagnosis} />
+                <DashSection id="why" title="未被推薦原因" desc="初步判斷：每一題 AI 沒推你，可能是什麼原因">
+                  <DiagnosisCards d={diagnosis} rec={recommend} table={brandTable} />
                 </DashSection>
               </div>
             )}

@@ -815,8 +815,8 @@ export function buildCitedPages(rec: RecommendLike, table: BrandTable): CitedPag
 
 const GENERIC_CJK = new Set(["私密", "保養", "護理", "清潔", "台灣", "官方", "官網", "生技", "生醫", "科技", "系列", "專家", "品牌"]);
 
-const TYPE_ORDER: SourceType[] = ["self", "competitor", "shop", "media", "social", "other"];
-const TYPE_COLOR: Record<SourceType, string> = {
+export const TYPE_ORDER: SourceType[] = ["self", "competitor", "shop", "media", "social", "other"];
+export const TYPE_COLOR: Record<SourceType, string> = {
   self: "var(--lime)",
   competitor: "#303c54",
   shop: "#8f99ab",

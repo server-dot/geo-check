@@ -167,13 +167,13 @@ export function buildReportMarkdown(job: AuditJob): string {
     out.push('');
     out.push(`${GATE_SYMBOL[d.recognition.state]} ${d.recognition.line}`);
     out.push('');
-    out.push('| 推薦題 | AI 推你 | 你網站上最接近的頁 | AI 推了誰 |');
-    out.push('|---|---|---|---|');
+    out.push('| 推薦題 | 原因 | AI 推你 | 你網站上最接近的頁 | AI 推了誰 |');
+    out.push('|---|---|---|---|---|');
     for (const r of d.rows) {
       const page = r.match
         ? `${GATE_SYMBOL[VERDICT_STATE[r.match.verdict]]} ${VERDICT_LABEL[r.match.verdict]}${r.match.pageUrl ? `：${esc(r.match.pageTitle || r.match.pageUrl)} ${r.match.pageUrl}` : ''}`
         : '? 沒比對出來';
-      out.push(`| ${esc(r.question)} | ${r.named > 0 ? '✓' : '✗'} ${r.named}/${r.total} 次 | ${page} | ${r.rivals.join('、') || '—'} |`);
+      out.push(`| ${esc(r.question)} | ${GATE_SYMBOL[r.reason.state]} ${r.reason.title}：${esc(r.reason.detail)}${r.reason.said ? `最接近的頁${esc(r.match?.pageTitle ? `「${r.match.pageTitle.split(/[｜|]/)[0].trim()}」` : '')}：${esc(r.reason.said)}。` : ''}${r.reason.advice ? `**建議**：${esc(r.reason.advice)}` : ''} | ${r.named > 0 ? '✓' : '✗'} ${r.named}/${r.total} 次 | ${page} | ${r.rivals.join('、') || '—'} |`);
     }
     out.push('');
     out.push(d.thirdPartyNote);

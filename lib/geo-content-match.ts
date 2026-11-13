@@ -23,6 +23,9 @@ export interface ContentMatch {
   pageTitle: string;
   missing: string[]; // 題目或同業頁面在用、你那一頁沒出現的字，最多 4 個
   peerPages: { url: string; title: string }[]; // AI 在這題引用的同業頁面，最多 3 個
+  // 11-13 小積木：「要說你講的是…建議可以…」。11-13 之前的結果沒有這兩欄，報告用 missing＋peerPages 組一句頂替
+  pageAbout?: string; // 這一頁在講什麼（一句）
+  advice?: string;    // partial／no 時，可以補什麼內容或新增什麼頁（一句，「可以…」開頭）
 }
 
 export interface MatchPage {
@@ -77,9 +80,11 @@ ${qList}
 - yes：這一頁的主題就是在回答這個問題——客戶讀了會知道「這家就是在做這件事、可以找他」。
 - partial：沾到邊，但角度或用詞不同。例如問題問「找誰導入 n8n」，這一頁卻是在列「我做過哪些自動化項目」；或問題問「台灣中小企業」，頁面完全沒講對象是誰。
 - no：整個網站沒有一頁在講這件事。部落格教學文不算回答「找誰幫忙」這類問題。
+- about：一句話（25 字內）說你挑的那一頁在講什麼，例如「列出私密潔淨系列的商品」「介紹品牌理念與門市」。no 時給空字串。
+- advice：partial 或 no 時給一句建議（40 字內），用「可以」開頭，具體說要在那一頁補什麼內容、或新增一頁講什麼，才算正面回答這個問題；可以參考同業頁面標題的寫法。不要寫「就會被推薦」這類保證。yes 時給空字串。
 - missing：問題或同業頁面標題裡用到、但你挑的那一頁沒有講到的關鍵字詞，最多 ${MAX_MISSING} 個，每個 2 到 8 個字，用原文的寫法（例如「導入」「顧問」「中小企業」「台灣」）。yes 也可以有 missing。不要列品牌名、不要列太泛的字（「服務」「推薦」「哪些」）。
 
-只回傳 JSON：{"matches":[{"q":0,"page":3,"verdict":"partial","missing":["導入","顧問"]}]}
+只回傳 JSON：{"matches":[{"q":0,"page":3,"verdict":"partial","about":"列出做過的自動化專案","advice":"可以新增一頁說明 n8n 導入顧問服務：服務對象、流程、費用","missing":["導入","顧問"]}]}
 沒有任何相關頁面時 page 給 -1、verdict 給 "no"。`;
 }
 
@@ -92,8 +97,8 @@ export async function matchQuestionsToPages(
   if (questions.length === 0 || usable.length === 0) return null;
 
   const items = questions.map((q) => ({ question: q.question, peers: peerPagesFor(q) }));
-  const raw = await askJson(buildPrompt(items, usable), apiKey, 800);
-  const parsed = parseJson<{ matches?: { q?: number; page?: number; verdict?: string; missing?: unknown }[] }>(raw);
+  const raw = await askJson(buildPrompt(items, usable), apiKey, 1400);
+  const parsed = parseJson<{ matches?: { q?: number; page?: number; verdict?: string; about?: unknown; advice?: unknown; missing?: unknown }[] }>(raw);
   const rows = Array.isArray(parsed?.matches) ? parsed!.matches : [];
 
   return items.map((it, qi) => {
@@ -116,6 +121,8 @@ export async function matchQuestionsToPages(
       pageTitle: page?.title ?? '',
       missing,
       peerPages: it.peers,
+      pageAbout: page && typeof row?.about === 'string' ? row.about.trim().slice(0, 60) : '',
+      advice: verdict !== 'yes' && typeof row?.advice === 'string' ? row.advice.trim().slice(0, 80) : '',
     };
   });
 }

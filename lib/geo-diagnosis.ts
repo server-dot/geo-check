@@ -30,12 +30,70 @@ export interface DiagnosisRow {
   total: number;   // 這題總共幾次回答
   match: ContentMatch | null; // null＝這題沒比對出來
   rivals: string[]; // 這題 AI 點名最多的對手品牌（不含通路），最多 3 個
+  selfCited: number;  // 幾次回答的參考連結裡有你的網站
+  thirdParty: number; // 這題 AI 參考了幾次平台、論壇、媒體、推薦文
+  reason: Reason;
 }
+
+// 11-13 小積木：「這頁的重點是我要知道原因」。每題照三關刪去法給一個原因：
+// AI 不認得你 → 你網站上沒有回答這題的頁／沒有正面回答 → 有頁，AI 還是選了別人（知名度、口碑量不到，要明講）。
+// 只講現象，不講該補什麼（memory：geo-check-report-tone-awareness-not-solution）。
+export type ReasonKind = 'recommended' | 'unknown-brand' | 'no-page' | 'partial-page' | 'chose-others' | 'no-match';
+
+export interface Reason {
+  kind: ReasonKind;
+  state: GateState;
+  title: string;
+  detail: string;
+  said?: string;   // 你的頁講的是什麼（「你這頁講的是…」）
+  advice?: string; // 建議可以…（11-13 小積木要求這頁給建議）
+}
+
+const quoteList = (xs: string[]) => xs.map((x) => `「${x}」`).join('');
+
+// 你的頁講的是什麼＋建議可以補什麼。新結果用比對時 AI 寫的那兩句；舊結果用「缺的字」＋同業頁標題組
+function pageAdvice(question: string, m: ContentMatch): { said?: string; advice?: string } {
+  // 自己的其他網站（Relove 的 reloveshop）不能拿來當「同業寫法」：標題裡有你頁面標題的英文品牌字就跳過
+  const selfWords = (m.pageTitle.match(/[A-Za-z]{4,}/g) ?? []).map((w) => w.toLowerCase());
+  const peers = m.peerPages
+    .filter((p) => !selfWords.some((w) => p.title.toLowerCase().includes(w)))
+    .map((p) => p.title.split(/[｜|]/)[0].trim())
+    .filter(Boolean)
+    .slice(0, 2);
+  const peerHint = peers.length ? `AI 這題參考的同業頁是${quoteList(peers)}這類寫法。` : '';
+  if (m.verdict === 'no') {
+    return { advice: m.advice || `可以新增一頁，直接回答「${question}」。${peerHint}` };
+  }
+  let isHome = false;
+  try {
+    isHome = new URL(m.pageUrl).pathname.replace(/\/$/, '') === '';
+  } catch {}
+  const name = `${isHome ? '官網首頁' : ''}「${m.pageTitle.split(/[｜|]/)[0].trim()}」`;
+  const gap = m.missing.length ? `沒有講到${quoteList(m.missing)}` : '';
+  const said = [m.pageAbout, gap].filter(Boolean).join('，') || undefined;
+  const advice =
+    m.advice ||
+    (m.missing.length
+      ? `可以在${name}補上${quoteList(m.missing)}相關的說明，或另寫一頁正面回答這個問題。${peerHint}`
+      : `可以另寫一頁正面回答這個問題。${peerHint}`);
+  return { said, advice };
+}
+
+export const REASON_TITLE: Record<ReasonKind, string> = {
+  recommended: '每家 AI 都推了你',
+  'unknown-brand': 'AI 不認得你的品牌',
+  'no-page': '你網站上沒有講這件事的頁',
+  'partial-page': '你有相關的頁，但沒有直接回答這個問題',
+  'chose-others': '你有頁在講這件事，AI 還是推了別人',
+  'no-match': '判斷不出原因',
+};
 
 export interface Diagnosis {
   conclusion: string;
   // 用品牌名直接問 AI 找不找得到你；找不到時，推薦題沒推你就不難理解，放在表格上方
-  recognition: { state: GateState; line: string };
+  recognition: { state: GateState; line: string; found: number; total: number };
+  // 每種原因各幾題（網頁版大數字卡用）
+  reasonCounts: Record<ReasonKind, number>;
   rows: DiagnosisRow[];
   thirdPartyNote: string;
   // AI 的搜尋索引不會即時更新，剛改的頁面它還沒看到——這種情況下「沒被推薦」不能當結論
@@ -56,10 +114,10 @@ export function buildDiagnosis(brand: { citedSelf: boolean }[], rec: DiagnosisIn
   const found = brand.filter((b) => b.citedSelf).length;
   const recognition =
     brand.length === 0
-      ? { state: 'unknown' as const, line: '這次沒用品牌名問 AI' }
+      ? { state: 'unknown' as const, line: '這次沒用品牌名問 AI', found, total: 0 }
       : found > 0
-        ? { state: 'pass' as const, line: `用品牌名直接問，${found}/${brand.length} 家 AI 找得到你的網站` }
-        : { state: 'fail' as const, line: `用品牌名直接問，${brand.length} 家 AI 都找不到你的網站` };
+        ? { state: 'pass' as const, line: `用品牌名直接問，${found}/${brand.length} 家 AI 找得到你的網站`, found, total: brand.length }
+        : { state: 'fail' as const, line: `用品牌名直接問，${brand.length} 家 AI 都找不到你的網站`, found, total: brand.length };
 
   // names[].answers 是「題目依序攤平」之後的回答位置，換算回每題的範圍
   let offset = 0;
@@ -74,13 +132,13 @@ export function buildDiagnosis(brand: { citedSelf: boolean }[], rec: DiagnosisIn
       .sort((a, b) => b.hits - a.hits)
       .slice(0, MAX_RIVALS)
       .map((n) => n.name);
-    return {
-      question: q.question,
-      named: q.results.filter((r) => r.namedSelf).length,
-      total: q.results.length,
-      match: rec.contentMatch?.find((m) => m.question === q.question) ?? null,
-      rivals,
-    };
+    const named = q.results.filter((r) => r.namedSelf).length;
+    const total = q.results.length;
+    const match = rec.contentMatch?.find((m) => m.question === q.question) ?? null;
+    const selfCited = q.results.filter((r) => r.citations.some((c) => c.isSelf)).length;
+    const thirdParty = q.results.reduce((s, r) => s + r.citations.filter((c) => isThirdPartySource(c)).length, 0);
+    const reason = buildReason(q.question, { named, total, match, selfCited, thirdParty, rivals }, recognition.state);
+    return { question: q.question, named, total, match, rivals, selfCited, thirdParty, reason };
   });
 
   const n = rows.length;
@@ -99,9 +157,13 @@ export function buildDiagnosis(brand: { citedSelf: boolean }[], rec: DiagnosisIn
     0,
   );
 
+  const reasonCounts = Object.fromEntries(Object.keys(REASON_TITLE).map((k) => [k, 0])) as Record<ReasonKind, number>;
+  for (const r of rows) reasonCounts[r.reason.kind]++;
+
   return {
     conclusion: parts.join('；'),
     recognition,
+    reasonCounts,
     rows,
     thirdPartyNote:
       thirdParty > 0
@@ -109,4 +171,43 @@ export function buildDiagnosis(brand: { citedSelf: boolean }[], rec: DiagnosisIn
         : '別的網站有沒有提到你，這份報告查不到。',
     recencyNote: '最近一個月才改過的頁面，AI 可能還沒讀到，過 3～4 週再測一次。',
   };
+}
+
+function buildReason(
+  question: string,
+  r: { named: number; total: number; match: ContentMatch | null; selfCited: number; thirdParty: number; rivals: string[] },
+  recognition: GateState,
+): Reason {
+  const make = (kind: ReasonKind, state: GateState, detail: string, extra: { said?: string; advice?: string } = {}): Reason => ({
+    kind,
+    state,
+    title: REASON_TITLE[kind],
+    detail,
+    ...extra,
+  });
+  if (r.total > 0 && r.named === r.total) return make('recommended', 'pass', `${r.total} 家 AI 都在答案裡推了你。`);
+  const some = r.named > 0 ? `${r.total} 家 AI 裡有 ${r.total - r.named} 家沒推你。` : '';
+  if (recognition === 'fail')
+    return make('unknown-brand', 'fail', `${some}直接用品牌名問，AI 都找不到你的官網。AI 還不認得你，推薦的時候就不會想到你。`, {
+      advice: '可以先讓 AI 認得你：官網首頁清楚寫出品牌名、在做什麼、服務誰。',
+    });
+  if (!r.match) return make('no-match', 'unknown', `${some}這題沒比對到你網站上的頁，判斷不出是卡在哪裡。`);
+  const notSeen = r.selfCited === 0 ? '，AI 回答時也沒有參考你的網站' : '';
+  const page = r.match.pageTitle ? `「${r.match.pageTitle}」` : '';
+  if (r.match.verdict === 'no')
+    return make('no-page', 'fail', `${some}你網站上找不到在講這件事的頁，AI 回答這題時沒有你的內容可以用。`, pageAdvice(question, r.match));
+  if (r.match.verdict === 'partial')
+    return make('partial-page', 'partial', `${some}你最接近的頁${page}跟這題有關，但沒有直接回答這個問題${notSeen}。`, pageAdvice(question, r.match));
+  return make(
+    'chose-others',
+    'partial',
+    `${some}你的頁${page}有在講這件事${r.selfCited > 0 ? '，AI 也看到了你的網站' : ''}，${r.named > 0 ? '沒推你的 AI 推了別人' : 'AI 還是推了別人'}。` +
+      (r.thirdParty > 0 ? `這題 AI 參考了 ${r.thirdParty} 次平台、論壇、媒體或推薦文。` : '') +
+      'AI 挑誰也看知名度、別人怎麼說你，這兩件事這份報告量不到。',
+    {
+      said: r.match.pageAbout || undefined,
+      // 建議要點名 AI 參考的網站，網站分類在報告端算（components/report/DiagnosisCards.tsx）；
+      // 11-13 小積木罵「看看那些平台有沒有提到你」這種通用句「這三小建議」，這裡不給通用句
+    },
+  );
 }
