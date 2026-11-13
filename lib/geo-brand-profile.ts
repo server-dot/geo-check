@@ -33,6 +33,7 @@ export interface ProfileRow {
 export interface ProfileKeyword {
   word: string; // 8 字內的形容，例如「私密保養」「台灣品牌」
   engines: string[]; // 哪幾家 AI 這樣講
+  field?: ProfileFieldKey; // 屬於品牌輪廓哪一支（心智圖分支用）；11-13 前存的報告沒有，前端自己猜
 }
 
 export interface BrandProfile {
@@ -40,6 +41,7 @@ export interface BrandProfile {
   rows: ProfileRow[];
   intros?: string[]; // 每家回答的第一句（原文），跟 engines 同順序
   keywords?: ProfileKeyword[];
+  summaries?: string[]; // 每家 AI 怎麼介紹你的摘要，跟 engines 同順序（11-13 起跟關鍵詞同一次呼叫產生；舊報告沒有，前端用 intros）
 }
 
 interface AnswerIn {
@@ -146,25 +148,36 @@ export function firstSentence(answer: string): string {
 }
 
 // 各家講到的特點合併成一組關鍵詞，標出幾家 AI 這樣講：三家都講的就是 AI 對你的共識
-async function collectKeywords(brand: string, rows: ProfileRow[], engines: string[], apiKey: string): Promise<ProfileKeyword[]> {
+async function collectKeywords(brand: string, rows: ProfileRow[], engines: string[], apiKey: string): Promise<{ keywords: ProfileKeyword[]; summaries: string[] }> {
   const list = engines
     .map((e, i) => `${e}：${rows.map((r) => r.cells[i].value && `${r.label}＝${r.cells[i].value}`).filter(Boolean).join('；') || '（沒有）'}`)
     .join('\n');
-  const prompt = `幾個 AI 介紹「${brand}」時的說法如下。請整理成 6～10 個描述這個品牌的關鍵詞（每個 8 字內，例如「私密保養」「台灣品牌」「價格親民」「藥妝通路」），意思相同的合併成一個，並標出是哪幾家 AI 講的。
+  const prompt = `幾個 AI 介紹「${brand}」時的說法如下。請整理成 8～14 個描述這個品牌的關鍵詞（五類都要有，某一類沒有任何 AI 提到才略過）（每個 8 字內，例如「私密保養」「台灣品牌」「價格親民」「藥妝通路」），意思相同的合併成一個，並標出是哪幾家 AI 講的，以及它屬於哪一類（field 只能填 ${PROFILE_FIELDS.map((f) => `${f.key}＝${f.label}`).join('、')}）。
+另外替每一家 AI 各寫一段 60 字內的摘要（summaries，key 是 AI 名稱）：這家 AI 把「${brand}」介紹成什麼、主打什麼、價格和通路怎麼說（沒提到就寫沒提到）。只根據下面的說法，不要加形容詞或建議。
 
 ${list}
 
-只回傳 JSON：{"keywords":[{"word":"私密保養","engines":["${engines.join('","')}"]}]}`;
+只回傳 JSON：{"summaries":{"${engines[0]}":"…"},"keywords":[{"word":"私密保養","engines":["${engines.join('","')}"],"field":"category"}]}`;
   try {
-    const parsed = parseJson<{ keywords?: { word?: unknown; engines?: unknown }[] }>(await askJson(prompt, apiKey, 600));
-    return (parsed?.keywords ?? [])
-      .filter((k): k is { word: string; engines: unknown[] } => typeof k.word === 'string' && Array.isArray(k.engines))
-      .map((k) => ({ word: k.word.trim(), engines: engines.filter((e) => k.engines.includes(e)) }))
+    const parsed = parseJson<{ summaries?: Record<string, unknown>; keywords?: { word?: unknown; engines?: unknown; field?: unknown }[] }>(await askJson(prompt, apiKey, 1200));
+    const keys: string[] = PROFILE_FIELDS.map((f) => f.key);
+    const summaries = engines.map((e) => {
+      const v = parsed?.summaries?.[e];
+      return typeof v === 'string' ? v.trim().slice(0, 120) : '';
+    });
+    const keywords = (parsed?.keywords ?? [])
+      .filter((k): k is { word: string; engines: unknown[]; field?: unknown } => typeof k.word === 'string' && Array.isArray(k.engines))
+      .map((k) => ({
+        word: k.word.trim(),
+        engines: engines.filter((e) => k.engines.includes(e)),
+        ...(typeof k.field === 'string' && keys.includes(k.field) ? { field: k.field as ProfileFieldKey } : {}),
+      }))
       .filter((k) => k.word && k.engines.length > 0)
       .sort((a, b) => b.engines.length - a.engines.length)
-      .slice(0, 10);
+      .slice(0, 14);
+    return { keywords, summaries };
   } catch {
-    return [];
+    return { keywords: [], summaries: [] };
   }
 }
 
@@ -232,11 +245,11 @@ export async function extractProfile(brand: string, answers: AnswerIn[], apiKey:
     cells: engines.map((engine, i) => ({ engine, value: per[i][f.key]?.value ?? '', quote: per[i][f.key]?.quote ?? '' })),
     conflict: '',
   }));
-  const [conflicts, keywords] = await Promise.all([
+  const [conflicts, { keywords, summaries }] = await Promise.all([
     findConflicts(brand, rows, apiKey),
     collectKeywords(brand, rows, engines, apiKey),
     checkAgainstSite(brand, rows, sitePages, apiKey).catch(() => {}),
   ]);
   for (const r of rows) r.conflict = conflicts[r.key] ?? '';
-  return { engines, rows, intros: answers.map((a) => firstSentence(a.answer)), keywords };
+  return { engines, rows, intros: answers.map((a) => firstSentence(a.answer)), keywords, ...(summaries.some(Boolean) ? { summaries } : {}) };
 }

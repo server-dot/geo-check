@@ -1,6 +1,7 @@
 "use client";
 
 import { BrandProfileView } from "@/components/report/BrandProfile";
+import { CrawlerTiles } from "@/components/report/CrawlerTiles";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { StepAuditIcon, StepInputIcon, StepReportIcon } from "@/components/marketing/StepIcons";
@@ -3208,40 +3209,32 @@ function ResponsesExplorer({
   );
 }
 
-// 「AI 認不認得你」的精簡版：先給結論跟回答前幾行，原文全文跟引用來源收進展開
+// 品牌輪廓下的「各平台回答原文」：11-13 小積木「直接放原文了不用收合」，全文直接攤開；引用來源清單長（常 10～20 筆）仍收合
 function CompactAnswerCard({ result }: { result: VisibilityCardData }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="flex flex-col rounded-[10px] border border-line bg-card p-5">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[14px] font-medium text-ink2">{shortEngine(result.engine)}</p>
-        {result.citedSelf ? (
-          <span className="text-[14px] font-semibold text-ok">✓ 有引用官網</span>
-        ) : (
-          <span className="text-[14px] font-semibold text-fail">✗ 未引用官網</span>
-        )}
-      </div>
-      <div className={`mt-3 text-[15px] leading-relaxed text-ink2 ${open ? "" : "line-clamp-4"}`}>
-        {renderAnswerMarkdown(result.answer, result.citations)}
-      </div>
-      {open && result.citations.length > 0 && (
+      <p className="text-[14px] font-medium text-ink2">{shortEngine(result.engine)}</p>
+      <div className="mt-3 text-[15px] leading-relaxed text-ink2">{renderAnswerMarkdown(result.answer, result.citations)}</div>
+      {result.citations.length > 0 && (
         <div className="mt-3 border-t border-line pt-3">
-          <p className="text-[14px] text-ink3">引用來源（{result.citations.length}）</p>
-          <ul className="mt-1.5 space-y-1">
-            {result.citations.map((c, i) => (
-              <li key={i} className="text-[14px]">
-                <a href={c.url} target="_blank" rel="noopener noreferrer" className={`report-table-link break-all ${c.isSelf ? "font-semibold" : ""}`}>
-                  {c.isSelf ? "★ " : ""}
-                  {c.title || c.url}
-                </a>
-              </li>
-            ))}
-          </ul>
+          <button type="button" onClick={() => setOpen((v) => !v)} className="text-[14px] text-ink3 hover:text-ink">
+            {open ? "▾" : "▸"} 引用來源（{result.citations.length}）
+          </button>
+          {open && (
+            <ul className="mt-1.5 space-y-1">
+              {result.citations.map((c, i) => (
+                <li key={i} className="text-[14px]">
+                  <a href={c.url} target="_blank" rel="noopener noreferrer" className={`report-table-link break-all ${c.isSelf ? "font-semibold" : ""}`}>
+                    {c.isSelf ? "★ " : ""}
+                    {c.title || c.url}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
-      <button type="button" onClick={() => setOpen((v) => !v)} className="mt-3 self-start text-[14px] text-ink3 hover:text-ink">
-        {open ? "▾ 收起" : `▸ 看完整回答${result.citations.length > 0 ? `與 ${result.citations.length} 個引用來源` : ""}`}
-      </button>
     </div>
   );
 }
@@ -4015,10 +4008,10 @@ export default function HomeClient({
                 ...(recommend || candidates ? [{ id: "questions", label: "推薦題表現" }] : []),
                 ...(recommend ? [{ id: "responses", label: "AI 回答紀錄" }] : []),
                 ...(diagnosis ? [{ id: "why", label: "未被推薦原因" }] : []),
-                ...(citedDomains.length > 0 ? [{ id: "citations", label: "引用來源" }] : []),
+                ...(citedDomains.length > 0 ? [{ id: "citations", label: "AI 參考網站" }] : []),
                 ...(engine.brandVisibility.length > 0 ? [{ id: "brand-check", label: "品牌輪廓" }] : []),
                 { id: "more", label: "關鍵字查詢" },
-                { id: "tech", label: "AI 爬蟲存取" },
+                { id: "tech", label: "AI 看得到你嗎" },
               ]}
               active={reportPage}
               onSelect={goPage}
@@ -4187,7 +4180,7 @@ export default function HomeClient({
 
             {recommend && brandTable ? (
               <div className="mt-12">
-                <DashSection id="citations" title="引用來源" desc="AI 回答引用的網頁類型，與各品牌官網的被引用次數">
+                <DashSection id="citations" title="AI 參考了哪些網站" desc="AI 回答時附的參考連結，來自哪些網站">
                   <CitedPagesSection pages={buildCitedPages(recommend, brandTable)} selfLabel={reportBrand} />
                 </DashSection>
               </div>
@@ -4206,7 +4199,7 @@ export default function HomeClient({
                 <DashSection id="brand-check" title="品牌輪廓" desc={`AI 平台介紹 ${reportBrand} 時的品牌認知：品類、主力產品／服務、品牌特色、價格帶、通路／管道`}>
                   {profile && (
                     <div className="mb-8">
-                      <BrandProfileView profile={profile} brandChecks={engine.brandVisibility} brandName={reportBrand || reportHost} />
+                      <BrandProfileView profile={profile} brandName={reportBrand || reportHost} />
                     </div>
                   )}
                   {profile && <p className="mb-3 text-[16px] font-semibold text-ink">各平台回答原文</p>}
@@ -4317,9 +4310,12 @@ export default function HomeClient({
             {/* GEO 健檢的「AI 爬蟲存取」頁：11-02 封存的技術檢測＋改善建議，11-04 加回來。
                 23 項深度健檢、結構化資料、總分報告圖搬到 SEO 健檢（兩條獨立的檢測）。 */}
             {reportKind === "geo" && (
-            <DashSection id="tech" title="AI 爬蟲存取" desc="各家 AI 爬蟲讀不讀得到你的網站、讀到什麼，以及哪裡可以改">
-            <div className="flex flex-col gap-6">
-            <div>
+            <DashSection id="tech" title="AI 看不看得到你的網站" desc="AI 進不進得來、讀不讀得懂你的網站">
+            {/* 11-13 小積木：「沒人看得懂…去技術話、用圖示圖表」。第一眼四張卡，其他全收進技術細節；
+                有 AI 被擋或判定不出來時，下面那段說明照樣攤開（假綠燈比不給答案傷害更大） */}
+            <CrawlerTiles bots={engine.results} visibility={engine.visibility} signals={engine.contentSignals} llms={engine.llmsTxt} />
+            <div className="mt-6 flex flex-col gap-6">
+            <div className={unknownCount === 0 && engine.results.every((r) => r.status !== "blocked") ? "hidden" : ""}>
             {/* 判定不出來時必須明講。給假綠燈比不給答案傷害更大 */}
             <div
               className={`rounded-[10px] border p-6 text-center ${
@@ -4387,9 +4383,13 @@ export default function HomeClient({
 
             </div>
 
+            <details className="rounded-xl border border-line bg-card px-6 py-4">
+            <summary className="cursor-pointer text-[15px] font-semibold text-ink2 hover:text-ink">技術細節（各家 AI 機器人、robots.txt、AI 讀到的原文、llms.txt）</summary>
+            <div className="mt-5 flex flex-col gap-6">
+            {engine.robotsStatus === "found" && <p className="mono text-[14px] text-ink3">robots.txt：{engine.robotsUrl}</p>}
             {engine.visibility && (
-              <div className="mt-6">
-                <h2 className="eyebrow mb-3">AI 眼中的你</h2>
+              <div>
+                <h2 className="eyebrow mb-3">AI 讀到的首頁</h2>
                 <div className={`rounded-[10px] border p-6 ${VISIBILITY[engine.visibility.status].className}`}>
                   <p className="text-lg font-bold text-ink">{VISIBILITY[engine.visibility.status].label}</p>
                   <p className="mt-2 text-[15px] font-medium leading-relaxed text-ink">{engine.visibility.summary}</p>
@@ -4470,6 +4470,8 @@ export default function HomeClient({
             {engine.contentSignals && <ContentSignalsSection signals={engine.contentSignals} />}
 
             {engine.llmsTxt.exists !== null && <LlmsTxtCard llmsTxt={engine.llmsTxt} />}
+            </div>
+            </details>
 
             </div>
             </DashSection>

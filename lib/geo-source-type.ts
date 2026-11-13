@@ -7,9 +7,9 @@ export type SourceType = 'self' | 'competitor' | 'shop' | 'media' | 'social' | '
 
 export const SOURCE_LABEL: Record<SourceType, string> = {
   self: '你的網站',
-  competitor: '對手官網',
-  shop: '電商通路',
-  media: '媒體評論',
+  competitor: '同業網站',
+  shop: '電商／平台', // 11-13 起接案平台（出任務、PRO360）也算這類：提到≠對手
+  media: '媒體文章',
   social: '社群論壇',
   other: '其他網站',
 };
@@ -21,6 +21,8 @@ const SHOP = [
   'etmall.com.tw', 'friday.tw', 'pcone.com.tw', 'carrefour.com.tw', 'costco.com.tw', 'pxmart.com.tw',
   'sogo.com.tw', 'shopline.tw', 'shopline.com', 'amazon.com', 'coupang.com', 'tw.coupang.com',
   'greatpharmacy.com.tw', 'urcosme.com',
+  // 接案／外包平台：上面的接案者頁面不是對手官網（11-13 出任務 Tasker 被算成 58 次對手官網）
+  'tasker.com.tw', 'pro360.com.tw', '518.com.tw', '1111.com.tw', '104.com.tw', 'yourator.co', 'fiverr.com', 'upwork.com',
 ];
 const MEDIA = [
   'cosme.net.tw', 'my-best.com', 'womenshealthmag.com', 'harpersbazaar.com', 'vogue.com.tw', 'elle.com',

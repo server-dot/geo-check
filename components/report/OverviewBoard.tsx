@@ -190,7 +190,7 @@ export function OverviewBoard({
           </Card>
           <Card title="品牌輪廓" sub={`AI 平台介紹 ${self.name} 時用到的描述與提到的平台數`} right={<GoLink onClick={() => onGo("brand-check")} />} className="col-span-6">
             {profile?.keywords?.length ? (
-              <KeywordCloud keywords={profile.keywords} total={profile.engines.length} size="sm" />
+              <KeywordCloud keywords={profile.keywords.slice(0, 10)} total={profile.engines.length} size="sm" />
             ) : (
             <div className="flex h-full flex-wrap content-center gap-3">
               {brandChecks.map((b) => (

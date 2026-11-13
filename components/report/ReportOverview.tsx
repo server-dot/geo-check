@@ -6,6 +6,7 @@
 // 看起來很準其實是雜訊——所以這裡的數字一律寫成「次數／總數」，不寫百分比。
 
 import type { ReactNode } from "react";
+import { Icon, StatTile } from "./StatTile";
 import { brandSlugs, classifySource, SOURCE_LABEL, type SourceType } from "@/lib/geo-source-type";
 
 interface AnswerLike {
@@ -741,7 +742,10 @@ export function buildCitedPages(rec: RecommendLike, table: BrandTable): CitedPag
   const self = selfTokens(rec.brandName);
   const selfSlugs = brandSlugs([table.rows.find((r) => r.isSelf)?.name ?? "", rec.brandName]);
   const rivalRows = table.rows.filter((r) => !r.isSelf);
-  const rivals = brandSlugs(rivalRows.map((r) => r.name)).filter((s) => !selfSlugs.includes(s));
+  // 平台／通路（出任務、蝦皮…）的網站不是對手官網：網域對到通路名就歸「電商／平台」，品牌記成通路名
+  const channelSlugs = brandSlugs(table.channels.map((c) => c.name)).filter((s) => !selfSlugs.includes(s));
+  const channelOf = (host: string) => table.channels.find((c) => brandSlugs([c.name]).some((x) => host.split(".")[0].includes(x)))?.name ?? "";
+  const rivals = brandSlugs(rivalRows.map((r) => r.name)).filter((s) => !selfSlugs.includes(s) && !channelSlugs.includes(s));
   const selfName = table.rows.find((r) => r.isSelf)?.name ?? rec.brandName;
   // 這個網站是哪個對手的：網域裡有對手英文名，或標題裡有對手的中文名（「賽吉兒」「婦潔」）
   const rivalOf = (host: string, title: string): string => {
@@ -773,7 +777,11 @@ export function buildCitedPages(rec: RecommendLike, table: BrandTable): CitedPag
           const title = (c.title || "").trim();
           let type = classifySource(host, isSelf, rivals);
           let brand = type === "self" ? selfName : "";
-          if (type === "competitor" || type === "other") {
+          const channel = type !== "self" ? channelOf(host) : "";
+          if (channel) {
+            type = "shop";
+            brand = channel;
+          } else if (type === "competitor" || type === "other") {
             const who = rivalOf(host, title);
             // 「其他」網站的標題寫著對手名字＋官方網站，才升格成對手官網；媒體電商不動
             if (who && (type === "competitor" || /官網|官方/.test(title))) {
@@ -811,109 +819,154 @@ const TYPE_ORDER: SourceType[] = ["self", "competitor", "shop", "media", "social
 const TYPE_COLOR: Record<SourceType, string> = {
   self: "var(--lime)",
   competitor: "#303c54",
-  shop: "#5f6a80",
-  media: "#8f99ab",
-  social: "#b9c0cc",
-  other: "#e3e6ec",
+  shop: "#8f99ab",
+  media: "#b9c0cc",
+  social: "#d3d8e0",
+  other: "#e9ebf0",
 };
 
-export function CitedPagesSection({ pages, selfLabel, max = 10 }: { pages: CitedPage[]; selfLabel: string; max?: number }) {
+const TYPE_ICON: Record<SourceType, ReactNode> = {
+  self: Icon.home,
+  competitor: Icon.people,
+  shop: Icon.store,
+  media: Icon.news,
+  social: Icon.chat,
+  other: Icon.globe,
+};
+
+// 圓環圖：各類網站佔 AI 參考連結的比例，中間寫總數
+function SourceDonut({ parts, total }: { parts: { t: SourceType; n: number }[]; total: number }) {
+  const r = 52;
+  const c = 2 * Math.PI * r;
+  const lens = parts.map((p) => (p.n / total) * c);
+  const offs = lens.map((_, i) => lens.slice(0, i).reduce((a, b) => a + b, 0));
+  return (
+    <svg viewBox="0 0 140 140" className="h-[180px] w-[180px] shrink-0" role="img" aria-label={`AI 一共附了 ${total} 個參考連結`}>
+      <circle cx="70" cy="70" r={r} fill="none" stroke="var(--inset)" strokeWidth="20" />
+      {parts.map((p, i) => (
+        <circle
+          key={p.t}
+          cx="70"
+          cy="70"
+          r={r}
+          fill="none"
+          stroke={TYPE_COLOR[p.t]}
+          strokeWidth="20"
+          strokeDasharray={`${lens[i]} ${c - lens[i]}`}
+          strokeDashoffset={-offs[i]}
+          transform="rotate(-90 70 70)"
+        >
+          <title>{`${SOURCE_LABEL[p.t]} ${p.n}`}</title>
+        </circle>
+      ))}
+      <text x="70" y="68" textAnchor="middle" className="fill-ink text-[26px] font-bold">
+        {total}
+      </text>
+      <text x="70" y="88" textAnchor="middle" className="fill-ink3 text-[11px]">
+        個參考連結
+      </text>
+    </svg>
+  );
+}
+
+// 「AI 參考了哪些網站」：11-13 小積木「版型很醜、字一堆，盡量用圖示圖表，方便行銷人員跟客戶說明」。
+// 上：圓環＋各類大數字卡；中：前 5 名網站長條圖；網址、被參考的頁面收進「看全部」
+export function CitedPagesSection({ pages, selfLabel, max = 5 }: { pages: CitedPage[]; selfLabel: string; max?: number }) {
   const total = pages.reduce((n, p) => n + p.count, 0);
   if (total === 0) return null;
-  const byType = TYPE_ORDER.map((t) => ({ t, n: pages.filter((p) => p.type === t).reduce((s, p) => s + p.count, 0) })).filter((x) => x.n > 0);
-  const top = [...byType].filter((x) => x.t !== "other").sort((a, b) => b.n - a.n)[0];
-  const selfN = byType.find((x) => x.t === "self")?.n ?? 0;
-  // 一個品牌一列：你自己＋對手官網。電商、媒體、社群只留在上面的分類長條
-  const groups = new Map<string, { brand: string; isSelf: boolean; host: string; count: number; top: CitedPage | null }>();
+  const byType = TYPE_ORDER.map((t) => ({ t, n: pages.filter((p) => p.type === t).reduce((s, p) => s + p.count, 0) }));
+  const shown = byType.filter((x) => x.n > 0);
+  const tiles = byType.filter((x) => x.t !== "other" && (x.n > 0 || x.t === "self"));
+  const otherN = byType.find((x) => x.t === "other")?.n ?? 0;
+
+  // 一個網站一列（同一個品牌／平台的多個頁面合併）
+  const groups = new Map<string, { name: string; type: SourceType; host: string; count: number; top: CitedPage | null }>();
   for (const p of pages) {
-    if (p.type !== "self" && p.type !== "competitor") continue;
     const key = p.type === "self" ? "__self" : p.brand || p.host;
-    const g = groups.get(key) ?? { brand: p.type === "self" ? p.brand : p.brand || p.host, isSelf: p.type === "self", host: p.host, count: 0, top: null };
+    const g = groups.get(key) ?? { name: p.type === "self" ? selfLabel : p.brand || p.host, type: p.type, host: p.host, count: 0, top: null };
     g.count += p.count;
     if (!g.top || p.count > g.top.count) g.top = p;
     groups.set(key, g);
   }
-  if (!groups.has("__self")) groups.set("__self", { brand: selfLabel, isSelf: true, host: "", count: 0, top: null });
-  const sites = [...groups.values()].sort((x, y) => y.count - x.count || Number(y.isSelf) - Number(x.isSelf)).slice(0, max);
-  const peak = Math.max(1, ...sites.map((x) => x.count));
+  if (!groups.has("__self")) groups.set("__self", { name: selfLabel, type: "self", host: "", count: 0, top: null });
+  const all = [...groups.values()].sort((x, y) => y.count - x.count || Number(y.type === "self") - Number(x.type === "self"));
+  const top = all.slice(0, max);
+  const selfRow = all.find((g) => g.type === "self")!;
+  if (!top.includes(selfRow)) top.push(selfRow);
+  const peak = Math.max(1, ...top.map((x) => x.count));
+  const rankOf = (g: (typeof all)[number]) => (g.count > 0 ? all.indexOf(g) + 1 : null);
 
   return (
-    <div className="space-y-3">
-      <div className="rounded-[10px] border border-line bg-card p-5">
-        <p className="text-[15px] text-ink">
-          AI 回答時一共引用了 <strong>{total}</strong> 次網頁
-          {top && (
-            <>
-              ，最多來自<strong>{SOURCE_LABEL[top.t]}</strong>（{top.n} 次）
-            </>
-          )}
-          {selfN > 0 ? (
-            <>，你的網站被引用 <strong>{selfN}</strong> 次。</>
-          ) : (
-            <>，<strong>沒有引用你的網站</strong>。</>
-          )}
-        </p>
-        <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-inset">
-          {byType.map((x) => (
-            <div key={x.t} style={{ width: `${(x.n / total) * 100}%`, background: TYPE_COLOR[x.t] }} title={`${SOURCE_LABEL[x.t]} ${x.n}`} />
+    <div className="space-y-5">
+      <div className="flex flex-col items-center gap-6 rounded-xl border border-line bg-card p-6 shadow-[0_1px_3px_rgba(48,60,84,.07)] md:flex-row">
+        <SourceDonut parts={shown} total={total} />
+        <div className={`grid w-full flex-1 gap-3 grid-cols-2 ${tiles.length >= 5 ? "lg:grid-cols-5" : tiles.length === 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+          {tiles.map((x) => (
+            <StatTile
+              key={x.t}
+              icon={TYPE_ICON[x.t]}
+              value={x.n}
+              label={SOURCE_LABEL[x.t]}
+              tone={x.t === "self" ? "self" : "plain"}
+              note={
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-block h-2.5 w-2.5 rounded-sm border border-ink/20" style={{ background: TYPE_COLOR[x.t] }} />
+                  佔 {Math.round((x.n / total) * 100)}%
+                </span>
+              }
+            />
           ))}
         </div>
-        <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-[14px]">
-          {byType.map((x) => (
-            <li key={x.t} className="flex items-center gap-1.5 text-ink2">
-              <span className="h-2.5 w-2.5 rounded-sm" style={{ background: TYPE_COLOR[x.t] }} />
-              {SOURCE_LABEL[x.t]}
-              <span className="mono text-[14px] text-ink3">{x.n}</span>
-            </li>
-          ))}
-        </ul>
       </div>
+      <p className="-mt-2 text-[15px] leading-relaxed text-ink2">
+        AI 回答你勾的問題時，會在答案裡附上參考連結，代表它是看了哪些網站才這樣回答。來自<strong className="text-ink">你的網站</strong>的連結越多，表示 AI 越把你當成資料來源；
+        <strong className="text-ink">電商／平台</strong>多，表示 AI 是去購物網站、接案平台上找答案。
+        {otherN > 0 && <span className="text-ink3">（另有 {otherN} 個連結來自其他網站）</span>}
+      </p>
 
-      <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
-        <p className="border-b border-line px-4 py-2.5 text-[14px] font-medium text-ink2">官網引用排名</p>
-        {sites.length === 0 ? (
-          <p className="px-4 py-4 text-[15px] text-ink3">這次 AI 沒有引用任何品牌的官網，引用的都是電商、媒體跟社群。</p>
-        ) : (
-          <table className="w-full min-w-[680px] text-[15px]">
-            <thead>
-              <tr className="border-b border-line bg-inset/60 text-left text-[14px] text-ink3">
-                <th className="w-10 px-4 py-2.5 text-right font-medium">#</th>
-                <th className="px-3 py-2.5 font-medium">品牌</th>
-                <th className="px-3 py-2.5 font-medium">被引用次數</th>
-                <th className="px-3 py-2.5 font-medium">最常被引用的頁面</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sites.map((x, i) => (
-                <tr key={x.brand} className={`border-b border-line last:border-0 ${x.isSelf ? "bg-lime/[.08]" : ""}`}>
-                  <td className="mono px-4 py-2.5 text-right align-top text-[14px] text-ink3">{x.count > 0 ? i + 1 : "—"}</td>
-                  <td className="px-3 py-2.5 align-top">
-                    <span className={x.isSelf ? "font-bold text-ink" : "text-ink"}>{x.brand}</span>
-                    {x.isSelf && <span className="ml-2 rounded-full bg-lime px-2 py-0.5 text-[14px] font-bold text-ink">你</span>}
-                    {x.host && <p className="mono mt-0.5 text-[14px] text-ink3">{x.host}</p>}
-                  </td>
-                  <td className="px-3 py-2.5 align-top">
-                    <div className="flex items-center gap-2.5">
-                      <div className="h-2 w-full max-w-[160px] overflow-hidden rounded-full bg-inset">
-                        <div className={`h-full rounded-full ${x.isSelf ? "bg-lime" : "bg-ink3/45"}`} style={{ width: `${(x.count / peak) * 100}%` }} />
-                      </div>
-                      <span className="mono shrink-0 text-[14px] text-ink2 tabular-nums">{x.count} 次</span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5 align-top text-[14px]">
-                    {x.top ? (
-                      <a href={x.top.url} target="_blank" rel="noopener noreferrer" className="report-table-link line-clamp-1">
-                        {x.top.title || x.top.url}
-                      </a>
-                    ) : (
-                      <span className="text-ink3">AI 沒有引用你的網站</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      <div className="rounded-xl border border-line bg-card p-6 shadow-[0_1px_3px_rgba(48,60,84,.07)]">
+        <p className="text-[16px] font-bold text-ink">最常被 AI 參考的網站</p>
+        <ul className="mt-4 space-y-3">
+          {top.map((g) => {
+            const isSelf = g.type === "self";
+            return (
+              <li key={g.name} className="grid grid-cols-[28px_minmax(0,200px)_1fr_48px] items-center gap-3">
+                <span className="text-center text-[15px] font-bold text-ink3 tabular-nums">{rankOf(g) ?? "—"}</span>
+                <span className="min-w-0">
+                  <span className={`block truncate text-[15px] ${isSelf ? "font-bold" : "font-medium"} text-ink`}>
+                    {g.name}
+                    {isSelf && <span className="ml-1.5 rounded-full bg-lime px-2 py-0.5 text-[13px] font-bold">你</span>}
+                  </span>
+                  {!isSelf && <span className="text-[13px] text-ink3">{SOURCE_LABEL[g.type]}</span>}
+                </span>
+                <div className="h-4 overflow-hidden rounded-full bg-inset">
+                  <div className="h-full rounded-full" style={{ width: `${(g.count / peak) * 100}%`, background: g.type === "other" || g.type === "social" ? "#aab2c0" : TYPE_COLOR[g.type] }} />
+                </div>
+                <span className="text-right text-[15px] font-bold text-ink tabular-nums">{g.count}</span>
+              </li>
+            );
+          })}
+        </ul>
+        {selfRow.count === 0 && <p className="mt-3 text-[15px] font-semibold text-fail">✗ 這次 AI 沒有參考你的網站</p>}
+
+        <details className="mt-5 border-t border-line pt-4">
+          <summary className="cursor-pointer text-[14px] text-ink3 hover:text-ink">看全部 {all.length} 個網站與 AI 參考的頁面</summary>
+          <ul className="mt-3 divide-y divide-line text-[14px]">
+            {all.map((g) => (
+              <li key={g.name} className="flex items-baseline gap-3 py-2">
+                <span className="w-8 shrink-0 text-right text-ink3 tabular-nums">{g.count}</span>
+                <span className="w-[180px] shrink-0 truncate font-medium text-ink">{g.name}</span>
+                {g.top ? (
+                  <a href={g.top.url} target="_blank" rel="noopener noreferrer" className="report-table-link min-w-0 truncate">
+                    {g.top.title || g.top.url}
+                  </a>
+                ) : (
+                  <span className="text-ink3">—</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
       </div>
     </div>
   );
