@@ -14,13 +14,15 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-const DIR = path.join(process.cwd(), '.data', 'replay');
+export const REPLAY_DIR = path.join(process.cwd(), '.data', 'replay');
+const DIR = REPLAY_DIR;
 const isDev = process.env.NODE_ENV === 'development';
 const replaying = isDev && process.env.GEO_REPLAY === '1';
 
-interface Tape {
+export interface Tape {
   url: string;
   family: string; // 對不到時找頂替用：主機＋路徑＋模型＋prompt 開頭
+  request?: string; // 送出去的內容（不含金鑰，金鑰在 header），給 /dev/replay 頁面看問了什麼
   status: number;
   body: string;
   savedAt: string;
@@ -101,7 +103,7 @@ export async function paidFetch(url: string, init: RequestInit = {}): Promise<Re
   if (res.ok) {
     try {
       mkdirSync(DIR, { recursive: true });
-      const tape: Tape = { url: cleanUrl(url), family, status: res.status, body: text, savedAt: new Date().toISOString() };
+      const tape: Tape = { url: cleanUrl(url), family, request: body, status: res.status, body: text, savedAt: new Date().toISOString() };
       writeFileSync(file, JSON.stringify(tape));
     } catch {}
   }

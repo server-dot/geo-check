@@ -28,10 +28,10 @@ function shortEngine(e: string): string {
   return e.split(/[（(]/)[0].trim();
 }
 
-// 前幾名：AI 點名推薦的都算（11-12 起不分對手／通路），同一個名字的不同寫法讓模型自己認
+// 前幾名對手：只算品牌（平台、通路不算），同一個名字的不同寫法讓模型自己認
 export function topRivals(names: RecommendedName[]): string[] {
   return names
-    .filter((n) => !n.isSelf)
+    .filter((n) => !n.isSelf && n.kind !== 'channel')
     .sort((a, b) => b.count - a.count)
     .slice(0, MAX_RIVALS)
     .map((n) => n.name);

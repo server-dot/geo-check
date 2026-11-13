@@ -138,8 +138,11 @@ export function firstSentence(answer: string): string {
     .replace(/[*_`#>]/g, '')
     .replace(/[「」]/g, '')
     .trim();
-  const m = plain.match(/^[\s\S]*?[。！？\n]/);
-  return (m ? m[0] : plain).replace(/\n/g, '').trim().slice(0, 90);
+  // 跳過開場白：「以下是我整理的台灣資料：」「好的，」這種結尾是冒號、或以「以下／根據／好的」開頭的短句，
+  // 不是 AI 對你的描述（11-12 原沐製材所 ChatGPT 卡只剩這一句）
+  const parts = plain.match(/[^。！？\n]+[。！？\n]?/g) ?? [plain];
+  const pick = parts.map((p) => p.replace(/\n/g, '').trim().replace(/^[-•]\s*/, '')).find((p) => p && !/[：:]$/.test(p) && !/^(以下|根據|好的|當然)/.test(p));
+  return (pick ?? plain.replace(/\n/g, ' ').trim()).slice(0, 90);
 }
 
 // 各家講到的特點合併成一組關鍵詞，標出幾家 AI 這樣講：三家都講的就是 AI 對你的共識

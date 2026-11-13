@@ -94,7 +94,9 @@ ${PRODUCT_NOT_CONTENT}
 }
 
 // 2. 論壇裡標題是問句、有提到需求詞、不像業配的貼文
-export async function forumPosts(keyword: string, key: string): Promise<Post[]> {
+// failed：Serper 呼叫失敗的次數（額度用完、逾時）。全部失敗時不能說成「論壇上沒人問」
+export async function forumPosts(keyword: string, key: string): Promise<{ posts: Post[]; failed: number; total: number }> {
+  let failed = 0;
   const lists = await Promise.all(
     Object.entries(FORUMS).map(async ([site, domain]) => {
       try {
@@ -106,11 +108,12 @@ export async function forumPosts(keyword: string, key: string): Promise<Post[]> 
           .filter((o) => site !== 'FB' || o.link.includes('/groups/'))
           .map((o) => ({ site, keyword, title: cleanTitle(o.title), link: o.link }));
       } catch {
+        failed += 1;
         return [];
       }
     }),
   );
-  return lists.flat();
+  return { posts: lists.flat(), failed, total: Object.keys(FORUMS).length };
 }
 
 // 3. 留下「在找推薦」的貼文，整理成問 AI 的句子（盡量保留網友原話）
@@ -142,22 +145,30 @@ ${list.map((p, i) => `[${i}] ${p.site}：${p.title}`).join('\n')}
   return out.slice(0, count);
 }
 
-export async function listForumQuestions(input: RecommendInput, apiKey: string, count = MAX_FORUM_QUESTIONS): Promise<{ question: string; source: RealQuestionSource }[]> {
+// 2026-11-12 原沐製材所：Serper 額度用完（餘額 -4），每次搜尋都失敗，畫面卻寫「論壇上找不到網友問過的問題」——
+// 查不了跟沒人問是兩回事，要分開（同 WAF 假綠燈那次的教訓）。status：ok＝有搜到結果（可能 0 則）、failed＝搜尋本身壞了
+export async function listForumQuestions(
+  input: RecommendInput,
+  apiKey: string,
+  count = MAX_FORUM_QUESTIONS,
+): Promise<{ questions: { question: string; source: RealQuestionSource }[]; status: 'ok' | 'failed' }> {
   const key = process.env.SERPER_API_KEY;
-  if (!key) return [];
+  if (!key) return { questions: [], status: 'failed' };
   try {
     const needs = await findNeeds(input, apiKey);
     if (process.env.DEBUG_REALQ) console.log('[realq] needs', needs);
-    if (needs.length === 0) return [];
-    const lists = await Promise.all(needs.map((k) => forumPosts(k, key)));
+    if (needs.length === 0) return { questions: [], status: 'ok' };
+    const results = await Promise.all(needs.map((k) => forumPosts(k, key)));
+    const failed = results.reduce((n, r) => n + r.failed, 0);
+    const total = results.reduce((n, r) => n + r.total, 0);
     const seen = new Set<string>();
-    const posts = lists.flat().filter((p) => (seen.has(p.link) ? false : (seen.add(p.link), true)));
-    if (process.env.DEBUG_REALQ) console.log('[realq] posts', posts.length, posts.slice(0, 8).map((p) => p.title));
-    if (posts.length === 0) return [];
-    return await pickQuestions(input, posts, count, apiKey);
+    const posts = results.flatMap((r) => r.posts).filter((p) => (seen.has(p.link) ? false : (seen.add(p.link), true)));
+    if (process.env.DEBUG_REALQ) console.log('[realq] posts', posts.length, 'failed', failed, '/', total);
+    if (posts.length === 0) return { questions: [], status: total > 0 && failed === total ? 'failed' : 'ok' };
+    return { questions: await pickQuestions(input, posts, count, apiKey), status: 'ok' };
   } catch (e) {
     if (process.env.DEBUG_REALQ) console.log('[realq] error', e);
-    return [];
+    return { questions: [], status: 'failed' };
   }
 }
 
@@ -165,11 +176,12 @@ export async function listForumQuestions(input: RecommendInput, apiKey: string, 
 // 網友一題都沒找到時 AI 只看首頁。AI 那步失敗就回 null（報告不顯示推薦題這塊）
 export async function buildRecommendCandidates(input: RecommendInput, apiKey: string): Promise<RecommendCandidates | null> {
   // 短關鍵字只看首頁，跟找網友問題同時跑
-  const [forum, keywords] = await Promise.all([
+  const [forumResult, keywords] = await Promise.all([
     listForumQuestions(input, apiKey),
     generateKeywordQuestions(input, apiKey).catch(() => [] as string[]),
   ]);
+  const forum = forumResult.questions;
   const ai = await generateRecommendQuestions(input, apiKey, undefined, forum.map((f) => f.source.title)).catch(() => [] as string[]);
   if (ai.length === 0 && keywords.length === 0) return null;
-  return { forum, ai, keywords, input };
+  return { forum, ...(forumResult.status === 'failed' ? { forumFailed: true } : {}), ai, keywords, input };
 }

@@ -50,6 +50,7 @@ export interface PickedQuestion {
 // 健檢時先準備好的候選題：網友在論壇問過的（全部列出，只給人看、不能勾）＋ AI 參考網友問題與首頁產生的（給人勾）
 export interface RecommendCandidates {
   forum: { question: string; source: RealQuestionSource }[];
+  forumFailed?: boolean; // 論壇搜尋本身失敗（Serper 額度用完、逾時），不是沒人問
   ai: string[];
   // 短關鍵字：從首頁商品／服務分類抓「品項＋推薦」，一般人打進搜尋框的那種。11-11 前的紀錄沒有這欄
   keywords?: string[];
@@ -371,14 +372,14 @@ function buildNamePrompt(answers: { engine: string; question: string; answer: st
 ${about ? `\n${brandName} 的官網這樣介紹自己（用來判斷誰跟它是同一類）：\n${about}\n` : ''}
 兩種類型：
 - "brand"：跟「${brandName}」賣同一類東西、提供同一類服務，客人會「選它而不選 ${brandName}」的對手。可能是品牌、商品的牌子、公司、工作室、診所、顧問、講師、課程、YouTube 頻道——但前提是它跟 ${brandName} 做的是同一件事。
-- "channel"：不是對手的其他對象。例如：電商平台（蝦皮、momo、PChome）、連鎖通路或藥妝店（屈臣氏、康是美、寶雅）、百貨、評論或比價網站（@cosme、mybest）、媒體、論壇、社群平台、接案平台，以及被當成「可以去問」的醫師、專家、網紅（除非 ${brandName} 自己就是做這一行）。
+- "channel"：不是對手的其他對象。賣的東西型態不同也算 channel：${brandName} 是接案／客製服務、顧問、工作室時，賣現成軟體或系統的公司（ERP、客服系統、電商開店平台、SaaS）是客人可能另外買的工具，不是對手；反過來 ${brandName} 是賣現成軟體的，接案工作室也不是它的對手。例如：電商平台（蝦皮、momo、PChome）、連鎖通路或藥妝店（屈臣氏、康是美、寶雅）、百貨、評論或比價網站（@cosme、mybest）、媒體、論壇、社群平台、接案平台，以及被當成「可以去問」的醫師、專家、網紅（除非 ${brandName} 自己就是做這一行）。
 
 規則：
 - 絕對不要抽：軟體／工具／技術名稱（n8n、OpenAI、Claude、Zapier 這類）、成分或原料名、泛稱（「線上課程平台」「藥妝店」「官方文件」）、文章標題。
 - 抽的是「誰」，不是「哪篇文章」：回答寫「TheAI學院的 n8n 完整教學」就抽「TheAI學院」；寫「【n8n 中文教學】從零打造…」這種標題，要抽發這篇的網站或作者，抽不出來就跳過。
 - 同一個對象的不同寫法（「屈臣氏 Watsons」「屈臣氏台灣（Watsons）Blog」）只算一個，用最短、最常見的那個名字。
 - 名字照回答裡的寫法，不要翻譯；同一回答重複出現只列一次。
-- 分不清時，看客人會不會「選它而不選 ${brandName}」：會就是 brand，不會就是 channel。
+- 分不清時，看客人會不會「選它而不選 ${brandName}」：會就是 brand，不會就是 channel。要找人幫忙客製的客人，不會拿現成軟體跟接案者二選一。
 - 沒有具體點名就給空陣列。
 
 ${blocks}

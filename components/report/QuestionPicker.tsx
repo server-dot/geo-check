@@ -11,6 +11,7 @@ import { track } from "@/lib/ga";
 
 export interface QuestionCandidates {
   forum: { question: string; source: { site: string; title: string; link: string } }[];
+  forumFailed?: boolean;
   ai: string[];
   keywords?: string[]; // 短關鍵字「品項＋推薦」；11-11 前的紀錄沒有
   input?: { brandName: string };
@@ -116,7 +117,9 @@ export function QuestionPicker<R>({
           ))}
         </ul>
       ) : (
-        <p className="mt-1 text-[15px] text-ink3">論壇上找不到網友問過的相關問題。</p>
+        <p className="mt-1 text-[15px] text-ink3">
+          {candidates?.forumFailed ? "這次論壇搜尋失敗，沒查到網友問過的問題（不代表沒人問）。" : "論壇上找不到網友問過的相關問題。"}
+        </p>
       )}
 
       <h3 className="mt-6 text-[16px] font-semibold text-ink">

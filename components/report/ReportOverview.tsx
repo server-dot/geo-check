@@ -99,6 +99,8 @@ export interface BrandTable {
   total: number;
   flat: { qi: number; engine: string; namedSelf: boolean }[];
   selfRank: number | null; // 沒被點名就是 null
+  // 通路（電商、藥妝連鎖、評論網站、媒體、接案平台）：AI 叫客人去哪裡買／找，不是對手，不進排名
+  channels: { name: string; count: number }[];
 }
 
 export function buildBrandTable(rec: RecommendLike): BrandTable {
@@ -135,10 +137,10 @@ export function buildBrandTable(rec: RecommendLike): BrandTable {
   const merged = mergeSpellings(rec.names);
 
   const others: BrandRow[] = merged
-    // 11-12 小積木：不分「對手／通路」，題目問對了，AI 點名推薦的就全部列出來（Tasker、蝦皮也照列）。
+    // 11-12 試過不分對手／通路全部列，同一天小積木又說「提到誰不等於是對手，出任務不是對手」，改回來。
     // 不能直接用 n.isSelf 濾：抽名字時「那一行引用了你的網址」也會被標成 isSelf，
     // 結果 AI 在同一行推的施巴、豐傑生醫都被當成你，從表裡消失。這裡只認名字對得上的。
-    .filter((n) => !isSelfName(n.name))
+    .filter((n) => !isSelfName(n.name) && n.kind !== "channel")
     .map((n) => ({
       name: n.name,
       isSelf: false,
@@ -153,7 +155,12 @@ export function buildBrandTable(rec: RecommendLike): BrandTable {
   const rows = at === -1 ? [...others, self] : [...others.slice(0, at), self, ...others.slice(at)];
   const selfRank = self.count > 0 ? others.filter((o) => o.count > self.count).length + 1 : null;
 
-  return { rows, engines, engineTotals, total: flat.length, flat, selfRank };
+  const channels = merged
+    .filter((n) => n.kind === "channel" && !isSelfName(n.name))
+    .map((n) => ({ name: n.name, count: n.answers ? n.answers.length : n.count }))
+    .sort((a, b) => b.count - a.count);
+
+  return { rows, engines, engineTotals, total: flat.length, flat, selfRank, channels };
 }
 
 // ── 共用模板 ───────────────────────────────────────────────
@@ -682,6 +689,26 @@ export function CitationTable({ domains, max = 10 }: { domains: DomainLike[]; ma
       {domains.length <= rows.length && selfIdx === -1 && (
         <p className="border-t border-line px-4 py-2.5 text-[14px] text-ink3">你的網站不在 AI 引用的名單裡。</p>
       )}
+    </div>
+  );
+}
+
+// 非對手一行帶過：通路、媒體、被建議去問的專家，不算進排名，但列出來有參考價值
+export function ChannelList({ table }: { table: BrandTable }) {
+  if (table.channels.length === 0) return null;
+  return (
+    <div className="rounded-[10px] border border-line bg-card px-4 py-3 text-[14px]">
+      <span className="font-medium text-ink2">其他提及對象</span>
+      <span className="ml-2 text-[14px] text-ink3">（平台、通路、媒體、專家，不算對手）</span>
+      <p className="mt-1.5 leading-relaxed text-ink2">
+        {table.channels.map((c, i) => (
+          <span key={c.name}>
+            {i > 0 && "、"}
+            {c.name}
+            <span className="mono ml-0.5 text-[14px] text-ink3">×{c.count}</span>
+          </span>
+        ))}
+      </p>
     </div>
   );
 }

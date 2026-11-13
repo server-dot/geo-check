@@ -68,7 +68,7 @@ export function buildDiagnosis(brand: { citedSelf: boolean }[], rec: DiagnosisIn
     const end = offset + q.results.length;
     offset = end;
     const rivals = rec.names
-      .filter((n) => !n.isSelf)
+      .filter((n) => !n.isSelf && n.kind !== 'channel')
       .map((n) => ({ name: n.name, hits: (n.answers ?? []).filter((i) => i >= start && i < end).length }))
       .filter((n) => n.hits > 0)
       .sort((a, b) => b.hits - a.hits)

@@ -36,7 +36,7 @@ interface MeResponse {
 import { CompetitorCompare } from "@/components/report/CompetitorCompare";
 import { OverviewBoard } from "@/components/report/OverviewBoard";
 import { MAX_PICK, QuestionPicker, type QuestionCandidates } from "@/components/report/QuestionPicker";
-import { type BrandTable, BrandRankTable, buildBrandTable, buildCitedPages, CitationTable, CitedPagesSection, DashSection, OverviewKpis, QuestionTable, ReportNav, SentimentSection, ShareDonut, shortEngine } from "@/components/report/ReportOverview";
+import { type BrandTable, BrandRankTable, buildBrandTable, buildCitedPages, ChannelList, CitationTable, CitedPagesSection, DashSection, OverviewKpis, QuestionTable, ReportNav, SentimentSection, ShareDonut, shortEngine } from "@/components/report/ReportOverview";
 
 // 首頁 hero 下面的三格數字帶，掛載時跑一次 1100ms 的 ease-out-cubic count-up
 // （跟設計稿 dc-runtime 的 componentDidMount 那段動畫邏輯一致）。
@@ -4093,6 +4093,7 @@ export default function HomeClient({
                   <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-5">
                     <div className="min-w-0 space-y-3">
                       <BrandRankTable table={brandTable} />
+                      <ChannelList table={brandTable} />
                     </div>
                     <ShareDonut table={brandTable} />
                   </div>
