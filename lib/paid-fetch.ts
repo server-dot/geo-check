@@ -100,7 +100,8 @@ export async function paidFetch(url: string, init: RequestInit = {}): Promise<Re
 
   const res = await fetch(url, init);
   const text = await res.text();
-  if (res.ok) {
+  // 空白回應不錄（Bright Data 偶爾回 200 空白），不然重播時永遠拿到空的
+  if (res.ok && text.trim()) {
     try {
       mkdirSync(DIR, { recursive: true });
       const tape: Tape = { url: cleanUrl(url), family, request: body, status: res.status, body: text, savedAt: new Date().toISOString() };

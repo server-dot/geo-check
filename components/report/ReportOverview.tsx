@@ -627,6 +627,12 @@ export function QuestionTable({
           );
         })}
       </table>
+      {table.engines.includes("Google AI 摘要") && (
+        // 11-17 代查改用 Bright Data 台灣住家 IP 後跟實測接近，但同一句查 3 次仍有 1 次品牌不同（每次現場生成）
+        <p className="border-t border-line px-4 py-2.5 text-[13px] text-ink3">
+          Google AI 摘要每次搜尋都會重新生成，同一句在台灣搜兩次，列出的品牌也可能不一樣，只能當參考。
+        </p>
+      )}
     </div>
   );
 }
@@ -779,7 +785,8 @@ export function buildCitedPages(rec: RecommendLike, table: BrandTable): CitedPag
           let brand = type === "self" ? selfName : "";
           const channel = type !== "self" ? channelOf(host) : "";
           if (channel) {
-            type = "shop";
+            // 「其他提及對象」也收媒體（Women's Health）：網域規則已判成媒體／社群的只借名字，不改成電商
+            if (type !== "media" && type !== "social") type = "shop";
             brand = channel;
           } else if (type === "competitor" || type === "other") {
             const who = rivalOf(host, title);
@@ -986,7 +993,6 @@ interface SentimentThemeLike {
 export function SentimentSection({ themes, answerCount, reviewQuery }: { themes: SentimentThemeLike[]; answerCount: number; reviewQuery?: string }) {
   const pos = themes.filter((t) => t.polarity === "positive").length;
   const neg = themes.length - pos;
-  const maxCount = Math.max(1, ...themes.map((t) => t.count));
   return (
     <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
       <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-line px-4 py-3">
@@ -1004,12 +1010,11 @@ export function SentimentSection({ themes, answerCount, reviewQuery }: { themes:
       {themes.length === 0 ? (
         <p className="px-4 py-4 text-[15px] text-ink3">這次 AI 提到你時只講事實（官網、產品），沒有評價。</p>
       ) : (
-        <table className="w-full min-w-[620px] text-[15px]">
+        <table className="w-full min-w-[520px] text-[15px]">
           <thead>
             <tr className="border-b border-line bg-inset/60 text-left text-[14px] text-ink3">
               <th className="px-4 py-2.5 font-medium">評價主題</th>
               <th className="w-[90px] px-3 py-2.5 font-medium">類別</th>
-              <th className="w-[180px] px-3 py-2.5 font-medium">出現次數</th>
               <th className="w-[200px] px-3 py-2.5 font-medium">平台</th>
             </tr>
           </thead>
@@ -1026,14 +1031,6 @@ export function SentimentSection({ themes, answerCount, reviewQuery }: { themes:
                 </td>
                 <td className="px-3 py-2.5 text-[14px]">
                   {t.polarity === "positive" ? <span className="font-semibold text-ok">✓ 正面</span> : <span className="font-semibold text-fail">✗ 負面</span>}
-                </td>
-                <td className="px-3 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-2.5 w-[120px] overflow-hidden rounded-full bg-inset">
-                      <div className={t.polarity === "positive" ? "bg-ok" : "bg-fail"} style={{ width: `${(t.count / maxCount) * 100}%` }} />
-                    </div>
-                    <span className="mono text-[14px] text-ink2 tabular-nums">{t.count}/{answerCount}</span>
-                  </div>
                 </td>
                 <td className="px-3 py-2.5 text-[14px] text-ink2">{t.engines.join("、")}</td>
               </tr>

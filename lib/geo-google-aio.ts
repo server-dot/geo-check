@@ -2,7 +2,11 @@ import { hostnameOf, isSameSite, type VisibilityAnswer } from './geo-brand-visib
 import { paidFetch } from './paid-fetch';
 
 // ── Google AI 摘要（AI Overview）────────────────────────────
-// Google 沒有官方 API，透過 SerpApi 查台灣 Google（google.com.tw、繁中）。
+// Google 沒有官方 API，代查台灣 Google（google.com.tw、繁中）。
+//
+// 11-17 起優先用 Bright Data（台灣住家 IP）：SerpApi 從海外機房查，同一句「推薦好用的私密處清潔與保養品」
+// 查 3 次都沒有 Relove，小積木自己在台灣搜卻是第一名；Bright Data 查 3 次有 2 次 Relove 第一，跟實測一致。
+// 沒設 BRIGHTDATA_API_KEY 或兩次都失敗才退回 SerpApi。
 //
 // 坑（2026-11-02 實測）：AI 摘要有兩種——Google 已經快取的會直接出現在搜尋結果裡；
 // 冷門的中文問題是打開頁面後才「思考中」即時生成，第一次回應只會給一個 page_token，
@@ -72,10 +76,107 @@ function blocksToText(blocks: Block[], depth = 0): string {
   return lines.filter(Boolean).join('\n\n');
 }
 
+// ── Bright Data ──
+interface BdBlock {
+  type?: string;
+  title?: string;
+  snippet?: string;
+  list?: BdBlock[];
+  links?: { text?: string; link?: string }[];
+}
+export interface BdAio {
+  texts?: BdBlock[];
+  references?: { href?: string; title?: string }[];
+}
+
+// 每段結尾會黏著來源標籤（「…不緊繃。 www.foreverrelove.com.tw +1」「…使用。 屈臣氏網路商店 +2」），拿掉
+function stripSourceTag(s: string): string {
+  return s.replace(/(?<=[。！？）)」：:])\s+(?:[^\s。！？]+\.[a-z]{2,}(?:\s\+\d+)?|[^。！？：]{1,24}?\s\+\d+)$/i, '').trim();
+}
+
+function bdToText(blocks: BdBlock[], depth = 0): string {
+  const lines: string[] = [];
+  for (const b of blocks) {
+    if (b.type === 'list' && b.list) {
+      if (b.title) lines.push(`**${b.title}**`);
+      for (const item of b.list) {
+        if (item.type === 'list' && item.list) {
+          lines.push(bdToText([item], depth + 1));
+          continue;
+        }
+        const snip = stripSourceTag(item.snippet ?? '');
+        const head = item.title && !snip.startsWith(item.title) ? `${item.title}：` : '';
+        if (snip || head) lines.push(`${'  '.repeat(depth)}- ${head}${snip}`.trimEnd());
+      }
+    } else if (b.type === 'heading' && b.snippet) lines.push(`**${b.snippet}**`);
+    else if (b.snippet) lines.push(stripSourceTag(b.snippet));
+  }
+  return lines.filter(Boolean).join('\n\n');
+}
+
+function bdLinks(blocks: BdBlock[], out: { url: string; title: string }[] = []): { url: string; title: string }[] {
+  for (const b of blocks) {
+    for (const l of b.links ?? []) if (l.link) out.push({ url: l.link, title: l.text ?? '' });
+    if (b.list) bdLinks(b.list, out);
+  }
+  return out;
+}
+
+// 回傳：undefined＝這次失敗（要重試或退回 SerpApi）；null＝Google 這題沒給 AI 摘要；其他＝摘要
+async function brightData(question: string, key: string, zone: string): Promise<BdAio | null | undefined> {
+  const url = `https://www.google.com.tw/search?q=${encodeURIComponent(question)}&hl=zh-TW&gl=tw&brd_ai_overview=2&brd_json=1`;
+  try {
+    const res = await paidFetch('https://api.brightdata.com/request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ zone, url, country: 'tw', format: 'raw' }),
+      signal: AbortSignal.timeout(90_000), // 實測一次約 40 秒（要開瀏覽器等 AI 摘要生成）
+    });
+    if (!res.ok) return undefined;
+    const text = await res.text();
+    if (!text.trim()) return undefined; // 偶爾回 200 但內容空白（11-17 實測 4 次有 1 次）
+    const j = JSON.parse(text) as { ai_overview?: BdAio; organic?: unknown };
+    if (j.ai_overview?.texts?.length) return j.ai_overview;
+    return j.organic ? null : undefined; // 有搜尋結果但沒摘要＝真的沒有；連搜尋結果都沒有＝這次壞掉
+  } catch {
+    return undefined;
+  }
+}
+
+export function bdToAnswer(aio: BdAio, question: string, origin: string): VisibilityAnswer | null {
+  const answer = bdToText(aio.texts ?? []);
+  if (!answer) return null;
+  const domain = hostnameOf(origin);
+  const seen = new Set<string>();
+  const citations = [
+    ...(aio.references ?? []).filter((r) => r.href).map((r) => ({ url: r.href!, title: r.title ?? '' })),
+    ...bdLinks(aio.texts ?? []),
+  ]
+    .filter((c) => (seen.has(c.url) ? false : (seen.add(c.url), true)))
+    .map((c) => ({ ...c, isSelf: isSameSite(hostnameOf(c.url), domain) }));
+  return { engine: ENGINE_LABEL, query: question, answer, citedSelf: citations.some((c) => c.isSelf), citations };
+}
+
+async function fetchViaBrightData(question: string, origin: string): Promise<GoogleAioResult | undefined> {
+  const key = process.env.BRIGHTDATA_API_KEY;
+  if (!key) return undefined;
+  const zone = process.env.BRIGHTDATA_SERP_ZONE || 'serp_api1';
+  for (let i = 0; i < 2; i++) {
+    const aio = await brightData(question, key, zone);
+    if (aio === undefined) continue;
+    if (aio === null) return { status: 'absent' };
+    const answer = bdToAnswer(aio, question, origin);
+    if (answer) return { status: 'present', answer };
+  }
+  return undefined;
+}
+
 export type GoogleAioResult = { status: 'present'; answer: VisibilityAnswer } | { status: 'absent' } | null;
 
 // null＝查不了（沒 key、額度用完、逾時）；absent＝Google 這題真的沒給 AI 摘要
 export async function fetchGoogleAio(question: string, origin: string): Promise<GoogleAioResult> {
+  const bd = await fetchViaBrightData(question, origin);
+  if (bd !== undefined) return bd;
   const key = process.env.SERPAPI_KEY;
   if (!key) return null;
   const first = await serp(
