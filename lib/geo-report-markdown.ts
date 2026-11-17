@@ -53,25 +53,29 @@ export function buildReportMarkdown(job: AuditJob): string {
   }
 
   // ── 總分 ──
-  const categories = buildCategories5(engine, audit);
-  const overall = computeOverallScore(categories);
-  const counts = { ok: 0, warn: 0, fail: 0 };
-  for (const c of categories) {
-    counts.ok += c.ok;
-    counts.warn += c.warn;
-    counts.fail += c.fail;
-  }
+  // 11-04 GEO／SEO 拆開後，內容、結構化、技術、品牌四類只在 SEO 健檢跑；GEO 報告畫面不出總分，
+  // 這裡照算會變成 (100＋0＋0＋0＋0)÷5＝20 分 F 級（11-17 aiqkangber），所以只有 SEO 報告才輸出。
+  if (job.kind === 'seo') {
+    const categories = buildCategories5(engine, audit);
+    const overall = computeOverallScore(categories);
+    const counts = { ok: 0, warn: 0, fail: 0 };
+    for (const c of categories) {
+      counts.ok += c.ok;
+      counts.warn += c.warn;
+      counts.fail += c.fail;
+    }
 
-  out.push('## 總分');
-  out.push('');
-  out.push(`- 總分：${overall.score} / 100（${overall.grade} 級・${overall.gradeLabel}）`);
-  out.push(`- 項目統計：正常 ${counts.ok} 項、可優化 ${counts.warn} 項、需處理 ${counts.fail} 項`);
-  out.push(`- 算法：五個分類各自的通過率平均（${categories.map((c) => c.passRate).join('＋')}）÷ ${categories.length}`);
-  out.push('');
-  out.push('| 分類 | 通過率 | 正常 | 可優化 | 需處理 |');
-  out.push('| --- | --- | --- | --- | --- |');
-  for (const c of categories) out.push(`| ${c.name} | ${c.passRate} | ${c.ok} | ${c.warn} | ${c.fail} |`);
-  out.push('');
+    out.push('## 總分');
+    out.push('');
+    out.push(`- 總分：${overall.score} / 100（${overall.grade} 級・${overall.gradeLabel}）`);
+    out.push(`- 項目統計：正常 ${counts.ok} 項、可優化 ${counts.warn} 項、需處理 ${counts.fail} 項`);
+    out.push(`- 算法：五個分類各自的通過率平均（${categories.map((c) => c.passRate).join('＋')}）÷ ${categories.length}`);
+    out.push('');
+    out.push('| 分類 | 通過率 | 正常 | 可優化 | 需處理 |');
+    out.push('| --- | --- | --- | --- | --- |');
+    for (const c of categories) out.push(`| ${c.name} | ${c.passRate} | ${c.ok} | ${c.warn} | ${c.fail} |`);
+    out.push('');
+  }
 
   // ── AI 爬蟲存取（實測，不是只讀 robots.txt）──
   out.push('## AI 爬蟲存取權限');
