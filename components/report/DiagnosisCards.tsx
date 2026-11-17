@@ -9,7 +9,7 @@
 
 import type { ReactNode } from "react";
 import { type Diagnosis } from "@/lib/geo-diagnosis";
-import { type BrandTable, type RecommendLike } from "./ReportOverview";
+import { shortEngine, type BrandTable, type RecommendLike } from "./ReportOverview";
 
 type Answer = { engine: string; answer?: string };
 
@@ -35,9 +35,10 @@ const POINTS: [RegExp, string, string][] = [
   [/孕|產後|敏感肌/, "適合誰用", "寫出適合哪些人用，例如孕期、產後、敏感肌"],
   [/適合|族群|中小企業|新創|品牌型|規模/, "適合誰", "寫出最適合哪些人、在什麼情況下選你"],
   [/媒體|排行|No\.?\s?1|第一|得獎|評比/i, "媒體報導或得獎", "有被報導、得獎或上排行榜的，列出名稱、年份並附原文連結"],
-  [/醫師|婦產科|醫療|藥局/, "醫師或醫療通路背書", "有醫師推薦、或在藥局／婦產科販售的，寫出是誰、在哪裡"],
+  [/醫師|婦產科|藥局|醫療通路/, "醫師或醫療通路背書", "有醫師推薦、或在藥局／婦產科販售的，寫出是誰、在哪裡"],
   [/口碑|評價|好評|熱銷|銷售/, "使用者評價", "放上使用者評價，或銷量、回購率這類數字"],
   [/價格|平價|預算|CP|報價|費用|收費|月費|方案/i, "價格", "寫出價格或收費方式（起價、方案、怎麼計費）"],
+  // （「醫療」不算：11-17 AI 寫大同世界科技適合「政府、製造、醫療」產業，被當成醫師背書）
   // 11-17 小積木：「能初步講建議嗎 relove 那篇寫超好」——上面幾類全是保養品用語，接案、顧問、軟體業抓不到，建議只剩空話
   [/串接|整合|API|Zendesk|Omnichat|Shopify|ERP|CRM|LINE|多平台|多渠道/i, "能串接哪些系統", "列出你能串接的系統和平台（例如 LINE、Shopify、ERP），一個一行"],
   [/案例|服務過|數百家|上百家|實績|導入經驗|公開案例/, "做過的案例", "放 2～3 個實際案例：客戶是哪一行、做了什麼、結果的數字"],
@@ -179,6 +180,9 @@ export function DiagnosisCards({ d, rec }: { d: Diagnosis; rec: RecommendLike; t
       const hasPage = !!m?.pageUrl && r.reason.kind !== "no-page";
       const missing = m?.missing ?? [];
 
+      // 有幾家推了你：卡片只列「不是每家都推你」的題目，有家推過就先講（11-17 aiqkangber 第 1 題 Google 推了你，卡片卻只寫沒讀到）
+      const namedBy = [...new Set(results.filter((x) => x.namedSelf).map((x) => shortEngine(x.engine)))];
+      const namedNote = namedBy.length ? `${namedBy.join("、")} 有推你` : "";
       // 為什麼沒推你：一句話
       let why: ReactNode;
       if (r.reason.kind === "chose-others" && hasPage) {
@@ -225,18 +229,19 @@ export function DiagnosisCards({ d, rec }: { d: Diagnosis; rec: RecommendLike; t
       } else if (r.reason.advice) {
         todos = [r.reason.advice];
       }
-      return { r, why, todoLead, todos, rival, quote };
+      return { r, why, namedNote, todoLead, todos, rival, quote };
     });
   const allNamed = d.rows.length - items.length;
 
   return (
     <div className="space-y-4">
-      {items.map(({ r, why, todoLead, todos, rival, quote }, i) => (
+      {items.map(({ r, why, namedNote, todoLead, todos, rival, quote }, i) => (
         <section key={r.question} className="rounded-xl border border-line bg-card p-5">
           <p className="text-[13px] text-ink3">題目 {i + 1}</p>
           <h3 className="mt-0.5 text-[17px] font-bold leading-snug text-ink">{r.question}</h3>
 
-          <p className="mt-4 text-[13px] font-semibold text-ink3">為什麼沒推你</p>
+          {namedNote && <p className="mt-3 text-[15px] font-semibold text-ok">✓ {namedNote}</p>}
+          <p className="mt-4 text-[13px] font-semibold text-ink3">{namedNote ? "其他家為什麼沒推你" : "為什麼沒推你"}</p>
           <p className="mt-1 text-[16px] leading-relaxed text-ink">{why}</p>
 
           {rival && !quote && <p className="mt-3 text-[14px] text-ink3">AI 推 {rival} 時只列了名字，沒寫為什麼推它。</p>}
