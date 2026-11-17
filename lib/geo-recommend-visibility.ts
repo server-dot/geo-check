@@ -418,7 +418,10 @@ export async function extractRecommendedNames(
   // 2026-11-10 每題加了第二種問法後一次是 15 份回答，整包丟給模型會把所有名字塞進 index 0
   // （Relove：40 個名字全部 count 1、answers [0]，排名變成照字母排，大牌跟小牌一樣 1 次）。
   // 改成每 5 份一批平行抽，index 再加回批次起點；某一批失敗只少那幾份，不會整份名單變空。
-  const BATCH = 5;
+  // 11-17 aiqkangber：5 份一批時模型把編號對錯——Google 第 3 題的品牌（橙設、戰國策、PeakQi）被記到前一份 ChatGPT，
+  // Google 那欄變成「—」，ChatGPT 那欄顯示的其實是 Google 的名單；長回答裡的表格、分隔線讓模型數錯塊。
+  // 改成一份回答一次（平行），不用靠模型回對編號；多出來的成本是每份多送一次指示文字，gpt-4.1-mini 一次健檢多不到 US$0.01。
+  const BATCH = 1;
   const batches: number[] = [];
   for (let s = 0; s < answers.length; s += BATCH) batches.push(s);
   const rows = (
@@ -428,10 +431,8 @@ export async function extractRecommendedNames(
           const raw = await askJson(buildNamePrompt(answers.slice(start, start + BATCH), brandName, domain, about), apiKey, 1600);
           const parsed = parseJson<{ answers?: { index?: number; names?: unknown }[] }>(raw);
           const got = Array.isArray(parsed?.answers) ? parsed!.answers : [];
-          const size = Math.min(BATCH, answers.length - start);
-          return got
-            .filter((r) => typeof r.index === 'number' && r.index >= 0 && r.index < size) // 超出這批範圍的不要算到別批頭上
-            .map((r) => ({ ...r, index: (r.index as number) + start }));
+          // 一批只有一份：模型回什麼 index 都算這一份（它偶爾回 1），名字全收
+          return got.map((r) => ({ ...r, index: start }));
         } catch {
           return [];
         }
