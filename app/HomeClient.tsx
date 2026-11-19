@@ -36,6 +36,7 @@ interface MeResponse {
 }
 
 import { CompetitorCompare } from "@/components/report/CompetitorCompare";
+import { SeoKeywords } from "@/components/report/SeoKeywords";
 import { OverviewBoard } from "@/components/report/OverviewBoard";
 import { MAX_PICK, QuestionPicker, type QuestionCandidates } from "@/components/report/QuestionPicker";
 import { type BrandTable, BrandRankTable, buildBrandTable, buildCitedPages, ChannelList, CitationTable, CitedPagesSection, DashSection, OverviewKpis, QuestionTable, ReportNav, SentimentSection, ShareDonut, shortEngine } from "@/components/report/ReportOverview";
@@ -216,6 +217,7 @@ interface RecommendVisibility {
     reviewAnswers?: { engine: string; query: string; answer: string; citedSelf: boolean; citations: { url: string; title: string; isSelf: boolean }[] }[];
   } | null;
   positioning?: { brand: string; isSelf: boolean; traits: { text: string; quote: string; engine: string }[] }[] | null;
+  rivalMap?: import("@/lib/geo-rival-map").RivalMap | null;
 }
 
 interface LlmsTxtLink {
@@ -295,6 +297,8 @@ interface StatusResponse {
   engine?: EngineResult;
   audit?: CheckItem[];
   schemaCards?: SchemaTypeCard[];
+  // SEO 關鍵字排名（使用者填關鍵字按「查排名」之後才有）
+  seoKeywords?: import("@/lib/seo-keyword-rank").KeywordRank[] | null;
   // 逐頁可讀字數（爬取順序），健檢報告圖的累積曲線用
   pageWords?: number[];
   // 推薦題查詢結果。2026-11-11 起健檢不自動問：使用者勾題按「問 AI」之後才有，沒問過是 null
@@ -3954,6 +3958,7 @@ export default function HomeClient({
             <ReportNav
               items={reportKind === "seo" ? [
                 { id: "seo-overview", label: "SEO 總覽" },
+                { id: "seo-keywords", label: "關鍵字排名" },
                 ...(status?.audit && status.schemaCards ? [{ id: "schema", label: "結構化資料" }] : []),
                 ...(status?.audit ? [{ id: "audit", label: "深度健檢明細" }] : []),
               ] : [
@@ -4052,9 +4057,9 @@ export default function HomeClient({
 
             {recommend && brandTable && brandTable.rows.some((r) => !r.isSelf && r.count > 0) && (
               <div className="mt-12">
-                <DashSection id="competitors" title="競爭對手分析" desc={`${reportBrand} 與競品的品牌定位、引用來源比較`}>
+                <DashSection id="competitors" title="競爭對手分析" desc="AI 推過的業者各站在哪個位置，誰跟你搶同一群客人">
                   <div className="space-y-4">
-                    <CompetitorCompare table={brandTable} questions={recommend.questions} positioning={recommend.positioning} />
+                    <CompetitorCompare names={recommend.names} questions={recommend.questions} rivalMap={recommend.rivalMap} />
                   </div>
                 </DashSection>
               </div>
@@ -4460,6 +4465,11 @@ export default function HomeClient({
                     <RbCheckDistribution cats={buildCategories5(engine, status.audit)} />
                   </RbSoloCard>
                 )}
+              </DashSection>
+            )}
+            {reportKind === "seo" && (
+              <DashSection id="seo-keywords" title="關鍵字排名" desc="客人在 Google 搜這些字時，你在第一頁排第幾、前面是誰、你的網頁可以補什麼">
+                <SeoKeywords jobId={reportJobId} initial={status?.seoKeywords} onDone={(r) => setStatus((s) => (s ? { ...s, seoKeywords: r } : s))} />
               </DashSection>
             )}
             {reportKind === "seo" && status?.audit && status.schemaCards && (

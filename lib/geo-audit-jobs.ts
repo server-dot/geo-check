@@ -1,4 +1,5 @@
 import type { CheckResult } from './geo-audit-rules';
+import type { KeywordCandidate, KeywordRank } from './seo-keyword-rank';
 import type { RobotsStatus, AiBotResult, ContentSignals } from './geo-ai-crawlers';
 import type { ContentVisibility } from './geo-content-visibility';
 import type { WafHint } from './geo-waf-fingerprint';
@@ -59,6 +60,10 @@ export interface AuditJob {
   // 不需要推薦題就能算的：品牌評價（直接問評價題＋品牌題的回答）、品牌輪廓。
   // 問過推薦題之後 recommendVisibility 裡也會帶一份（評價會加入推薦題回答重算）
   brandInsights?: { sentiment: SentimentResult | null; profile: BrandProfile | null } | null;
+  // SEO 健檢：使用者自己填的關鍵字，查 Google 排名＋為什麼排不上去（/api/seo/keywords，見 lib/seo-keyword-rank.ts）
+  seoKeywords?: KeywordRank[] | null;
+  // 給人勾的候選關鍵字（第一次打開關鍵字排名頁時產生、存起來）
+  seoKeywordCandidates?: KeywordCandidate[] | null;
   // 這次健檢有 AI 步驟因為 OpenRouter 額度不足失敗（報告會缺幾塊），前端要標出來
   aiCreditShort?: boolean;
   error?: string;
@@ -129,6 +134,8 @@ export function auditJobPayload(job: AuditJob) {
     recommendVisibility: done ? job.recommendVisibility : undefined,
     recommendCandidates: done ? job.recommendCandidates : undefined,
     brandInsights: done ? job.brandInsights : undefined,
+    seoKeywords: done ? job.seoKeywords : undefined,
+    seoKeywordCandidates: done ? job.seoKeywordCandidates : undefined,
     aiCreditShort: done ? job.aiCreditShort || undefined : undefined,
     error: job.error,
   };

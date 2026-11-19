@@ -5,6 +5,7 @@ import type { ContentMatch } from './geo-content-match';
 import { fetchGoogleAio } from './geo-google-aio';
 import type { SentimentResult } from './geo-sentiment';
 import type { BrandPositioning } from './geo-positioning';
+import type { RivalMap } from './geo-rival-map';
 import type { BrandProfile } from './geo-brand-profile';
 import { noteOpenRouterFailure } from './openrouter-health';
 import { paidFetch } from './paid-fetch';
@@ -96,6 +97,8 @@ export interface RecommendVisibility {
   sentiment?: SentimentResult | null;
   // AI 怎麼定位你跟前幾名對手（見 geo-positioning.ts）
   positioning?: BrandPositioning[] | null;
+  // 競爭對手分析的市場定位圖：兩個軸看 AI 怎麼描述每家（見 geo-rival-map.ts）。11-17 試過的 peers（同類業者）、swot 已拿掉，舊紀錄的欄位不讀
+  rivalMap?: RivalMap | null;
   // 11-12 拿掉「你跟某對手哪個好」的直接比較（只問得到一家、其他家沒問，畫面不一致；答案多半是「看需求」）。
   // 舊紀錄裡的 compare／compares 欄位留著不讀。
   profile?: BrandProfile | null;

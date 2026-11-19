@@ -724,7 +724,7 @@ export function ChannelList({ table }: { table: BrandTable }) {
 // 參考 WorkDuo：只列網域客戶看不懂（24h.pchome.com.tw 是什麼？），要列「哪一篇文章」，
 // 再標上它是電商、媒體、社群還是對手官網。
 
-interface CitedPage {
+export interface CitedPage {
   url: string;
   title: string;
   host: string;
@@ -732,6 +732,7 @@ interface CitedPage {
   brand: string; // 你／對手的品牌名（其他類型是空字串）
   count: number;
   questions: number;
+  answerKeys: string[]; // 哪幾則回答引用了這頁（「題號-第幾個回答」），合併成網站時用來算「幾則回答」
   mentionsSelf: boolean;
 }
 
@@ -765,9 +766,9 @@ export function buildCitedPages(rec: RecommendLike, table: BrandTable): CitedPag
     }
     return "";
   };
-  const byKey = new Map<string, CitedPage & { qs: Set<number> }>();
+  const byKey = new Map<string, CitedPage & { qs: Set<number>; ans: Set<string> }>();
   rec.questions.forEach((q, qi) => {
-    for (const r of q.results) {
+    q.results.forEach((r, ri) => {
       for (const c of r.citations ?? []) {
         let host = "";
         try {
@@ -804,19 +805,30 @@ export function buildCitedPages(rec: RecommendLike, table: BrandTable): CitedPag
             brand,
             count: 0,
             questions: 0,
+            answerKeys: [],
             mentionsSelf: isSelf || self.some((t) => title.toLowerCase().includes(t)),
             qs: new Set(),
+            ans: new Set(),
           };
           byKey.set(key, p);
         }
         p.count += 1;
         p.qs.add(qi);
+        p.ans.add(`${qi}-${ri}`);
         if (!p.title && c.title) p.title = c.title;
       }
-    }
+    });
   });
+  // 同一個網域只要有一頁認得出是對手官網，整個網域都算那家（11-17 Relove：saugella.com.tw 引用 3 次，
+  // 「賽吉兒」是中文比不到網域，只有標題寫「官方網站」那 1 頁被認出來，另外 2 頁掉到「其他網站」）
+  const rivalHost = new Map<string, string>();
+  for (const p of byKey.values()) if (p.type === "competitor" && p.brand) rivalHost.set(p.host, p.brand);
+  for (const p of byKey.values()) {
+    const b = rivalHost.get(p.host);
+    if (b && p.type === "other") Object.assign(p, { type: "competitor", brand: b });
+  }
   return [...byKey.values()]
-    .map(({ qs, ...p }) => ({ ...p, questions: qs.size }))
+    .map(({ qs, ans, ...p }) => ({ ...p, questions: qs.size, answerKeys: [...ans] }))
     .sort((a, b) => b.count - a.count || b.questions - a.questions);
 }
 
@@ -877,8 +889,8 @@ function SourceDonut({ parts, total }: { parts: { t: SourceType; n: number }[]; 
 }
 
 // 「AI 參考了哪些網站」：11-13 小積木「版型很醜、字一堆，盡量用圖示圖表，方便行銷人員跟客戶說明」。
-// 上：圓環＋各類大數字卡；中：前 5 名網站長條圖；網址、被參考的頁面收進「看全部」
-export function CitedPagesSection({ pages, selfLabel, max = 5 }: { pages: CitedPage[]; selfLabel: string; max?: number }) {
+// 圓環＋各類大數字卡＋全部網站前 5 名長條（TopSitesCard）。競爭對手分析另放一張只列對手官網的
+export function CitedPagesSection({ pages, selfLabel }: { pages: CitedPage[]; selfLabel: string }) {
   const total = pages.reduce((n, p) => n + p.count, 0);
   if (total === 0) return null;
   const byType = TYPE_ORDER.map((t) => ({ t, n: pages.filter((p) => p.type === t).reduce((s, p) => s + p.count, 0) }));
@@ -886,22 +898,6 @@ export function CitedPagesSection({ pages, selfLabel, max = 5 }: { pages: CitedP
   const tiles = byType.filter((x) => x.t !== "other" && (x.n > 0 || x.t === "self"));
   const otherN = byType.find((x) => x.t === "other")?.n ?? 0;
 
-  // 一個網站一列（同一個品牌／平台的多個頁面合併）
-  const groups = new Map<string, { name: string; type: SourceType; host: string; count: number; top: CitedPage | null }>();
-  for (const p of pages) {
-    const key = p.type === "self" ? "__self" : p.brand || p.host;
-    const g = groups.get(key) ?? { name: p.type === "self" ? selfLabel : p.brand || p.host, type: p.type, host: p.host, count: 0, top: null };
-    g.count += p.count;
-    if (!g.top || p.count > g.top.count) g.top = p;
-    groups.set(key, g);
-  }
-  if (!groups.has("__self")) groups.set("__self", { name: selfLabel, type: "self", host: "", count: 0, top: null });
-  const all = [...groups.values()].sort((x, y) => y.count - x.count || Number(y.type === "self") - Number(x.type === "self"));
-  const top = all.slice(0, max);
-  const selfRow = all.find((g) => g.type === "self")!;
-  if (!top.includes(selfRow)) top.push(selfRow);
-  const peak = Math.max(1, ...top.map((x) => x.count));
-  const rankOf = (g: (typeof all)[number]) => (g.count > 0 ? all.indexOf(g) + 1 : null);
 
   return (
     <div className="space-y-5">
@@ -930,51 +926,101 @@ export function CitedPagesSection({ pages, selfLabel, max = 5 }: { pages: CitedP
         <strong className="text-ink">電商／平台</strong>多，表示 AI 是去購物網站、接案平台上找答案。
         {otherN > 0 && <span className="text-ink3">（另有 {otherN} 個連結來自其他網站）</span>}
       </p>
+      <TopSitesCard pages={pages} selfLabel={selfLabel} />
+    </div>
+  );
+}
 
+// 最常被 AI 參考的網站：前 5 名長條＋你（不在前 5 也列），網址、頁面收進「看全部」。
+// rivalsOnly：競爭對手分析用，只列對手官網＋你（11-17 小積木：「競品獨占回答的引用來源」屁用沒有，
+// 「我要全部都是競爭對手的分析，原本的地方是綜合網站」）
+export function TopSitesCard({
+  pages: allPages,
+  selfLabel,
+  max = 5,
+  rivalsOnly = false,
+}: {
+  pages: CitedPage[];
+  selfLabel: string;
+  max?: number;
+  rivalsOnly?: boolean;
+}) {
+  if (allPages.reduce((n, p) => n + p.count, 0) === 0) return null;
+  const pages = rivalsOnly ? allPages.filter((p) => p.type === "competitor" || p.type === "self") : allPages;
+  if (rivalsOnly && !pages.some((p) => p.type === "competitor")) {
+    return (
       <div className="rounded-xl border border-line bg-card p-6 shadow-[0_1px_3px_rgba(48,60,84,.07)]">
-        <p className="text-[16px] font-bold text-ink">最常被 AI 參考的網站</p>
-        <ul className="mt-4 space-y-3">
-          {top.map((g) => {
-            const isSelf = g.type === "self";
-            return (
-              <li key={g.name} className="grid grid-cols-[28px_minmax(0,200px)_1fr_48px] items-center gap-3">
-                <span className="text-center text-[15px] font-bold text-ink3 tabular-nums">{rankOf(g) ?? "—"}</span>
-                <span className="min-w-0">
-                  <span className={`block truncate text-[15px] ${isSelf ? "font-bold" : "font-medium"} text-ink`}>
-                    {g.name}
-                    {isSelf && <span className="ml-1.5 rounded-full bg-lime px-2 py-0.5 text-[13px] font-bold">你</span>}
-                  </span>
-                  {!isSelf && <span className="text-[13px] text-ink3">{SOURCE_LABEL[g.type]}</span>}
-                </span>
-                <div className="h-4 overflow-hidden rounded-full bg-inset">
-                  <div className="h-full rounded-full" style={{ width: `${(g.count / peak) * 100}%`, background: g.type === "other" || g.type === "social" ? "#aab2c0" : TYPE_COLOR[g.type] }} />
-                </div>
-                <span className="text-right text-[15px] font-bold text-ink tabular-nums">{g.count}</span>
-              </li>
-            );
-          })}
-        </ul>
-        {selfRow.count === 0 && <p className="mt-3 text-[15px] font-semibold text-fail">✗ 這次 AI 沒有參考你的網站</p>}
-
-        <details className="mt-5 border-t border-line pt-4">
-          <summary className="cursor-pointer text-[14px] text-ink3 hover:text-ink">看全部 {all.length} 個網站與 AI 參考的頁面</summary>
-          <ul className="mt-3 divide-y divide-line text-[14px]">
-            {all.map((g) => (
-              <li key={g.name} className="flex items-baseline gap-3 py-2">
-                <span className="w-8 shrink-0 text-right text-ink3 tabular-nums">{g.count}</span>
-                <span className="w-[180px] shrink-0 truncate font-medium text-ink">{g.name}</span>
-                {g.top ? (
-                  <a href={g.top.url} target="_blank" rel="noopener noreferrer" className="report-table-link min-w-0 truncate">
-                    {g.top.title || g.top.url}
-                  </a>
-                ) : (
-                  <span className="text-ink3">—</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </details>
+        <p className="text-[16px] font-bold text-ink">AI 最常參考的對手官網</p>
+        <p className="mt-2 text-[15px] text-ink3">這次 AI 回答時沒有引用任何對手的官網，參考的是平台、媒體、論壇。</p>
       </div>
+    );
+  }
+  // 一個網站一列（同一個品牌／平台的多個頁面合併）
+  // 對手卡算「幾則回答引用了它」，不算連結數：AI 在一則回答裡貼同一家 6 個連結，連結數就灌成 6
+  // （11-17 aiqkangber：livechat 5 次全來自同一則 Perplexity 回答，看起來跟 Raccoon AI 一樣強）
+  const groups = new Map<string, { name: string; type: SourceType; host: string; count: number; ans: Set<string>; top: CitedPage | null }>();
+  for (const p of pages) {
+    const key = p.type === "self" ? "__self" : p.brand || p.host;
+    const g = groups.get(key) ?? { name: p.type === "self" ? selfLabel : p.brand || p.host, type: p.type, host: p.host, count: 0, ans: new Set<string>(), top: null };
+    g.count += p.count;
+    for (const k of p.answerKeys ?? []) g.ans.add(k);
+    if (!g.top || p.count > g.top.count) g.top = p;
+    groups.set(key, g);
+  }
+  if (!groups.has("__self")) groups.set("__self", { name: selfLabel, type: "self", host: "", count: 0, ans: new Set<string>(), top: null });
+  if (rivalsOnly) for (const g of groups.values()) g.count = g.ans.size;
+  const all = [...groups.values()].sort((x, y) => y.count - x.count || Number(y.type === "self") - Number(x.type === "self"));
+  const top = all.slice(0, max);
+  const selfRow = all.find((g) => g.type === "self")!;
+  if (!top.includes(selfRow)) top.push(selfRow);
+  const peak = Math.max(1, ...top.map((x) => x.count));
+  const rankOf = (g: (typeof all)[number]) => (g.count > 0 ? all.indexOf(g) + 1 : null);
+
+  return (
+    <div className="rounded-xl border border-line bg-card p-6 shadow-[0_1px_3px_rgba(48,60,84,.07)]">
+      <p className="text-[16px] font-bold text-ink">{rivalsOnly ? "AI 最常參考的對手官網" : "最常被 AI 參考的網站"}</p>
+      {rivalsOnly && <p className="mt-1 text-[14px] text-ink3">數字＝幾則 AI 回答附上了這家官網的連結（同一則貼好幾個連結只算 1）。只代表這次勾的題目</p>}
+      <ul className="mt-4 space-y-3">
+        {top.map((g) => {
+          const isSelf = g.type === "self";
+          return (
+            <li key={g.name} className="grid grid-cols-[28px_minmax(0,200px)_1fr_48px] items-center gap-3">
+              <span className="text-center text-[15px] font-bold text-ink3 tabular-nums">{rankOf(g) ?? "—"}</span>
+              <span className="min-w-0">
+                <span className={`block truncate text-[15px] ${isSelf ? "font-bold" : "font-medium"} text-ink`}>
+                  {g.name}
+                  {isSelf && <span className="ml-1.5 rounded-full bg-lime px-2 py-0.5 text-[13px] font-bold">你</span>}
+                </span>
+                {!isSelf && !rivalsOnly && <span className="text-[13px] text-ink3">{SOURCE_LABEL[g.type]}</span>}
+              </span>
+              <div className="h-4 overflow-hidden rounded-full bg-inset">
+                <div className="h-full rounded-full" style={{ width: `${(g.count / peak) * 100}%`, background: g.type === "other" || g.type === "social" ? "#aab2c0" : TYPE_COLOR[g.type] }} />
+              </div>
+              <span className="text-right text-[15px] font-bold text-ink tabular-nums">{g.count}</span>
+            </li>
+          );
+        })}
+      </ul>
+      {selfRow.count === 0 && <p className="mt-3 text-[15px] font-semibold text-fail">✗ 這次 AI 沒有參考你的網站</p>}
+
+      <details className="mt-5 border-t border-line pt-4">
+        <summary className="cursor-pointer text-[14px] text-ink3 hover:text-ink">看全部 {all.length} 個網站與 AI 參考的頁面</summary>
+        <ul className="mt-3 divide-y divide-line text-[14px]">
+          {all.map((g) => (
+            <li key={g.name} className="flex items-baseline gap-3 py-2">
+              <span className="w-8 shrink-0 text-right text-ink3 tabular-nums">{g.count}</span>
+              <span className="w-[180px] shrink-0 truncate font-medium text-ink">{g.name}</span>
+              {g.top ? (
+                <a href={g.top.url} target="_blank" rel="noopener noreferrer" className="report-table-link min-w-0 truncate">
+                  {g.top.title || g.top.url}
+                </a>
+              ) : (
+                <span className="text-ink3">—</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </details>
     </div>
   );
 }

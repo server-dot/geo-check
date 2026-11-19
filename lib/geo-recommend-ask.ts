@@ -4,6 +4,7 @@ import { matchQuestionsToPages, type MatchPage } from './geo-content-match';
 import { detectOwnedSources, markOwnedQuestions } from './geo-owned-sources';
 import { extractSentiment, selfShortName, sentimentInputs, type SentimentResult } from './geo-sentiment';
 import { extractPositioning, topRivals } from './geo-positioning';
+import { buildRivalMap } from './geo-rival-map';
 import type { BrandProfile } from './geo-brand-profile';
 
 // 使用者勾好推薦題、按「問 AI」之後跑的整段（2026-11-11 前這段在健檢流程裡自動跑）：
@@ -50,6 +51,9 @@ export async function askPickedQuestions(args: {
       .then((s) => (s ? { ...s, reviewQuery: insights?.sentiment?.reviewQuery, reviewAnswers: insights?.sentiment?.reviewAnswers } : insights?.sentiment ?? null))
       .catch(() => insights?.sentiment ?? null),
   ]);
-  const positioning = await extractPositioning(selfName, rivals, [...all, ...reviewAnswers], apiKey).catch(() => null);
-  return { ...rv, contentMatch, sentiment, positioning, profile: insights?.profile ?? null };
+  const [positioning, rivalMap] = await Promise.all([
+    extractPositioning(selfName, rivals, [...all, ...reviewAnswers], apiKey).catch(() => null),
+    buildRivalMap(rv, input, origin, apiKey).catch(() => null),
+  ]);
+  return { ...rv, contentMatch, sentiment, positioning, rivalMap, profile: insights?.profile ?? null };
 }

@@ -1,164 +1,242 @@
 "use client";
 
-// ── 競爭對手分析 ───────────────────────────────────────────
-// 只比「被點名幾次」是拙劣的分析（2026-11-02 小積木）。這區回答兩件事：
-// 1. AI 怎麼形容你、怎麼形容它（定位差在哪）
-// 2. AI 推了它、沒推你的那幾次，看的是哪些網頁（你缺席的地方）
-// 11-12 拿掉：推薦次數 vs、各平台蝴蝶圖、逐題比較（一題 3 個回答，次數跟「品牌推薦排名」重複又是雜訊），
-// 以及「你跟它哪個好」的直接比較（只有切到的那家會問，其他家沒問，畫面不一致；答案多半是「看需求」）。
+// ── 競爭對手分析：市場定位圖 ───────────────────────────────
+// 11-18 小積木：SWOT「感覺不太好」、矩陣「不太適合」、縱軸用被推次數的象限圖「好醜而且完全用不到」。
+// 兩個軸都看 AI 怎麼描述每一家（lib/geo-rival-map.ts 依產業挑軸，每個位置都附 AI 原話），不用任何次數。
+// 第一眼看：誰跟你站在同一區（真正的對手）、哪一區沒人（可以主打的位置）。點一家看 AI 原話。
 
 import { useState } from "react";
-import { brandSlugs, classifySource, SOURCE_LABEL } from "@/lib/geo-source-type";
-import type { BrandTable } from "./ReportOverview";
 
 interface ResultLike {
-  engine: string;
-  namedSelf?: boolean;
-  citations?: { url: string; title: string; isSelf: boolean }[];
+  answer?: string;
 }
-
-interface PositioningLike {
-  brand: string;
+interface NameLike {
+  name: string;
   isSelf: boolean;
-  traits: { text: string; quote: string; engine: string }[];
+  answers?: number[];
+}
+interface AxisLike {
+  low: string;
+  high: string;
+}
+interface RivalMapLike {
+  x: AxisLike;
+  y: AxisLike;
+  self: { x: number; y: number; why: string; url?: string; type?: string; dims?: (DimLike | null)[] };
+  points: { name: string; x: number; y: number; type: string; quote: string; url?: string; dims?: (DimLike | null)[] }[];
+  axes?: AxisLike[];
+}
+interface DimLike {
+  v: number;
+  why: string;
 }
 
-function tokens(name: string): string[] {
-  return [...new Set(name.toLowerCase().match(/[a-z0-9]{2,}|[一-鿿]{2,}/g) ?? [])];
-}
-
-function sameBrand(a: string, b: string): boolean {
-  const ta = tokens(a);
-  const tb = tokens(b);
-  return ta.some((t) => tb.includes(t));
-}
-
-function TraitList({ title, traits, highlight }: { title: string; traits: PositioningLike["traits"]; highlight?: boolean }) {
+// 一條軸上你（金）跟它（深）的位置，-2～2
+function Track({ a, me, it }: { a: AxisLike; me: DimLike | null; it: DimLike | null }) {
+  const pos = (v: number) => `${((v + 2) / 4) * 100}%`;
   return (
-    <div className={`rounded-[10px] border p-4 ${highlight ? "border-lime/60 bg-lime/[.06]" : "border-line bg-card"}`}>
-      <p className="text-[14px] font-bold text-ink">{title}</p>
-      {traits.length === 0 ? (
-        <p className="mt-2 text-[15px] text-ink3">AI 這次沒有具體描述</p>
-      ) : (
-        <ul className="mt-2 space-y-2.5">
-          {traits.map((t) => (
-            <li key={t.text}>
-              <p className="text-[15px] font-medium text-ink">{t.text}</p>
-              <p className="mt-0.5 text-[14px] leading-relaxed text-ink3">
-                {t.engine}：「{t.quote}」
-              </p>
-            </li>
-          ))}
-        </ul>
-      )}
+    <div>
+      <div className="flex justify-between text-[12.5px] text-ink3">
+        <span>{a.low}</span>
+        <span>{a.high}</span>
+      </div>
+      <div className="relative mt-1.5 h-[10px]">
+        <div className="absolute inset-x-0 top-1/2 h-[2px] -translate-y-1/2 rounded bg-line" />
+        {/* 同一格時兩點錯開一點，不然它被你蓋住 */}
+        {it && (
+          <span
+            className="absolute top-1/2 h-[12px] w-[12px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink"
+            style={{ left: me && me.v === it.v ? `calc(${pos(it.v)} + 9px)` : pos(it.v) }}
+          />
+        )}
+        {me && (
+          <span className="absolute top-1/2 h-[13px] w-[13px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[1.5px] border-[var(--goldInk)] bg-lime" style={{ left: it && me.v === it.v ? `calc(${pos(me.v)} - 9px)` : pos(me.v) }} />
+        )}
+      </div>
+      <dl className="mt-1.5 grid grid-cols-[2.2em_minmax(0,1fr)] gap-x-1.5 gap-y-0.5 text-[13.5px] leading-snug">
+        <dt className="font-bold text-[var(--goldInk)]">你</dt>
+        <dd className="text-ink2">{me?.why || "—"}</dd>
+        <dt className="font-bold text-ink">它</dt>
+        <dd className="text-ink2">{it?.why || "—"}</dd>
+      </dl>
     </div>
   );
 }
 
-export function CompetitorCompare({
-  table,
-  questions,
-  positioning,
-}: {
-  table: BrandTable;
-  questions: { question: string; results: ResultLike[] }[];
-  positioning?: PositioningLike[] | null;
-}) {
-  // 只列前 4 家：定位描述只整理前 4 名（lib/geo-positioning MAX_RIVALS），列更多的話後面幾家會是空的
-  const rivals = table.rows.filter((r) => !r.isSelf && r.count > 0 && r.hits).slice(0, 4);
-  const self = table.rows.find((r) => r.isSelf);
-  const [pick, setPick] = useState(rivals[0]?.name ?? "");
-  const rival = rivals.find((r) => r.name === pick) ?? rivals[0];
-  if (!self || !rival) return <p className="text-[15px] text-ink3">這次 AI 沒有點名其他品牌，沒有對手可以比。</p>;
+const shortName = (n: string) => {
+  const s = n.split(/[（(／/]/)[0].trim();
+  const head = s.split(" ")[0];
+  return s.length > 8 && head.length >= 2 && /[\u4e00-\u9fff]/.test(head) ? head : s;
+};
 
-  const flatResults = questions.flatMap((q) => q.results);
-  const selfHits = new Set(self.hits ?? []);
-  // AI 推了對手、卻沒推你的回答
-  const rivalOnly = (rival.hits ?? []).filter((i) => !selfHits.has(i));
+// AI 給分很極端（大多 ±2、±1.5），照原分數畫會全擠在四個角（11-18 小積木：「為何還是很偏激」）。
+// 改成照順序平均攤開：每個軸上把出現過的分數由小到大排，等距放；順序不變、同分的還是同一個位置。
+// 圖上看的是「各家互相比誰比較偏哪邊」，不是絕對分數。
+function spreadOut(m: RivalMapLike): RivalMapLike {
+  const rank = (vs: number[]) => {
+    const u = [...new Set(vs)].sort((a, b) => a - b);
+    return (v: number) => (u.length < 2 ? 0 : -1.6 + (3.2 * u.indexOf(v)) / (u.length - 1));
+  };
+  const rx = rank([m.self.x, ...m.points.map((p) => p.x)]);
+  const ry = rank([m.self.y, ...m.points.map((p) => p.y)]);
+  return { ...m, self: { ...m.self, x: rx(m.self.x), y: ry(m.self.y) }, points: m.points.map((p) => ({ ...p, x: rx(p.x), y: ry(p.y) })) };
+}
 
-  // 那些回答引用的網頁（排除你自己的）
-  const selfSlugs = brandSlugs([self.name]);
-  const pages = new Map<string, { url: string; title: string; host: string; n: number }>();
-  for (const i of rivalOnly) {
-    for (const c of flatResults[i]?.citations ?? []) {
-      let host = "";
-      try {
-        host = new URL(c.url).hostname.replace(/^www\./, "");
-      } catch {
-        continue;
-      }
-      if (c.isSelf || selfSlugs.some((s) => host.split(".")[0].includes(s))) continue;
-      const key = host + new URL(c.url).pathname.replace(/\/$/, "");
-      const p = pages.get(key) ?? { url: c.url, title: c.title, host, n: 0 };
-      p.n += 1;
-      pages.set(key, p);
-    }
+const NEAR = 1.2; // 「離你最近」的半徑（攤開後的座標）
+const SIZE = 460; // 圖的高（viewBox）；寬多留右邊給最右排的名字
+const W = SIZE + 120;
+const PAD = 48;
+
+function Plot({ map, selfName, pick, onPick }: { map: RivalMapLike; selfName: string; pick: string; onPick: (n: string) => void }) {
+  const inner = SIZE - PAD * 2;
+  // 分數 ±2 的點不要壓在框線上（會跟軸的文字疊在一起），內縮 22
+  const IN = 22;
+  const px = (v: number) => PAD + IN + ((v + 2) / 4) * (inner - IN * 2);
+  const py = (v: number) => PAD + IN + ((2 - v) / 4) * (inner - IN * 2);
+  // 圓點一律畫在真正的位置；只有名字避讓：跟已經放好的名字重疊就上下挪，挪過的拉一條細線回圓點
+  const GAP = 17;
+  const textW = (t: string) => [...t].reduce((w, ch) => w + (/[\u0000-\u00ff]/.test(ch) ? 7 : 12.5), 0);
+  const all = [{ name: "__self", x: map.self.x, y: map.self.y }, ...map.points]
+    .map((p) => ({ ...p, cx: px(p.x), cy: py(p.y), ly: py(p.y), w: textW(p.name === "__self" ? selfName : shortName(p.name)) + 16 }))
+    .sort((a, b) => a.cy - b.cy || (a.name === "__self" ? -1 : 1) || a.cx - b.cx);
+  const placed: { x1: number; x2: number; y: number }[] = [];
+  const hits = (cx: number, cy: number, w: number) => placed.some((p) => cx - 6 < p.x2 && cx + w > p.x1 && Math.abs(cy - p.y) < GAP - 1);
+  for (const d of all) {
+    const base = d.cy;
+    let cy = base;
+    for (let k = 1; hits(d.cx, cy, d.w) && k < 40; k++) cy = base + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * GAP;
+    d.ly = Math.min(Math.max(cy, PAD - 8), SIZE - PAD + 8);
+    placed.push({ x1: d.cx - 6, x2: d.cx + d.w, y: d.ly });
   }
-  // 所有對手的官網都要認得出來（不只目前選的這個），不然 saugella.com.tw 會被標成「其他網站」
-  const rivalSlugs = brandSlugs(table.rows.filter((r) => !r.isSelf).map((r) => r.name)).filter((x) => !selfSlugs.includes(x));
-  const gapPages = [...pages.values()].sort((a, b) => b.n - a.n).slice(0, 6);
+  const dots = all;
+  const mid = SIZE / 2;
+  const axisText = "fill-[var(--ink3)] text-[12px]";
+  return (
+    <svg viewBox={`0 0 ${W} ${SIZE}`} className="mx-auto w-full max-w-[620px]" role="img" aria-label="市場定位圖">
+      {/* 離你 NEAR 以內淡淡上色 */}
+      <ellipse
+        cx={px(map.self.x)}
+        cy={py(map.self.y)}
+        rx={(NEAR / 4) * (inner - IN * 2)}
+        ry={(NEAR / 4) * (inner - IN * 2)}
+        fill="var(--limeTint)"
+        clipPath="url(#plot-clip)"
+      />
+      <clipPath id="plot-clip">
+        <rect x={PAD} y={PAD} width={inner} height={inner} />
+      </clipPath>
+      <line x1={PAD} y1={mid} x2={SIZE - PAD} y2={mid} stroke="var(--line)" />
+      <line x1={mid} y1={PAD} x2={mid} y2={SIZE - PAD} stroke="var(--line)" />
+      <rect x={PAD} y={PAD} width={inner} height={inner} fill="none" stroke="var(--line)" />
+      <text x={PAD} y={SIZE - PAD + 22} className={axisText}>← {map.x.low}</text>
+      <text x={SIZE - PAD} y={SIZE - PAD + 22} textAnchor="end" className={axisText}>{map.x.high} →</text>
+      <text x={PAD - 12} y={PAD} transform={`rotate(-90 ${PAD - 12} ${PAD})`} textAnchor="end" className={axisText}>{map.y.high} →</text>
+      <text x={PAD - 12} y={SIZE - PAD} transform={`rotate(-90 ${PAD - 12} ${SIZE - PAD})`} className={axisText}>← {map.y.low}</text>
+      {dots.map((d) => {
+        const self = d.name === "__self";
+        const on = d.name === pick;
+        const label = self ? selfName : shortName(d.name);
+        return (
+          <g key={d.name} onClick={self ? undefined : () => onPick(d.name)} className={self ? "" : "cursor-pointer"}>
+            <circle cx={d.cx} cy={d.cy} r={12} fill="transparent" />
+            <circle
+              cx={d.cx}
+              cy={d.cy}
+              r={self ? 7 : on ? 6 : 5}
+              fill={self ? "var(--lime)" : on ? "var(--ink)" : "var(--gray)"}
+              stroke={self ? "var(--goldInk)" : "none"}
+              strokeWidth={1.5}
+            />
+            {d.ly !== d.cy && <line x1={d.cx + 4} y1={d.cy} x2={d.cx + 9} y2={d.ly} stroke="var(--line)" />}
+            <text
+              x={d.cx + 10}
+              y={d.ly + 4}
+              className={`text-[12.5px] ${self ? "fill-[var(--goldInk)] font-bold" : on ? "fill-[var(--ink)] font-bold" : "fill-[var(--ink2)]"}`}
+            >
+              {label}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
 
-  const selfPos = positioning?.find((p) => p.isSelf) ?? positioning?.find((p) => sameBrand(p.brand, self.name));
-  const rivalPos = positioning?.find((p) => !p.isSelf && sameBrand(p.brand, rival.name));
+export function CompetitorCompare({
+  names,
+  rivalMap,
+}: {
+  names: NameLike[];
+  questions?: { question: string; results: ResultLike[] }[];
+  rivalMap?: RivalMapLike | null;
+}) {
+  const selfName = shortName(names.find((n) => n.isSelf)?.name ?? "你");
+  const map = rivalMap ? spreadOut(rivalMap) : null;
+  // 跟你同一區的（兩個軸都同一邊）就是正面對手，先給人看最近的那家
+  // 離你最近的＝距離 NEAR 以內、最多 3 家（你剛好在中線上時，用象限判斷會變成「沒有」）
+  const near = (p: { x: number; y: number }) => Math.hypot(p.x - map!.self.x, p.y - map!.self.y);
+  // 最近的那一家一定列；其他在 NEAR 以內的才列
+  const same = map ? [...map.points].sort((a, b) => near(a) - near(b)).filter((p, i) => i === 0 || near(p) <= NEAR).slice(0, 3) : [];
+  const dist = (p: { x: number; y: number }) => (map ? Math.hypot(p.x - map.self.x, p.y - map.self.y) : 0);
+  const first = [...(same.length ? same : map?.points ?? [])].sort((a, b) => dist(a) - dist(b))[0];
+  const [pick, setPick] = useState(first?.name ?? "");
 
+  if (!map || !first)
+    return (
+      <p className="text-[15px] text-ink3">
+        {rivalMap === undefined
+          ? "這份報告是舊版，沒有市場定位圖；重新問一次 AI 就會有。"
+          : "AI 這次推薦的業者大多只列了名字，沒有足夠的描述能判斷各家的定位，所以不畫圖。"}
+      </p>
+    );
+
+  const cur = map.points.find((p) => p.name === pick) ?? first;
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[15px] text-ink2">比較對象：</span>
-        {rivals.map((r) => (
-          <button
-            key={r.name}
-            type="button"
-            onClick={() => setPick(r.name)}
-            className={`rounded-full border px-3 py-1 text-[14px] ${
-              r.name === rival.name ? "border-ink bg-ink font-semibold text-paper" : "border-line bg-card text-ink2 hover:border-ink3"
-            }`}
-          >
-            {r.name}
-          </button>
-        ))}
-      </div>
-
-      {/* 1. 定位 */}
-      {positioning && (
-        <div>
-          <p className="mb-2 text-[15px] font-bold text-ink">品牌定位比較</p>
-          <div className="grid gap-3 grid-cols-2">
-            <TraitList title={`你（${self.name}）`} traits={selfPos?.traits ?? []} highlight />
-            <TraitList title={rival.name} traits={rivalPos?.traits ?? []} />
-          </div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] xl:items-start">
+        <div className="rounded-[10px] border border-line bg-card p-3">
+          <Plot map={map} selfName={selfName} pick={cur.name} onPick={setPick} />
         </div>
-      )}
 
-      {/* 2. 缺席的地方 */}
-      <div className="overflow-x-auto rounded-[10px] border border-line bg-card">
-        <p className="border-b border-line px-4 py-2.5 text-[15px] font-bold text-ink">
-          競品獨占回答的引用來源
-        </p>
-        {gapPages.length === 0 ? (
-          <p className="px-4 py-3 text-[15px] text-ink3">
-            {rivalOnly.length === 0 ? `每次推 ${rival.name} 的回答也都有推你。` : "這幾次回答沒有附引用網址。"}
+        <div className="rounded-[10px] border border-line bg-card p-4">
+          <p className="text-[16px] font-bold text-ink">
+            <span className="text-[var(--goldInk)]">{selfName}</span>
+            <span className="mx-2 font-normal text-ink3">vs</span>
+            {cur.name}
           </p>
-        ) : (
-          <table className="w-full min-w-[560px] text-[15px]">
-            <tbody>
-              {gapPages.map((p) => (
-                <tr key={p.url} className="border-b border-line align-top last:border-0">
-                  <td className="px-4 py-2.5">
-                    <a href={p.url} target="_blank" rel="noopener noreferrer" className="report-table-link line-clamp-1 font-medium">
-                      {p.title || p.host}
-                    </a>
-                    <p className="mono mt-0.5 text-[14px] text-ink3">{p.host}</p>
-                  </td>
-                  <td className="w-[100px] px-3 py-2.5 text-[14px] text-ink2">{SOURCE_LABEL[classifySource(p.host, false, rivalSlugs)]}</td>
-                  <td className="mono w-[70px] px-3 py-2.5 text-right text-[14px] text-ink2">{p.n} 次</td>
-                </tr>
+          {/* 圖例：金點＝你、深點＝它，順便帶各自的類型 */}
+          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[14px]">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-[12px] w-[12px] rounded-full border-[1.5px] border-[var(--goldInk)] bg-lime" />
+              <span className="font-bold text-[var(--goldInk)]">你</span>
+              {map.self.type && <span className="text-ink3">{map.self.type}</span>}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-[11px] w-[11px] rounded-full bg-ink" />
+              <span className="font-bold text-ink">它</span>
+              {cur.type && <span className="text-ink3">{cur.type}</span>}
+            </span>
+          </div>
+          {map.axes && cur.dims && map.self.dims ? (
+            <div className="mt-3 space-y-4">
+              {map.axes.map((a, k) => (
+                <Track key={k} a={a} me={map.self.dims![k] ?? null} it={cur.dims![k] ?? null} />
               ))}
-            </tbody>
-          </table>
-        )}
+            </div>
+          ) : (
+            <p className="mt-2 text-[15px] leading-relaxed text-ink2">AI 查到：{cur.quote}</p>
+          )}
+          <p className="mt-3 text-[13px] text-ink3">
+            {same.length > 0 && <>離你最近：{same.map((p) => shortName(p.name)).join("、")}。</>}點圖上其他家換著比
+            {cur.url && (
+              <a href={cur.url} target="_blank" rel="noopener noreferrer" className="report-table-link ml-2">
+                {shortName(cur.name)} 的資料來源 ↗
+              </a>
+            )}
+          </p>
+        </div>
       </div>
-
+      <p className="text-[13px] text-ink3">只畫 AI 這次推過的業者（平台、通路不算）。兩個軸依你的產業挑，每家的位置是另外請 AI 上網查官網、價目、案例判斷的，圖上是各家互相比的相對位置；點一家看理由和來源。</p>
     </div>
   );
 }

@@ -76,8 +76,12 @@ ${blocks}
     for (const t of (Array.isArray(b.traits) ? b.traits : []) as { text?: unknown; answer?: unknown; quote?: unknown }[]) {
       if (typeof t?.text !== 'string' || typeof t.quote !== 'string' || typeof t.answer !== 'number') continue;
       const q = t.quote.trim();
-      if (norm(q).length < 4 || !texts[t.answer]?.includes(norm(q))) continue;
-      traits.push({ text: t.text.trim(), quote: q, engine: shortEngine(answers[t.answer].engine) });
+      if (norm(q).length < 4) continue;
+      // 模型給的段落編號常對錯（11-17 aiqkangber：大同世界科技、未來式數位的特點全因編號錯被丟光），
+      // 原句只要在任何一則回答裡找得到就收，出處用實際找到的那則
+      const at = texts[t.answer]?.includes(norm(q)) ? t.answer : texts.findIndex((x) => x.includes(norm(q)));
+      if (at < 0) continue;
+      traits.push({ text: t.text.trim(), quote: q, engine: shortEngine(answers[at].engine) });
     }
     out.push({ brand: b.brand.trim(), isSelf: b.brand.trim() === selfName, traits });
   }
