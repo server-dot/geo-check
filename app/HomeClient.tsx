@@ -36,6 +36,7 @@ interface MeResponse {
 }
 
 import { CompetitorCompare } from "@/components/report/CompetitorCompare";
+import { ForumTags } from "@/components/report/ForumTags";
 import { SeoKeywords } from "@/components/report/SeoKeywords";
 import { OverviewBoard } from "@/components/report/OverviewBoard";
 import { MAX_PICK, QuestionPicker, type QuestionCandidates } from "@/components/report/QuestionPicker";
@@ -118,36 +119,6 @@ interface ContentVisibility {
   summary: string;
   advice: string;
   duplicateBlockChars: number;
-}
-
-// 跟 lib/geo-keyword-visibility.ts 的 guessKeywordCandidates() 同一套邏輯，
-// 這裡另外放一份純字串版本給前端即時算候選字（不需要打 API），純函式沒有
-// fetch/env，跟後端那份保持邏輯一致但各自獨立維護，避免把伺服器端模組
-// 拉進前端 bundle。
-function guessKeywordCandidates(title: string, description: string, h1: string[]): string[] {
-  const KEYWORD_MIN_CHARS = 2;
-  const KEYWORD_MAX_CHARS = 16;
-  const MAX_CANDIDATES = 5;
-  const charLen = (s: string) => [...s].length;
-
-  const pool: string[] = [];
-  const titleParts = title.split(/[|｜\-–—:：]/).map((s) => s.trim()).filter(Boolean);
-  const positioningText = [...titleParts.slice(1), ...h1].join(" ");
-  pool.push(...positioningText.split(/[×xX,，、\s]+/));
-  pool.push(...description.split(/[，,、。]/).slice(0, 4));
-
-  const seen = new Set<string>();
-  const candidates: string[] = [];
-  for (const raw of pool) {
-    const clean = raw.replace(/\s+/g, " ").trim();
-    const len = charLen(clean);
-    if (len < KEYWORD_MIN_CHARS || len > KEYWORD_MAX_CHARS) continue;
-    if (seen.has(clean)) continue;
-    seen.add(clean);
-    candidates.push(clean);
-    if (candidates.length >= MAX_CANDIDATES) break;
-  }
-  return candidates;
 }
 
 type SignalValue = "yes" | "no" | "unset";
@@ -1634,7 +1605,7 @@ function ReportBoard({
   );
 }
 
-// PDF 第二頁：關鍵字 AI 能見度。只有使用者按過「查詢」、有結果時才會有這一頁。
+// PDF 第二頁：關鍵字 AI 能見度。問過推薦題、有結果時才會有這一頁。
 // 跟第一頁同一套 --rb- token 跟版型（1200px、抬頭列、KPI 帶、卡片、頁尾）。
 // 每個關鍵字一張卡，列每家引擎「有沒有提到你」跟一句判讀；最後是「AI 在推誰」
 // 的彙總名單（前十名＋自己的真實名次）。不放引擎回答全文——那是螢幕上展開看的東西，
@@ -1942,7 +1913,7 @@ function ReportBoardSection({
       <p className="report-board-actions mt-2 text-xs text-ink3">
         下載的 PDF 是完整的健檢報告圖——爬蟲累積讀到的內容、四道關卡、各家爬蟲存取權限、AI
         認不認得你、優先處理順序全部在一張紙上，直接轉給合作對象。
-        {keywordPage ? "關鍵字 AI 能見度的結果會放在第 2 頁。" : "下面查過關鍵字的話，結果會多一頁放進去。"}
+        {keywordPage ? "推薦題的結果會放在第 2 頁。" : ""}
       </p>
       {jobId && (
         <p className="report-board-actions mt-1.5 text-xs text-ink3">
@@ -3199,61 +3170,6 @@ function CompactAnswerCard({ result }: { result: VisibilityCardData }) {
   );
 }
 
-function BrandVisibilityCard({ result }: { result: VisibilityCardData }) {
-  return (
-    <div className="rounded-[10px] border border-line bg-card p-6">
-      <p className="mono text-[14px] font-medium tracking-wide text-ink3 uppercase">{result.engine}</p>
-      <p className="mt-1 text-lg font-bold text-ink">
-        {result.namedSelf === undefined
-          ? result.citedSelf
-            ? "🟢 引用了你自己的網站"
-            : "🔴 沒有引用你自己的網站"
-          : result.namedSelf
-            ? "🟢 答案裡推薦了你"
-            : "🔴 答案裡沒推薦你"}
-      </p>
-      {/* 推薦（答案點名）跟引用（來源列出你的網站）分開講，不合成一個燈號 */}
-      {result.namedSelf !== undefined && (
-        <p className="mt-1 text-[14px] text-ink3">引用來源：{result.citedSelf ? "有你的網站" : "沒有你的網站"}</p>
-      )}
-      {result.advice && <p className="mt-2 text-[15px] leading-relaxed text-ink2">{result.advice}</p>}
-
-      <div className="quote-block mt-4 border-l-[3px] border-lime pl-4">
-        <p className="text-[14px] font-medium text-ink3">我們實際問的問題：</p>
-        <p className="mt-1 text-[15px] text-ink">「{result.query}」</p>
-      </div>
-
-      <div className="mt-4">
-        <p className="text-[14px] font-medium text-ink3">{result.engine} 的實際回答：</p>
-        <div className="mt-1 overflow-hidden break-words rounded-lg border border-line bg-paper p-3 text-[15.5px] leading-relaxed text-ink2">
-          {renderAnswerMarkdown(result.answer, result.citations)}
-        </div>
-      </div>
-
-      {result.citations.length > 0 && (
-        <div className="mt-4">
-          <p className="text-[14px] font-medium text-ink3">引用來源：</p>
-          <ul className="mt-1 space-y-1">
-            {result.citations.map((c, i) => (
-              <li key={i} className="text-[14.5px]">
-                <a
-                  href={c.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`break-all underline-offset-2 ${c.isSelf ? "font-semibold decoration-limeDark" : ""}`}
-                >
-                  {c.isSelf && "★ "}
-                  {c.title}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // llms.txt 卡片：不只給「格式完整」的判決，把實際解析出來的標題、摘要、
 // 連結清單都亮出來，讓人自己看得到底稿裡寫了什麼、哪些連結有說明、哪些沒有。
 function LlmsTxtCard({ llmsTxt }: { llmsTxt: { exists: boolean | null; quality: LlmsTxtQuality | null } }) {
@@ -3417,12 +3333,6 @@ export default function HomeClient({
   // ref 改值不會重繪，但「AI 可讀版」連結要跟著這次健檢的 id 出現在畫面上，所以另外存一份 state
   const [reportJobId, setReportJobId] = useState<string | null>(null);
   const [showRawContent, setShowRawContent] = useState(false);
-  const [customKeywords, setCustomKeywords] = useState<string[]>([]);
-  const [addedSuggestions, setAddedSuggestions] = useState<string[]>([]);
-  const [keywordInput, setKeywordInput] = useState("");
-  const [keywordResults, setKeywordResults] = useState<Record<string, KeywordVisibilityResult[]>>({});
-  const [keywordLoading, setKeywordLoading] = useState(false);
-  const [keywordError, setKeywordError] = useState("");
   const [recommendOverride, setRecommendOverride] = useState<RecommendVisibility | null>(null);
   // 問過推薦題之後按「換題目重問」：在結果上方打開勾選清單
   const [repick, setRepick] = useState(false);
@@ -3638,18 +3548,6 @@ export default function HomeClient({
   const reportKind: AuditKind = status?.kind ?? "geo";
   const unknownCount = engine?.results.filter((r) => r.status === "unknown").length ?? 0;
 
-  // 自動抓的候選字只是建議，不會預設進查詢清單——使用者要自己點加入，
-  // 不是預設全加、要自己動手刪掉不要的（之前是反過來，容易誤查一堆沒篩過的字）。
-  const suggestedKeywords = engine?.visibility
-    ? guessKeywordCandidates(engine.visibility.title, engine.visibility.description, engine.visibility.h1).filter(
-        (k) => !addedSuggestions.includes(k)
-      )
-    : [];
-  const activeKeywords = [...addedSuggestions, ...customKeywords];
-
-  // 把所有關鍵字查詢的引用來源彙總成一份「AI 目前的推薦名單」。
-  // 純前端計算，資料是已經查回來的 keywordResults，不會多花任何 API 額度。
-  // 自動跑的推薦題跟使用者自己查的關鍵字合在一起算——對 AI 來說都是「這個主題底下推誰」。
   // 使用者改題目重問過，就用重問的結果蓋掉健檢時自動問的那份
   const recommend = recommendOverride ?? status?.recommendVisibility ?? null;
   const brandTable = recommend ? buildBrandTable(recommend) : null;
@@ -3679,56 +3577,14 @@ export default function HomeClient({
   const recommendAsKeywordResults: Record<string, KeywordVisibilityResult[]> = Object.fromEntries(
     (recommend?.questions ?? []).map((q) => [q.question, q.results.map((r) => ({ ...r, keyword: q.question }))]),
   );
-  const allKeywordResults: Record<string, KeywordVisibilityResult[]> = { ...recommendAsKeywordResults, ...keywordResults };
-  const allKeywordOrder = [...Object.keys(recommendAsKeywordResults), ...activeKeywords];
   const citedDomains = tallyCitedDomains(
-    Object.entries(allKeywordResults).flatMap(([keyword, results]) =>
+    Object.entries(recommendAsKeywordResults).flatMap(([keyword, results]) =>
       results.map((r) => ({ keyword, citations: r.citations })),
     ),
   );
   // 「AI 為什麼沒推薦你」三關：品牌題（第 1 關）＋推薦題與內容比對（第 2、3 關）
   const diagnosis = recommend && engine ? buildDiagnosis(engine.brandVisibility, recommend) : null;
   // 前十名＋「你排在十名外」的補列、長尾帶過，都在 CitationTable 裡處理
-
-  function addSuggestedKeyword(k: string) {
-    setAddedSuggestions((prev) => [...prev, k]);
-  }
-
-  function removeKeyword(k: string) {
-    if (addedSuggestions.includes(k)) setAddedSuggestions((prev) => prev.filter((x) => x !== k));
-    else setCustomKeywords((prev) => prev.filter((x) => x !== k));
-  }
-
-  function addCustomKeyword() {
-    const v = keywordInput.trim();
-    if (v && !activeKeywords.includes(v)) setCustomKeywords((prev) => [...prev, v]);
-    setKeywordInput("");
-  }
-
-  async function runKeywordCheck() {
-    if (activeKeywords.length === 0 || !url.trim()) return;
-    setKeywordLoading(true);
-    setKeywordError("");
-    try {
-      const res = await fetch("/api/geo/keywords", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keywords: activeKeywords, url }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "查詢失敗");
-      const map: Record<string, KeywordVisibilityResult[]> = {};
-      for (const r of data.results as { keyword: string; results: KeywordVisibilityResult[] }[]) {
-        map[r.keyword] = r.results;
-      }
-      setKeywordResults(map);
-      track("keyword_query", { keyword_count: activeKeywords.length });
-    } catch (err) {
-      setKeywordError(err instanceof Error ? err.message : "查詢失敗");
-    } finally {
-      setKeywordLoading(false);
-    }
-  }
 
   return (
     <div className="min-h-screen bg-paper">
@@ -3971,7 +3827,7 @@ export default function HomeClient({
                 ...(diagnosis ? [{ id: "why", label: "未被推薦原因" }] : []),
                 ...(citedDomains.length > 0 ? [{ id: "citations", label: "AI 參考網站" }] : []),
                 ...(engine.brandVisibility.length > 0 ? [{ id: "brand-check", label: "品牌輪廓" }] : []),
-                { id: "more", label: "關鍵字查詢" },
+                ...(candidates ? [{ id: "forum", label: "網友相關問題" }] : []),
                 { id: "tech", label: "AI 看得到你嗎" },
               ]}
               active={reportPage}
@@ -4174,100 +4030,13 @@ export default function HomeClient({
               </div>
             )}
 
-            <div className="mt-12">
-              <DashSection id="more" title="關鍵字查詢" desc="自訂關鍵字，查詢 AI 推薦的品牌">
-                <div className="rounded-[10px] border border-line bg-card p-6">
-                {suggestedKeywords.length > 0 && (
-                  <div className="mb-3">
-                    <p className="mb-1.5 text-[14px] text-ink3">建議關鍵字（點一下加入查詢）</p>
-                    <div className="flex flex-wrap gap-2">
-                      {suggestedKeywords.map((k) => (
-                        <button
-                          key={k}
-                          type="button"
-                          onClick={() => addSuggestedKeyword(k)}
-                          className="inline-flex items-center gap-1 rounded-full border border-dashed border-line px-3 py-1 text-[15px] text-ink3 hover:border-lime-dark hover:text-ink"
-                        >
-                          + {k}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <p className="mb-1.5 text-[14px] text-ink3">要查詢的關鍵字</p>
-                <div className="flex flex-wrap gap-2">
-                  {activeKeywords.map((k) => (
-                    <span
-                      key={k}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-line bg-inset px-3 py-1 text-[15px] text-ink2"
-                    >
-                      {k}
-                      <button
-                        type="button"
-                        onClick={() => removeKeyword(k)}
-                        className="text-ink3 hover:text-fail"
-                        aria-label={`移除 ${k}`}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                  {activeKeywords.length === 0 && (
-                    <span className="text-[15px] text-ink3">
-                      {suggestedKeywords.length > 0 ? "（還沒加入任何關鍵字，點上面的建議或自己輸入）" : "（沒有抓到候選關鍵字，自己加一個試試）"}
-                    </span>
-                  )}
-                </div>
-                <div className="mt-3 flex gap-2">
-                  <input
-                    value={keywordInput}
-                    onChange={(e) => setKeywordInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addCustomKeyword();
-                      }
-                    }}
-                    placeholder="輸入自己的關鍵字…"
-                    className="input-mono flex-1"
-                  />
-                  <button type="button" onClick={addCustomKeyword} className="btn-line">
-                    新增
-                  </button>
-                  <button
-                    type="button"
-                    onClick={runKeywordCheck}
-                    disabled={keywordLoading || activeKeywords.length === 0}
-                    className="btn-lime whitespace-nowrap"
-                  >
-                    {keywordLoading ? "查詢中…" : `查詢（${activeKeywords.length} 個關鍵字 × 2 引擎）`}
-                  </button>
-                </div>
-                {keywordError && <p className="mt-2 text-[15px] text-fail">{keywordError}</p>}
+            {candidates && (
+              <div className="mt-12">
+                <DashSection id="forum" title="網友相關問題" desc="網友在 Dcard、PTT、Threads、Mobile01、FB 社團問過的相關問題，點開看原文">
+                  <ForumTags candidates={candidates} />
+                </DashSection>
               </div>
-
-              {Object.keys(keywordResults).length > 0 && (
-                <div className="mt-4 space-y-6">
-                  {activeKeywords
-                    .filter((k) => keywordResults[k])
-                    .map((k) => (
-                      <div key={k}>
-                        <p className="mb-2 text-[15px] font-semibold text-ink2">「{k}」</p>
-                        <div className="space-y-3">
-                          {keywordResults[k].length === 0 ? (
-                            <p className="text-[15px] text-ink3">
-                              這個關鍵字沒有查到結果（可能沒設 API key 或呼叫失敗）
-                            </p>
-                          ) : (
-                            keywordResults[k].map((r) => <BrandVisibilityCard key={r.engine} result={r} />)
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              )}
-              </DashSection>
-            </div>
+            )}
 
             {/* GEO 健檢的「AI 爬蟲存取」頁：11-02 封存的技術檢測＋改善建議，11-04 加回來。
                 23 項深度健檢、結構化資料、總分報告圖搬到 SEO 健檢（兩條獨立的檢測）。 */}
@@ -4455,8 +4224,8 @@ export default function HomeClient({
                 pageWords={status?.pageWords}
                 crawledPages={status?.progress.crawled ?? 0}
                 keywordPage={
-                  Object.keys(allKeywordResults).length > 0
-                    ? { keywords: allKeywordOrder, results: allKeywordResults, citedDomains, diagnosis }
+                  Object.keys(recommendAsKeywordResults).length > 0
+                    ? { keywords: Object.keys(recommendAsKeywordResults), results: recommendAsKeywordResults, citedDomains, diagnosis }
                     : null
                 }
               />

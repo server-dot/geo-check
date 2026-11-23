@@ -95,7 +95,7 @@ export default function AiCitesCompetitorArticlePage() {
 
             <h2 className="mt-11 text-[24px] md:text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
-              回到 <Link href="/">健檢</Link>，用同一組關鍵字重新查一次「關鍵字 AI 能見度」——這一項可以自己輸入想搶的主題，
+              回到 <Link href="/">健檢</Link>，在「推薦題表現」按「換題目重問」，用同一組題目再問一次 AI，也可以自己寫想搶的主題，
               不用等重跑整份健檢。AI 的回答會依當下搜尋結果變動，同一個問題隔幾天問結果可能不一樣，
               看的是有沒有往「開始出現在候選名單裡」的方向移動，不用預期一次就衝到第一名。
             </p>
