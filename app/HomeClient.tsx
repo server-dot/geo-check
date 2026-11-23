@@ -4013,11 +4013,12 @@ export default function HomeClient({
               {brandTable && recommend ? (
                 <OverviewBoard
                   table={brandTable}
-                  questions={recommend.questions}
                   brandChecks={engine.brandVisibility}
                   sentiment={sentiment}
                   profile={profile}
                   citedPages={citedPagesAll}
+                  names={recommend.names}
+                  rivalMap={recommend.rivalMap}
                   onGo={goPage}
                 />
               ) : (

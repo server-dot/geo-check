@@ -19,7 +19,7 @@ interface AxisLike {
   low: string;
   high: string;
 }
-interface RivalMapLike {
+export interface RivalMapLike {
   x: AxisLike;
   y: AxisLike;
   self: { x: number; y: number; why: string; url?: string; type?: string; dims?: (DimLike | null)[] };
@@ -160,6 +160,12 @@ function Plot({ map, selfName, pick, onPick }: { map: RivalMapLike; selfName: st
       })}
     </svg>
   );
+}
+
+// 總覽用的縮圖：同一張定位圖，不帶右邊的逐軸對比；點哪一家都是去完整頁
+export function RivalMapMini({ names, rivalMap, onOpen }: { names: NameLike[]; rivalMap: RivalMapLike; onOpen: () => void }) {
+  const selfName = shortName(names.find((n) => n.isSelf)?.name ?? "你");
+  return <Plot map={spreadOut(rivalMap)} selfName={selfName} pick="" onPick={onOpen} />;
 }
 
 export function CompetitorCompare({
