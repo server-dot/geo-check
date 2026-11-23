@@ -49,24 +49,55 @@ function buildPrompt(brandName: string, answers: SentimentInput[], owned: Set<st
       .split('\n')
       .map((l) => (lineFromOwned(l, a.citations, owned) ? `${l} ${OWNED_TAG}` : l))
       .join('\n');
-  const blocks = answers.map((a, i) => `[${i}] ${shortEngine(a.engine)}：\n${tag(a).slice(0, 2500)}`).join('\n\n---\n\n');
+  const blocks = answers.map((a, i) => `[${i}] ${shortEngine(a.engine)}：\n${tag(a)}`).join('\n\n---\n\n');
   return `下面是幾個 AI 回答裡提到「${brandName}」的段落。請整理出 AI 對「${brandName}」這個品牌本身的評價，分成正面跟負面。
 
 規則：
 - 只抓在講「${brandName}」的句子。講整個產品類別、講別的品牌、一般衛教知識，都不算。
 - 中性的事實（官網網址、成立年份、在哪裡買得到、產品有哪些）不算評價，不要抓。
 - AI 轉述「${brandName}」自己寫的內容，不算別人對它的評價。例如「${brandName}」的文章批評某個工具不準、自己測出能見度低，AI 把這些講成「${brandName}」的缺點——這是誤讀，不要抓。
-- 句尾標了「${OWNED_TAG}」的，是 AI 在轉述「${brandName}」自己寫的東西，不是外界的評價，不要當負面說法抓。
+- 句尾標了「${OWNED_TAG}」的，只是在轉述「${brandName}」自己文章裡的內容就不要抓；如果是 AI 看了它的網站之後自己下的評語（例如資訊不夠完整、案例不足），要抓。
+- 每一段都要從頭看到尾。回答有列缺點、風險、疑慮的小節時，每一個小節各抓一條負面，不要只抓第一個，也不要把不同的缺點併成一條。
 - 回答講的是名字很像的其他對象（別的店、別的公司、別的品牌），那一段整段跳過。
-- AI 自己的推測（「可能」「或許」「需要不斷提升」這種沒有根據的套話）不算評價。
+- 沒有根據的套話（「或許」「需要不斷提升」）不算評價。有講出具體理由的風險或疑慮（例如某項資訊沒公開、只有一個人負責）算負面評價。
 - 同一個意思在不同回答出現，合併成一條；每一段都要附上那一段裡的原句當證據。
 - 每條說法用台灣人平常講話的方式寫，具體、短（20 字內），例如「配方溫和、適合敏感肌」「價格比開架品牌高」。不要寫「支持精緻的日常護理」這種空話。
-- 證據的 quote 必須是那一段原文裡「一字不差」的連續片段（10～40 字），不要改寫、不要補字。找不到原句的段落不要列。
+- 證據的 quote 必須是那一段原文裡「一字不差」的連續片段（10～40 字），只抄最能代表這個評價的一句話，不要改寫、補字，不要把條列的好幾點接成一句。小節標題本身就講出評價時，直接抄那個標題當 quote（不含編號）。找不到原句的段落不要列。
 - 沒有評價就給空陣列，不要硬湊。
 
 ${blocks}
 
 只回傳 JSON：{"themes":[{"theme":"…","polarity":"positive","evidence":[{"answer":0,"quote":"…"},{"answer":2,"quote":"…"}]}]}`;
+}
+
+const norm = (t: string) => t.replace(/[\s*_`#>|\[\]()]/g, '');
+
+// 模型抄原句時常把條列接成一大句，整句比對會被刷掉（11-23 aiqkangber：5 條負評全抓到、全因此消失）。
+// 整句對不上就留下原文裡找得到的最長一段，顯示的引文一定是原文。
+export function verbatimPart(text: string, quote: string): string | null {
+  const q = quote.trim();
+  if (norm(q).length >= 4 && text.includes(norm(q))) return q;
+  const parts = q.match(/[^，。；、：]+[，。；、：]?/g) ?? [];
+  let best = '';
+  for (let i = 0; i < parts.length; i++) {
+    for (let j = i + 1; j <= parts.length; j++) {
+      const run = parts.slice(i, j).join('').replace(/[，。；、：]$/, '').trim();
+      if (!text.includes(norm(run))) break;
+      if (norm(run).length > norm(best).length) best = run;
+    }
+  }
+  return norm(best).length >= 8 ? best : null;
+}
+
+// 那一段所在的小節標題（原文，去掉 # 和編號）。引文只剩條列裡的一小段時，標題比殘句看得懂
+function headingOf(answer: string, part: string): string | null {
+  const lines = answer.split('\n');
+  const at = lines.findIndex((l) => norm(l).includes(norm(part)));
+  for (let i = at; i >= 0; i--) {
+    const m = lines[i].match(/^#{1,6}\s+(?:[\d一二三四五六七八九十]+[.、．]\s*)?(.+)$/);
+    if (m) return m[1].replace(/\*\*/g, '').trim();
+  }
+  return null;
 }
 
 export async function extractSentiment(
@@ -86,7 +117,7 @@ export async function extractSentiment(
       const raw = await askJson(
         attempt === 0 ? prompt : `${prompt}\n\n注意：最外層一定要是 {"themes":[…]}，每條都要有 theme、polarity、evidence（含 answer 編號跟 quote 原句），不要用其他格式。`,
         apiKey,
-        1200,
+        3000,
       );
       parsed = parseJson<Parsed>(raw);
     } catch {
@@ -96,7 +127,6 @@ export async function extractSentiment(
   if (!parsed || !Array.isArray(parsed.themes)) return null;
   // 次數不能信模型自己報：2026-11-02 實測它把只出現在 1 段的說法標成 3 段。
   // 每段都要附原句，回頭到那一段原文核對得到才算。
-  const norm = (t: string) => t.replace(/[\s*_`#>|\[\]()]/g, '');
   const texts = answers.map((a) => norm(a.answer));
   const themes: SentimentTheme[] = [];
   for (const t of parsed.themes) {
@@ -104,17 +134,16 @@ export async function extractSentiment(
     if (t.polarity !== 'positive' && t.polarity !== 'negative') continue;
     const ev = Array.isArray(t.evidence) ? t.evidence : [];
     const ok = new Map<number, string>();
+    const exact = new Set<number>();
     for (const e of ev as { answer?: unknown; quote?: unknown }[]) {
       if (typeof e?.answer !== 'number' || typeof e.quote !== 'string') continue;
-      const q = e.quote.trim();
-      if (norm(q).length < 4 || !texts[e.answer]?.includes(norm(q))) continue;
-      // 負評的原句如果出自品牌自己的文章（那一行的來源全是品牌的），是誤讀，不算
-      if (t.polarity === 'negative') {
-        const a = answers[e.answer];
-        const line = a.answer.split('\n').find((l) => norm(l).includes(norm(q)));
-        if (line && lineFromOwned(line, a.citations, owned)) continue;
-      }
-      if (!ok.has(e.answer)) ok.set(e.answer, q);
+      const q = texts[e.answer] ? verbatimPart(texts[e.answer], e.quote) : null;
+      if (!q) continue;
+      const whole = q === e.quote.trim();
+      const shown = whole ? q : headingOf(answers[e.answer].answer, q) ?? q;
+      // 同一段有整句核對得到的，優先於只剩一小段的
+      if (!ok.has(e.answer) || (whole && !exact.has(e.answer))) ok.set(e.answer, shown);
+      if (whole) exact.add(e.answer);
     }
     if (ok.size === 0) continue;
     const [first, quote] = [...ok.entries()][0];
@@ -135,7 +164,10 @@ export async function extractSentiment(
 // 負評再覆核一次：只問「這句的主詞是不是品牌本身」。
 // 11-04 aiqkangber：ChatGPT 寫「技術建議的準確性：…Contenta 工具在技術建議中指出的問題有時並不準確」，
 // 講的是 Contenta，那行也沒附來源（規則認不出出自品牌自己的文章），抽取時一半機率被當成 Q kangber 的負評。
-// 一次抽取要顧太多規則，單問一題比較穩。呼叫失敗就照原樣保留。
+// 一次抽取要顧太多規則，單問一題比較穩。
+// 11-23 aiqkangber：原本「那一行只引用品牌自己的網站」的負評直接刪掉，但 AI 看完官網後下的評語
+// （案例多為自有作品、資安資訊不完整）也是引用官網，全被誤刪。改成交給這一步判斷是轉述還是評語；
+// 呼叫失敗時才退回舊規則，把只引用自己網站的負評拿掉。
 async function checkNegatives(
   brandName: string,
   themes: SentimentTheme[],
@@ -146,16 +178,20 @@ async function checkNegatives(
   const neg = themes.map((t, i) => [t, i] as const).filter(([t]) => t.polarity === 'negative');
   if (neg.length === 0) return themes;
   const context = (t: SentimentTheme) => {
-    const n = (x: string) => x.replace(/[\s*_`#>|\[\]()]/g, '');
     for (const a of answers) {
       const lines = a.answer.split('\n');
-      const at = lines.findIndex((l) => n(l).includes(n(t.quote)));
+      const q = norm(t.quote);
+      const at = lines.findIndex((l) => norm(l).includes(q) || (norm(l).length >= 8 && q.endsWith(norm(l))));
       if (at >= 0) {
+        // 往上到小節標題（最多 8 行）、往下多帶幾行：只看前面幾行常看不出這句在批評什麼
+        let from = at;
+        while (from > 0 && at - from < 8 && !/^#{1,6}\s/.test(lines[from])) from--;
+        const to = lines.findIndex((l, i) => i > at && /^#{1,6}\s/.test(l));
         return lines
-          .slice(Math.max(0, at - 4), at + 1)
+          .slice(from, Math.min(to < 0 ? lines.length : to, at + 7))
           .map((l) => (lineFromOwned(l, a.citations, owned) ? `${l} ${OWNED_TAG}` : l))
           .join('\n')
-          .slice(-700);
+          .slice(0, 1200);
       }
     }
     return t.quote;
@@ -165,35 +201,38 @@ async function checkNegatives(
 
 以下都算「不是」：
 - 句子的主詞是別的東西：某個工具、某個平台、整個產業、別的品牌（例如「某某工具的建議不準確」）
-- AI 在轉述「${brandName}」自己寫的文章或測試結果（段落標了「${OWNED_TAG}」的通常是這種）
+- AI 在轉述「${brandName}」自己寫的文章或測試結果（段落標了「${OWNED_TAG}」的要特別看：轉述文章裡講的事就算「不是」；AI 看了它的網站後，自己評論它哪裡不足，算「是」）
 - 講的是名字很像的其他對象
-- AI 沒有根據的推測或套話（「競爭激烈，需要不斷提升」）
+- 沒有根據的套話（「競爭激烈，需要不斷提升」）。有講出具體理由的風險或疑慮算「是」
 
 ${items}
 
-只回傳 JSON：{"keep":[0,2]}，keep 放「真的在批評 ${brandName}」的編號；都不是就回 {"keep":[]}。`;
+每一條都要回答（共 ${neg.length} 條），只回傳 JSON：{"verdicts":{${neg.map((_, k) => `"${k}":"是或不是"`).join(',')}}}`;
+  const fallback = () => themes.filter((t) => t.polarity === 'positive' || !context(t).split('\n').some((l) => norm(l).includes(norm(t.quote)) && l.includes(OWNED_TAG)));
   let raw = '';
   try {
     raw = await askJson(prompt, apiKey, 200);
   } catch {
-    return themes;
+    return fallback();
   }
-  const parsed = parseJson<{ keep?: unknown }>(raw);
-  if (!parsed || !Array.isArray(parsed.keep)) return themes;
-  const keep = new Set(parsed.keep.filter((x): x is number => typeof x === 'number').map((k) => neg[k]?.[1]));
+  const parsed = parseJson<{ verdicts?: Record<string, unknown> }>(raw);
+  if (!parsed?.verdicts || typeof parsed.verdicts !== 'object') return fallback();
+  // 逐條回答：原本請它回編號清單、範例寫 [0,2]，它每次都照抄 [0,2]（11-23 連跑 5 次）
+  const verdicts = parsed.verdicts;
+  const keep = new Set(neg.flatMap(([, i], k) => (String(verdicts[k] ?? '').trim() === '是' ? [i] : [])));
   return themes.filter((t, i) => t.polarity === 'positive' || keep.has(i));
 }
 
 // 拿來歸納的素材：推薦題裡「答案真的點名你」的回答＋用你的名字直接問的回答
 export function sentimentInputs(
   rec: { questions: { results: { engine: string; answer: string; namedSelf: boolean; citations?: { url: string }[] }[] }[] },
-  brandChecks: { engine: string; answer: string; citations?: { url: string }[] }[],
+  brandChecks: { engine: string; answer: string; citations?: { url: string }[]; wrongEntity?: string }[],
 ): SentimentInput[] {
   return [
     ...rec.questions.flatMap((q) =>
       q.results.filter((r) => r.namedSelf).map((r) => ({ engine: r.engine, answer: r.answer, citations: r.citations })),
     ),
-    ...brandChecks.map((b) => ({ engine: b.engine, answer: b.answer, citations: b.citations })),
+    ...brandChecks.filter((b) => !b.wrongEntity).map((b) => ({ engine: b.engine, answer: b.answer, citations: b.citations })),
   ];
 }
 

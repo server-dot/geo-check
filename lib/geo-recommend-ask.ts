@@ -20,7 +20,7 @@ export async function askPickedQuestions(args: {
   picked: PickedQuestion[];
   pages: MatchPage[]; // 從檢測紀錄打開的報告沒有爬到的頁面（只存在記憶體 1 小時）→ 空陣列，第 2 關就不判斷
   siteExternalLinks: string[];
-  brandChecks: { engine: string; answer: string; citations: { url: string; title: string; isSelf: boolean }[] }[];
+  brandChecks: { engine: string; answer: string; citations: { url: string; title: string; isSelf: boolean }[]; wrongEntity?: string }[];
   insights: { sentiment: Sentiment | null; profile: BrandProfile | null } | null;
   apiKey: string;
 }): Promise<RecommendVisibility | null> {
@@ -42,17 +42,18 @@ export async function askPickedQuestions(args: {
   }).catch(() => new Set<string>());
   const rv = { ...rec, ...markOwnedQuestions(rec.questions, owned) };
 
+  const rightReviews = reviewAnswers.filter((a) => !a.wrongEntity);
   const rivals = topRivals(rv.names);
   const all = rv.questions.flatMap((q) => q.results.map((r) => ({ engine: r.engine, answer: r.answer })));
   const [contentMatch, sentiment] = await Promise.all([
     pages.length > 0 ? matchQuestionsToPages(rv.questions, pages, apiKey).catch(() => null) : Promise.resolve(null),
     // 評價：推薦題裡點名你的回答也有描述你，加進去重新歸納；失敗就沿用健檢時那份
-    extractSentiment(rv.brandName, [...sentimentInputs(rv, brandChecks), ...reviewAnswers], apiKey, owned)
+    extractSentiment(rv.brandName, [...sentimentInputs(rv, brandChecks), ...rightReviews], apiKey, owned)
       .then((s) => (s ? { ...s, reviewQuery: insights?.sentiment?.reviewQuery, reviewAnswers: insights?.sentiment?.reviewAnswers } : insights?.sentiment ?? null))
       .catch(() => insights?.sentiment ?? null),
   ]);
   const [positioning, rivalMap] = await Promise.all([
-    extractPositioning(selfName, rivals, [...all, ...reviewAnswers], apiKey).catch(() => null),
+    extractPositioning(selfName, rivals, [...all, ...rightReviews], apiKey).catch(() => null),
     buildRivalMap(rv, input, origin, apiKey).catch(() => null),
   ]);
   return { ...rv, contentMatch, sentiment, positioning, rivalMap, profile: insights?.profile ?? null };

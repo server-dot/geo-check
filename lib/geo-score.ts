@@ -1,3 +1,4 @@
+import { crawlersOnly } from './geo-ai-crawlers';
 import type { CheckStatus } from './geo-audit-rules';
 
 // ── GEO：五分類分數計算（前後端共用）──────────────────────
@@ -17,7 +18,7 @@ export interface Category5 {
 }
 
 export interface ScoreEngineInput {
-  results: { status: string }[];
+  results: { ua: string; status: string }[];
   contentSignals: { declared: boolean } | null;
   llmsTxt: { exists: boolean | null; quality: { status: string } | null };
 }
@@ -66,7 +67,7 @@ export function buildCategories5(engine?: ScoreEngineInput, audit?: ScoreCheckIn
   };
 
   if (engine) {
-    for (const b of engine.results) {
+    for (const b of crawlersOnly(engine.results)) {
       bump("AI 可達性", b.status === "allowed" ? "ok" : b.status === "blocked" ? "fail" : "warn");
     }
     if (engine.contentSignals) bump("AI 可達性", engine.contentSignals.declared ? "ok" : "warn");

@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 const LAYERS = [
   {
     name: "AI 爬蟲的存取權限",
-    what: "GPTBot、ClaudeBot、PerplexityBot 等 8 家爬蟲的實際請求結果",
+    what: "GPTBot、ClaudeBot、PerplexityBot 等 7 家爬蟲的實際請求結果",
     how: "讀 robots.txt 的規則，再用各家 UA 實際發一次請求對照",
     verdicts: "可存取 / 被擋 / 無法判定 / 政策允許但實測被擋",
   },

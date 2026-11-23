@@ -24,6 +24,7 @@ export interface VisibilityAnswer {
   query: string;
   answer: string;
   citedSelf: boolean;
+  wrongEntity?: string; // 用品牌名問、回答卻在講別人時，那個對象的名字（見 geo-answer-subject.ts）
   citations: { url: string; title: string; isSelf: boolean }[];
 }
 

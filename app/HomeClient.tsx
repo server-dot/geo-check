@@ -2,7 +2,7 @@
 
 import { BrandProfileView } from "@/components/report/BrandProfile";
 import { CrawlerTiles } from "@/components/report/CrawlerTiles";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { StepAuditIcon, StepInputIcon, StepReportIcon } from "@/components/marketing/StepIcons";
 import Link from "next/link";
@@ -15,6 +15,7 @@ import { DiagnosisCards } from "@/components/report/DiagnosisCards";
 import { buildDiagnosis, GATE_SYMBOL, VERDICT_LABEL, VERDICT_STATE, type Diagnosis, type GateState } from "@/lib/geo-diagnosis";
 import type { ContentMatch } from "@/lib/geo-content-match";
 import { buildCategories5, computeOverallScore, CATEGORY5_KEY_MAP, CATEGORY5_ORDER, type Category5 } from "@/lib/geo-score";
+import { crawlersOnly, geminiPermission } from "@/lib/geo-ai-crawlers";
 import { track } from "@/lib/ga";
 import { SITE_NAME } from "@/lib/site";
 // 報告目錄切換：每一頁要顯示哪些區塊（section id）。沒列的頁就只顯示同名那一區
@@ -69,7 +70,7 @@ function useCountUpProgress(durationMs = 1100): number {
 }
 
 const HOME_CHECKS = [
-  { name: "AI 爬蟲的存取權限", why: "GPTBot / ClaudeBot / PerplexityBot 等 8 家實際請求" },
+  { name: "AI 爬蟲的存取權限", why: "GPTBot / ClaudeBot / PerplexityBot 等 7 家實際請求" },
   { name: "AI 讀到的內容", why: "關掉 JavaScript 後量可讀字數、title、h1" },
   { name: "內容使用授權（Content Signals）", why: "search / ai-input / ai-train 三項的表態" },
   { name: "llms.txt", why: "有沒有、格式完不完整、連結解不解得開" },
@@ -83,7 +84,7 @@ const HOME_STEPS = [
   {
     no: "02",
     title: "七層檢測 + 深度健檢",
-    body: "以 8 家爬蟲的身分實際請求、關掉 JavaScript 量內容、再去問 AI 引擎。",
+    body: "以 7 家爬蟲的身分實際請求、關掉 JavaScript 量內容、再去問 AI 引擎。",
     Icon: StepAuditIcon,
   },
   { no: "03", title: "看報告、排順序", body: "總分與逐項判定，需處理的附上量到的值，可直接轉給工程師。", Icon: StepReportIcon },
@@ -147,6 +148,7 @@ interface VisibilityCardData {
   query: string;
   answer: string;
   citedSelf: boolean;
+  wrongEntity?: string; // 用品牌名問，AI 卻在講這個別人
   // 推薦題才有：回答正文有沒有真的點名你。undefined 代表這張卡不分這一層（品牌題、關鍵字查詢）
   namedSelf?: boolean;
   citations: { url: string; title: string; isSelf: boolean }[];
@@ -185,7 +187,7 @@ interface RecommendVisibility {
     themes: { theme: string; polarity: "positive" | "negative"; count: number; engines: string[]; quote: string; quoteEngine: string }[];
     answerCount: number;
     reviewQuery?: string;
-    reviewAnswers?: { engine: string; query: string; answer: string; citedSelf: boolean; citations: { url: string; title: string; isSelf: boolean }[] }[];
+    reviewAnswers?: { engine: string; query: string; answer: string; citedSelf: boolean; wrongEntity?: string; citations: { url: string; title: string; isSelf: boolean }[] }[];
   } | null;
   positioning?: { brand: string; isSelf: boolean; traits: { text: string; quote: string; engine: string }[] }[] | null;
   rivalMap?: import("@/lib/geo-rival-map").RivalMap | null;
@@ -1508,7 +1510,7 @@ function ReportBoard({
                           {r.engine}
                         </span>
                         <span style={{ fontSize: 12, whiteSpace: "nowrap", flex: "none", color: r.citedSelf ? "var(--rb-ok)" : "var(--rb-fail)" }}>
-                          {r.citedSelf ? "🟢 引用了你的網站" : "🔴 沒有引用你的網站"}
+                          {r.wrongEntity ? `🔴 認成 ${r.wrongEntity}` : r.citedSelf ? "🟢 引用了你的網站" : "🔴 沒有引用你的網站"}
                         </span>
                       </div>
                       {r.advice && <div style={{ fontSize: 12.5, lineHeight: 1.65, color: "var(--rb-ink2)" }}>{r.advice}</div>}
@@ -3006,7 +3008,7 @@ function ResponsesExplorer({
   );
   // 「品牌評價」的引文有一部分出自這題，全文要放進來才追得到出處
   (rec.sentiment?.reviewAnswers ?? []).forEach((a, ai) =>
-    rows.push({ id: `v${ai}`, kind: "評價題", qi: null, question: a.query, engine: shortEngine(a.engine), r: { ...a, advice: "" }, named: true, brands: [] }),
+    rows.push({ id: `v${ai}`, kind: "評價題", qi: null, question: a.query, engine: shortEngine(a.engine), r: { ...a, advice: "" }, named: !a.wrongEntity, brands: [] }),
   );
   const engines = ["全部", ...Array.from(new Set(rows.map((r) => r.engine)))];
   const shown = rows.filter((r) => (!compact || (r.kind === "推薦題" && r.qi === onlyQi)) && (engineFilter === "全部" || r.engine === engineFilter) && (namedFilter === "all" || (namedFilter === "yes" ? r.named : !r.named)));
@@ -3065,7 +3067,7 @@ function ResponsesExplorer({
                   {row.question}
                 </td>
                 {!compact && <td className="px-3 py-3 text-ink2">{row.engine}</td>}
-                <td className="px-3 py-3">{row.named ? <span className="font-semibold text-ok">✓ 有</span> : <span className="font-semibold text-fail">✗ 沒有</span>}</td>
+                <td className="px-3 py-3">{row.r.wrongEntity ? <span className="font-semibold text-fail">✗ 認成 {row.r.wrongEntity}</span> : row.named ? <span className="font-semibold text-ok">✓ 有</span> : <span className="font-semibold text-fail">✗ 沒有</span>}</td>
                 <td className="px-3 py-3 text-[14px] text-ink2">{row.brands.length ? row.brands.slice(0, 4).join("、") + (row.brands.length > 4 ? ` 等 ${row.brands.length} 個` : "") : "—"}</td>
                 {!compact && <td className="mono px-3 py-3 text-right text-[14px] text-ink2">{row.r.citations.length}</td>}
               </tr>
@@ -3105,7 +3107,7 @@ function ResponsesExplorer({
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-ink3">已提及</dt>
-                  <dd className={open.named ? "font-semibold text-ok" : "font-semibold text-fail"}>{open.named ? "✓ 有" : "✗ 沒有"}</dd>
+                  <dd className={open.named ? "font-semibold text-ok" : "font-semibold text-fail"}>{open.r.wrongEntity ? `✗ 認成 ${open.r.wrongEntity}` : open.named ? "✓ 有" : "✗ 沒有"}</dd>
                 </div>
               </dl>
               {open.brands.length > 0 && (
@@ -3146,6 +3148,7 @@ function CompactAnswerCard({ result }: { result: VisibilityCardData }) {
   return (
     <div className="flex flex-col rounded-[10px] border border-line bg-card p-5">
       <p className="text-[14px] font-medium text-ink2">{shortEngine(result.engine)}</p>
+      {result.wrongEntity && <p className="mt-1 text-[15px] font-semibold text-fail">✗ AI 認成別人：{result.wrongEntity}</p>}
       <div className="mt-3 text-[15px] leading-relaxed text-ink2">{renderAnswerMarkdown(result.answer, result.citations)}</div>
       {result.citations.length > 0 && (
         <div className="mt-3 border-t border-line pt-3">
@@ -3544,7 +3547,8 @@ export default function HomeClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在掛載時跑一次
   }, []);
 
-  const engine = status?.engine;
+  const rawEngine = status?.engine;
+  const engine = useMemo(() => (rawEngine ? { ...rawEngine, results: crawlersOnly(rawEngine.results) } : rawEngine), [rawEngine]);
   const reportKind: AuditKind = status?.kind ?? "geo";
   const unknownCount = engine?.results.filter((r) => r.status === "unknown").length ?? 0;
 
@@ -3925,7 +3929,7 @@ export default function HomeClient({
             {sentiment && (
               <div className="mt-12">
                 <DashSection id="sentiment" title="品牌評價" desc={`AI 回答中對 ${reportBrand || reportHost} 的正面與負面描述`}>
-                  <SentimentSection themes={sentiment.themes} answerCount={sentiment.answerCount} reviewQuery={sentiment.reviewQuery} />
+                  <SentimentSection wrong={[...engine.brandVisibility, ...(sentiment.reviewAnswers ?? [])].flatMap((a) => (a.wrongEntity ? [{ engine: shortEngine(a.engine), who: a.wrongEntity }] : []))} themes={sentiment.themes} answerCount={sentiment.answerCount} reviewQuery={sentiment.reviewQuery} />
                 </DashSection>
               </div>
             )}
@@ -4196,6 +4200,7 @@ export default function HomeClient({
             <div>
             <h2 className="eyebrow mb-3">各家 AI 爬蟲的存取權限</h2>
             <BotAccessList results={engine.results} origin={engine.origin} />
+            {rawEngine && geminiPermission(rawEngine.results) && <p className="mt-3 text-[14px] text-ink3">{geminiPermission(rawEngine.results)}</p>}
             </div>
 
             {engine.contentSignals && <ContentSignalsSection signals={engine.contentSignals} />}

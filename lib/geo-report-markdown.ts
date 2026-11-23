@@ -1,3 +1,4 @@
+import { crawlersOnly, geminiPermission } from './geo-ai-crawlers';
 import type { AuditJob } from './geo-audit-jobs';
 import { buildCategories5, computeOverallScore } from './geo-score';
 import { tallyCitedDomains } from './geo-cited-domains';
@@ -86,10 +87,13 @@ export function buildReportMarkdown(job: AuditJob): string {
   out.push('');
   out.push('| 爬蟲 | User-Agent | 判定 | 依據 |');
   out.push('| --- | --- | --- | --- |');
-  for (const b of engine.results) {
+  for (const b of crawlersOnly(engine.results)) {
     out.push(`| ${esc(b.label)} | ${esc(b.ua)} | ${BOT_STATUS_LABEL[b.status] ?? b.status} | ${esc(b.matchedRule)} |`);
   }
   out.push('');
+
+  const gemini = geminiPermission(engine.results);
+  if (gemini) out.push(gemini, '');
 
   // ── 內容使用授權 ──
   if (engine.contentSignals) {
@@ -137,7 +141,7 @@ export function buildReportMarkdown(job: AuditJob): string {
     for (const r of engine.brandVisibility) {
       out.push(`### ${r.engine}`);
       out.push('');
-      out.push(`- 判定：${r.citedSelf ? '引用了你自己的網站' : '沒有引用你自己的網站'}`);
+      out.push(`- 判定：${r.wrongEntity ? `AI 認成別人（${esc(r.wrongEntity)}）` : r.citedSelf ? '引用了你自己的網站' : '沒有引用你自己的網站'}`);
       out.push(`- 問題：${esc(r.query)}`);
       out.push('');
       out.push('回答原文：');

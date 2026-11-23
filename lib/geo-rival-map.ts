@@ -1,6 +1,7 @@
 import { SITE_URL } from './site';
 import { paidFetch } from './paid-fetch';
-import { hostnameOf } from './geo-brand-visibility';
+import { brandKeys, handleIsBrand, sameUrl } from './geo-owned-sources';
+import { hostnameOf, isSameSite } from './geo-brand-visibility';
 import { askJson, parseJson, type RecommendInput, type RecommendVisibility } from './geo-recommend-visibility';
 
 // ── 競爭對手分析：市場定位圖 ───────────────────────────────
@@ -39,6 +40,20 @@ export interface RivalMap {
 }
 
 const MAX_POINTS = 10;
+// AI 自己的網站不是任何一家的出處
+const AI_HOSTS = ['chatgpt.com', 'openai.com', 'gemini.google.com', 'perplexity.ai', 'claude.ai', 'copilot.microsoft.com', 'grok.com'];
+
+// 出處要是這次真的查到的網址（sonar 回的 annotations）；對手的出處不能是你自己的站或帳號頁。
+// 11-23 aiqkangber：對手的出處出現 chatgpt.com 和受測者自己的官網，都是模型隨手填的。對不上就不附出處。
+export function checkedSource(url: unknown, found: string[], self: { domain: string; keys: string[]; isSelf: boolean }): string | undefined {
+  if (typeof url !== 'string' || !/^https?:\/\//.test(url)) return undefined;
+  const hit = found.find((f) => sameUrl(f, url));
+  if (!hit) return undefined;
+  const host = hostnameOf(hit);
+  if (AI_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) return undefined;
+  if (!self.isSelf && (isSameSite(host, self.domain) || handleIsBrand(new URL(hit), self.keys))) return undefined;
+  return hit;
+}
 const AXIS_MODEL = 'openai/gpt-4.1';
 const SEARCH_MODEL = 'perplexity/sonar';
 
@@ -129,6 +144,7 @@ export async function buildRivalMap(
   const rivals = picked.peers.map((i) => all[i]);
 
   const domain = hostnameOf(origin);
+  const keys = brandKeys([rv.brandName], domain);
   // 一次丟 10 家，Perplexity 只查了 2 家就交差、4 家一批也常整批跳過或編號對錯（11-18 aiqkangber）；
   // 3 家一批平行查，回傳用名稱對回去（不信編號），你自己放在每一批當參考點
   const BATCH = 3;
@@ -163,16 +179,17 @@ ${list}
         signal: AbortSignal.timeout(60000),
       });
       if (!res.ok) return [];
-      const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+      const data = (await res.json()) as { choices?: { message?: { content?: string; annotations?: { url_citation?: { url?: string } }[] } }[] };
+      const found = (data.choices?.[0]?.message?.annotations ?? []).flatMap((a) => a.url_citation?.url ?? []);
       const p = parseJson<{ items?: Record<string, unknown>[] }>(data.choices?.[0]?.message?.content ?? '');
       // 只收這一批的編號，模型偶爾會回別批的
       // 用名稱對回編號：你自己＝0，這一批的業者＝原本的編號＋1；對不上的丟掉
       const same = (a: string, b: string) => a.replace(/\s/g, '').toLowerCase() === b.replace(/\s/g, '').toLowerCase();
       return (Array.isArray(p?.items) ? p!.items : []).flatMap((it) => {
         const n = String(it.name ?? '');
-        if (same(n, rv.brandName)) return [{ ...it, id: 0 }];
+        if (same(n, rv.brandName)) return [{ ...it, id: 0, url: checkedSource(it.url, found, { domain, keys, isSelf: true }) }];
         const i = ids.find((k) => same(n, rivals[k].name));
-        return i === undefined ? [] : [{ ...it, id: i + 1 }];
+        return i === undefined ? [] : [{ ...it, id: i + 1, url: checkedSource(it.url, found, { domain, keys, isSelf: false }) }];
       });
     } catch {
       return [];
@@ -196,7 +213,7 @@ ${list}
       const why = Array.isArray(val) ? clean(String(val[1] ?? '')).trim().slice(0, 50) : '';
       if (v !== null) s.set(i, { v, why });
     });
-    const url = typeof it.url === 'string' && /^https?:\/\//.test(it.url) ? it.url : undefined;
+    const url = typeof it.url === 'string' ? it.url : undefined;
     rows.push({ id, type: String(it.type ?? '').trim().slice(0, 16), url, s });
   }
   const selfRow = rows.find((r) => r.id === 0);

@@ -369,7 +369,7 @@ ${questions.map((q, i) => `[${i}] ${q}`).join('\n')}
 // 主觀判斷，所以畫面上要保留回答原文讓人核對。
 function buildNamePrompt(answers: { engine: string; question: string; answer: string }[], brandName: string, domain: string, about: string): string {
   const blocks = answers
-    .map((a, i) => `[${i}] 引擎：${a.engine}\n問題：${a.question}\n回答：\n${a.answer.slice(0, 2500)}`)
+    .map((a, i) => `[${i}] 引擎：${a.engine}\n問題：${a.question}\n回答：\n${a.answer}`)
     .join('\n\n---\n\n');
   return `我們在幫「${brandName}」（${domain}）做檢測：拿推薦類問題去問 AI，看 AI 推了誰。下面是幾個 AI 搜尋引擎的回答。請從每個回答裡，抽出「被具體推薦或點名的對象」，並標出它是哪一種。
 ${about ? `\n${brandName} 的官網這樣介紹自己（用來判斷誰跟它是同一類）：\n${about}\n` : ''}
@@ -450,7 +450,8 @@ export async function extractRecommendedNames(
   const byNorm = new Map<string, Entry>();
   const tokens = brandTokens(brandName);
   // 題目裡本來就在問的東西（n8n、Pinecone…）不是「被推薦的人」，模型再怎麼交代
-  // 還是會抽出來，這裡用題目文字反過來擋掉；超過 24 字的多半是文章標題，也不要。
+  // 還是會抽出來，這裡用題目文字反過來擋掉；超過 24 字的多半是文章標題，也不要
+  // （括號補充不算字數：「XX 工作室（某平台接案團隊）」先去掉括號，不然名字會被當成標題丟掉）。
   const questionText = answers.map((a) => a.question.toLowerCase()).join('\n');
   const MAX_NAME_CHARS = 24;
   for (const row of rows) {
@@ -462,7 +463,8 @@ export async function extractRecommendedNames(
       const rawName = typeof n === 'string' ? n : typeof n?.name === 'string' ? n.name : null;
       if (rawName === null) continue;
       const kind: 'brand' | 'channel' = typeof n === 'object' && n?.type === 'channel' ? 'channel' : 'brand';
-      const name = rawName.trim();
+      let name = rawName.trim();
+      if ([...name].length > MAX_NAME_CHARS) name = name.replace(/\s*[（(][^（()）]*[)）]\s*/g, ' ').trim();
       if (!name) continue;
       const key = name.toLowerCase();
       if ([...name].length > MAX_NAME_CHARS) continue;

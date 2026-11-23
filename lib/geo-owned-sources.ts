@@ -43,7 +43,7 @@ function profilePrefix(u: URL): string {
   return `${u.hostname.replace(/^www\./, '')}/${segs.slice(0, n).join('/')}`.toLowerCase();
 }
 
-function handleIsBrand(u: URL, keys: string[]): boolean {
+export function handleIsBrand(u: URL, keys: string[]): boolean {
   const host = u.hostname.replace(/^www\./, '');
   const plat = onPlatform(host);
   if (!plat) return false;

@@ -1036,7 +1036,7 @@ interface SentimentThemeLike {
   quoteEngine: string;
 }
 
-export function SentimentSection({ themes, answerCount, reviewQuery }: { themes: SentimentThemeLike[]; answerCount: number; reviewQuery?: string }) {
+export function SentimentSection({ themes, answerCount, reviewQuery, wrong = [] }: { themes: SentimentThemeLike[]; answerCount: number; reviewQuery?: string; wrong?: { engine: string; who: string }[] }) {
   const pos = themes.filter((t) => t.polarity === "positive").length;
   const neg = themes.length - pos;
   return (
@@ -1053,6 +1053,12 @@ export function SentimentSection({ themes, answerCount, reviewQuery }: { themes:
           {neg === 0 && themes.length > 0 ? "，這次 AI 沒有講到你的缺點" : ""}。每句引文的回答全文在下方「AI 回答紀錄」
         </p>
       </div>
+      {wrong.length > 0 && (
+        <p className="border-b border-line bg-fail/5 px-4 py-3 text-[15px] text-ink">
+          <span className="font-semibold text-fail">✗ AI 認成別人：</span>
+          {wrong.map((w) => `${w.engine} 講的是「${w.who}」`).join("；")}，不列入評價
+        </p>
+      )}
       {themes.length === 0 ? (
         <p className="px-4 py-4 text-[15px] text-ink3">這次 AI 提到你時只講事實（官網、產品），沒有評價。</p>
       ) : (

@@ -67,7 +67,7 @@ export default function RobotsTxtArticlePage() {
 
             <h2 className="mt-11 text-[24px] md:text-[30px]">問題長什麼樣</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
-              健檢會用 8 家 AI 爬蟲各自真實的 User-Agent 實際發送請求，對照 robots.txt 的規則，
+              健檢會用 7 家 AI 爬蟲各自真實的 User-Agent 實際發送請求，對照 robots.txt 的規則，
               只要有任何一家被 Disallow 擋下，這一項就會標成 <span className="t-fail">需處理</span>。
               下面是一個典型會連 AI 爬蟲一起擋掉的規則：
             </p>

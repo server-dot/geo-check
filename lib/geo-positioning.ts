@@ -44,7 +44,7 @@ export async function extractPositioning(
   apiKey: string,
 ): Promise<BrandPositioning[] | null> {
   if (answers.length === 0 || rivals.length === 0) return null;
-  const blocks = answers.map((a, i) => `[${i}] ${shortEngine(a.engine)}：\n${a.answer.slice(0, 2500)}`).join('\n\n---\n\n');
+  const blocks = answers.map((a, i) => `[${i}] ${shortEngine(a.engine)}：\n${a.answer}`).join('\n\n---\n\n');
   const brands = [selfName, ...rivals];
   const prompt = `下面是幾個 AI 回答推薦類問題的內容。請替這幾個品牌，各整理出 AI 用來形容它的特點：${brands.map((b) => `「${b}」`).join('、')}。
 

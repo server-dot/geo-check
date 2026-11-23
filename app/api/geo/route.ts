@@ -5,6 +5,7 @@ import { getSessionUser, isAdmin } from '@/lib/auth';
 import { reserveAudit, releaseAudit, type AuditKind } from '@/lib/quota';
 import {
   checkAiCrawlerAccess,
+  isPolicyOnly,
   parseContentSignals,
   type RobotsStatus,
 } from '@/lib/geo-ai-crawlers';
@@ -14,6 +15,7 @@ import { probeBotAccess, type ProbeResult } from '@/lib/geo-bot-probe';
 import { checkBrandVisibility, guessBrandName } from '@/lib/geo-brand-visibility';
 import { buildRecommendCandidates } from '@/lib/geo-real-questions';
 import { resolveBrandName, type RecommendInput } from '@/lib/geo-recommend-visibility';
+import { markWrongEntity } from '@/lib/geo-answer-subject';
 import { extractProfile } from '@/lib/geo-brand-profile';
 import { extractSentiment, fetchReviewAnswers, selfShortName, sentimentInputs } from '@/lib/geo-sentiment';
 import { detectOwnedSources, markOwned } from '@/lib/geo-owned-sources';
@@ -171,7 +173,7 @@ async function runEngineChecks(origin: string, withBrand: boolean): Promise<Engi
   //    （政策已經擋掉的不用測——守規矩的爬蟲本來就不會硬闖）
   // 2. 拿偵測到的品牌名稱去問 Perplexity「你知道這是誰嗎」，看回答有沒有引用自己的網站——
   //    比「AI 讀不讀得到」更進一步：「AI 真的知不知道你」
-  const toVerify = policyResults.filter((r) => r.status === 'allowed');
+  const toVerify = policyResults.filter((r) => r.status === 'allowed' && !isPolicyOnly(r.ua));
   const [probes, brandVisibility] = await Promise.all([
     toVerify.length > 0 ? probeBotAccess(origin, toVerify.map((r) => r.ua)) : Promise.resolve(new Map<string, ProbeResult>()),
     withBrand ? checkBrandVisibility(guessBrandName(visibility?.title ?? '', visibility?.orgName), origin) : Promise.resolve([]),
@@ -179,7 +181,7 @@ async function runEngineChecks(origin: string, withBrand: boolean): Promise<Engi
 
   const results = policyResults.map((r) => {
     const probe = probes.get(r.ua);
-    if (!probe) return r;
+    if (!probe) return isPolicyOnly(r.ua) && r.status === 'allowed' ? { ...r, matchedRule: `${r.matchedRule}（只看 robots.txt，這個控制項沒有自己的爬蟲可以實測）` } : r;
     if (probe.reachable === false) {
       return { ...r, status: 'mismatch' as const, matchedRule: `${r.matchedRule}；${probe.note}——robots.txt 允許，但 WAF 實際擋下` };
     }
@@ -399,7 +401,6 @@ async function runGeo(jobId: string, origin: string, engine: EngineResult, start
   let brandInsights: AuditJob['brandInsights'] = null;
   if (ready) {
     const review = await reviewPromise;
-    const reviewAnswers = review?.answers ?? [];
     const selfName = selfShortName(recommendInput!.brandName);
     // 哪些來源是品牌自己的（官網、姊妹購物站、官網連出去的帳號、作者是品牌的文章）：
     // 品牌題的「引用你」用這份判斷；評價抽取也用它排除轉述自己文章的負評
@@ -407,17 +408,26 @@ async function runGeo(jobId: string, origin: string, engine: EngineResult, start
       brandNames: [recommendInput!.brandName, selfName],
       domain: origin,
       siteExternalLinks,
-      citations: [...engine.brandVisibility.flatMap((b) => b.citations), ...reviewAnswers.flatMap((a) => a.citations ?? [])],
+      citations: [...engine.brandVisibility.flatMap((b) => b.citations), ...(review?.answers ?? []).flatMap((a) => a.citations ?? [])],
     }).catch(() => new Set<string>());
-    engine = { ...engine, brandVisibility: engine.brandVisibility.map((b) => markOwned(b, owned)) };
+    // 回答講的是不是你：認成同名的別人，就不算引用官網、也不拿來整理評價和品牌輪廓
+    const about = [recommendInput!.title, recommendInput!.description, recommendInput!.services?.slice(0, 400)].filter(Boolean).join('\n').slice(0, 700);
+    const [brandChecked, reviewAnswers] = await Promise.all([
+      markWrongEntity(selfName, origin, about, engine.brandVisibility.map((b) => markOwned(b, owned)), apiKey!),
+      markWrongEntity(selfName, origin, about, review?.answers ?? [], apiKey!),
+    ]);
+    const rightReviews = reviewAnswers.filter((a) => !a.wrongEntity);
+    engine = { ...engine, brandVisibility: brandChecked };
     const [s, profile] = await Promise.all([
-      extractSentiment(recommendInput!.brandName, [...sentimentInputs({ questions: [] }, engine.brandVisibility), ...reviewAnswers], apiKey!, owned).catch(() => null),
-      extractProfile(selfName, engine.brandVisibility, apiKey!, matchPages).catch(() => null),
+      extractSentiment(recommendInput!.brandName, [...sentimentInputs({ questions: [] }, engine.brandVisibility), ...rightReviews], apiKey!, owned).catch(() => null),
+      extractProfile(selfName, engine.brandVisibility.filter((b) => !b.wrongEntity), apiKey!, matchPages).catch(() => null),
     ]);
     // 評價題的回答全文也要存：報告上的負評引文要追得到出處（11-04 小積木：「是哪裡說到的我沒看到」）
-    const sentiment = s && review
-      ? { ...s, reviewQuery: review.query, reviewAnswers: review.answers.map(({ engine, query, answer, citedSelf, citations }) => ({ engine, query, answer, citedSelf, citations })) }
-      : s;
+    // 全部回答都認成別人時沒有評價可整理，但「認成誰」還是要留在報告上
+    const base = s ?? (reviewAnswers.some((a) => a.wrongEntity) ? { themes: [], answerCount: 0 } : null);
+    const sentiment = base && review
+      ? { ...base, reviewQuery: review.query, reviewAnswers: reviewAnswers.map(({ engine, query, answer, citedSelf, citations, wrongEntity }) => ({ engine, query, answer, citedSelf, citations, wrongEntity })) }
+      : base;
     brandInsights = { sentiment, profile };
   }
   const recommendCandidates = await candidatesPromise;

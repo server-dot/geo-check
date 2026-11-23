@@ -24,16 +24,31 @@ export interface AiBotResult {
 
 // 目前主流會抓取網站內容餵給生成式 AI 的爬蟲。export 出去給首頁「已檢測 N 家 AI
 // 爬蟲」那句文案用 AI_BOTS.length，不要在行銷頁另外手動寫死一個數字。
-export const AI_BOTS: { ua: string; label: string }[] = [
+// policyOnly：只是 robots.txt 裡的控制項，沒有自己的 User-Agent，不能拿它的名字去實測。
+// Google-Extended 管的是 Gemini 能不能用你的內容，不影響 Google 搜尋收錄；AI 摘要看的是 Googlebot
+// （https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers）
+export const AI_BOTS: { ua: string; label: string; policyOnly?: boolean }[] = [
   { ua: 'GPTBot', label: 'ChatGPT（OpenAI 一般爬蟲）' },
   { ua: 'OAI-SearchBot', label: 'ChatGPT 搜尋（OpenAI）' },
   { ua: 'ChatGPT-User', label: 'ChatGPT 即時瀏覽（OpenAI）' },
   { ua: 'ClaudeBot', label: 'Claude（Anthropic）' },
-  { ua: 'Google-Extended', label: 'Gemini / AI Overview（Google）' },
+  { ua: 'Google-Extended', label: 'Gemini 使用許可（Google）', policyOnly: true },
   { ua: 'PerplexityBot', label: 'Perplexity' },
   { ua: 'CCBot', label: 'Common Crawl（多數 LLM 訓練資料來源）' },
   { ua: 'Bytespider', label: '抖音／字節跳動 AI' },
 ];
+
+export const isPolicyOnly = (ua: string) => AI_BOTS.some((b) => b.ua === ua && b.policyOnly);
+// 報告上的「幾家進得來」只算真的爬蟲；控制項另外用一行講（舊報告也適用）
+export const crawlersOnly = <T extends { ua: string }>(results: T[]): T[] => results.filter((r) => !isPolicyOnly(r.ua));
+export function geminiPermission(results: { ua: string; status: BotStatus }[]): string {
+  const g = results.find((r) => r.ua === 'Google-Extended');
+  if (!g) return '';
+  const state = g.status === 'blocked' ? '不允許' : g.status === 'unknown' ? '無法判定' : '允許';
+  return `Gemini 使用許可（Google-Extended）：robots.txt ${state}。只看設定、沒有獨立爬蟲可實測，不影響 Google 搜尋和 AI 摘要。`;
+}
+// 會真的用它的身分去連線的家數（給行銷文案用）
+export const PROBED_BOT_COUNT = AI_BOTS.filter((b) => !b.policyOnly).length;
 
 type Rule = { type: 'allow' | 'disallow'; path: string };
 type Group = { agents: string[]; rules: Rule[]; contentSignal: string };
