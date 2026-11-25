@@ -33,7 +33,7 @@ export async function readTextCapped(res: Response, limit = MAX_BODY_BYTES): Pro
   return new TextDecoder('utf-8', { fatal: false }).decode(Buffer.concat(chunks.map((c) => Buffer.from(c))));
 }
 
-async function fetchWithTimeout(url: string, timeoutMs = 12000): Promise<Response> {
+export async function fetchWithTimeout(url: string, timeoutMs = 12000): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -269,7 +269,7 @@ export function extractPageFacts(html: string, url: string, depth: number, statu
   };
 }
 
-async function fetchSitemapUrls(origin: string): Promise<string[]> {
+export async function fetchSitemapUrls(origin: string): Promise<string[]> {
   const seen = new Set<string>();
   const queue = [`${origin}/sitemap.xml`];
   const out = new Set<string>();

@@ -257,7 +257,7 @@ export function reviewQueryFor(brandName: string): string {
 export async function fetchReviewAnswers(brandName: string, origin: string): Promise<{ query: string; answers: VisibilityAnswer[] }> {
   const query = reviewQueryFor(brandName);
   const [llm, google] = await Promise.all([
-    runVisibilityQueries(`${query}如何？有什麼優點跟缺點？請具體說明，並附上來源網址。`, origin, 900).catch(() => null),
+    runVisibilityQueries(`${query}如何？有什麼優點跟缺點？請具體說明，並附上來源網址。`, origin, 1800).catch(() => null),
     fetchGoogleAio(query, origin).catch(() => null),
   ]);
   return { query, answers: [...(llm ?? []), ...(google?.status === 'present' ? [google.answer] : [])] };

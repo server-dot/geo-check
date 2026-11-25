@@ -147,6 +147,7 @@ export function buildReportMarkdown(job: AuditJob): string {
       out.push('回答原文：');
       out.push('');
       out.push(r.answer.split('\n').map((l) => `> ${l}`).join('\n'));
+      if (r.truncated) out.push('', '（回答太長，只收到這裡）');
       out.push('');
       if (r.citations.length > 0) {
         out.push('引用來源：');
@@ -219,6 +220,7 @@ export function buildReportMarkdown(job: AuditJob): string {
         );
         out.push('');
         out.push(r.answer.split('\n').map((l) => `> ${l}`).join('\n'));
+      if (r.truncated) out.push('', '（回答太長，只收到這裡）');
         out.push('');
         if (r.citations.length > 0) {
           out.push('引用來源：' + r.citations.map((c) => `${c.isSelf ? '★ ' : ''}${c.url}`).join('、'));

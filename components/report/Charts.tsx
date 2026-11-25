@@ -107,6 +107,7 @@ export function SovDonut({ rows }: { rows: { name: string; isSelf: boolean; coun
     ...(restN > 0 ? [{ name: "其他", value: restN, color: "#eceef2" }] : []),
   ];
   const sum = data.reduce((n, d) => n + d.value, 0);
+  const tied = new Set(top.filter((r) => rows.filter((o) => o.count === r.count).length > 1).map((r) => r.name));
   return (
     <div className="flex items-center gap-4">
       <div className="h-[240px] w-[240px] shrink-0">
@@ -126,6 +127,7 @@ export function SovDonut({ rows }: { rows: { name: string; isSelf: boolean; coun
           <li key={d.name} className="flex items-center gap-2 text-[14px]">
             <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: d.color, outline: d.color === "#eceef2" ? "1px solid #dcdfe6" : undefined }} />
             <span className="min-w-0 flex-1 truncate text-ink2">{d.name}</span>
+            {tied.has(d.name) && <span className="shrink-0 text-ink3">並列</span>}
             <span className="mono text-ink3 tabular-nums">{Math.round((d.value / Math.max(1, sum)) * 100)}%</span>
           </li>
         ))}

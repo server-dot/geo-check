@@ -37,6 +37,7 @@ interface MeResponse {
 }
 
 import { CompetitorCompare } from "@/components/report/CompetitorCompare";
+import { LinePlan } from "@/components/report/LinePlan";
 import { ForumTags } from "@/components/report/ForumTags";
 import { SeoKeywords } from "@/components/report/SeoKeywords";
 import { OverviewBoard } from "@/components/report/OverviewBoard";
@@ -147,6 +148,7 @@ interface VisibilityCardData {
   engine: string;
   query: string;
   answer: string;
+  truncated?: boolean;
   citedSelf: boolean;
   wrongEntity?: string; // 用品牌名問，AI 卻在講這個別人
   // 推薦題才有：回答正文有沒有真的點名你。undefined 代表這張卡不分這一層（品牌題、關鍵字查詢）
@@ -174,7 +176,7 @@ interface RecommendedName {
 }
 interface RecommendVisibility {
   brandName: string;
-  questions: { question: string; altQuestion?: string; source?: { site: string; title: string; link: string }; origin?: "forum" | "ai" | "keyword" | "custom"; results: VisibilityCardData[] }[];
+  questions: { question: string; altQuestion?: string; source?: { site: string; title: string; link: string }; origin?: "forum" | "ai" | "keyword" | "custom"; google?: "present" | "absent" | "failed"; results: VisibilityCardData[] }[];
   names: RecommendedName[];
   askedAt: string;
   totalAnswers: number;
@@ -3093,6 +3095,7 @@ function ResponsesExplorer({
                 </button>
               </div>
               <div className="mt-5 text-[15.5px] leading-[1.85] text-ink2">{renderAnswerMarkdown(open.r.answer, open.r.citations, hl)}</div>
+              {open.r.truncated && <p className="mt-3 text-[14px] text-warn">⚠ 回答太長，只收到這裡。</p>}
             </div>
             <aside className="w-[340px] shrink-0 overflow-y-auto border-l border-line bg-paper p-6">
               <p className="text-[14px] font-bold text-ink">詳細資料</p>
@@ -3832,6 +3835,7 @@ export default function HomeClient({
                 ...(citedDomains.length > 0 ? [{ id: "citations", label: "AI 參考網站" }] : []),
                 ...(engine.brandVisibility.length > 0 ? [{ id: "brand-check", label: "品牌輪廓" }] : []),
                 ...(candidates ? [{ id: "forum", label: "網友相關問題" }] : []),
+                ...(me?.admin && reportJobId ? [{ id: "line-plan", label: "作戰清單（內部）" }] : []),
                 { id: "tech", label: "AI 看得到你嗎" },
               ]}
               active={reportPage}
@@ -3870,6 +3874,16 @@ export default function HomeClient({
               )}
             </div>
             <DashSection id="overview" title="總覽">
+              {(() => {
+                const failed = recommend?.questions.filter((q) => q.google === "failed").length ?? 0;
+                const p = status?.progress;
+                const notes = [
+                  ...(recommend ? [`共 ${recommend.totalAnswers} 則 AI 回答`] : []),
+                  ...(failed > 0 ? [`${failed} 題 Google 查詢失敗，沒算進去`] : []),
+                  ...(p && p.crawled > 0 && p.crawled >= p.cap ? [`網站讀了前 ${p.crawled} 頁，可能還有其他頁`] : []),
+                ];
+                return notes.length > 0 ? <p className="-mt-2 mb-3 text-[14px] text-ink3">{notes.join("　·　")}</p> : null;
+              })()}
               {brandTable && recommend ? (
                 <OverviewBoard
                   table={brandTable}
@@ -4038,6 +4052,14 @@ export default function HomeClient({
               <div className="mt-12">
                 <DashSection id="forum" title="網友相關問題" desc="網友在 Dcard、PTT、Threads、Mobile01、FB 社團問過的相關問題，點開看原文">
                   <ForumTags candidates={candidates} />
+                </DashSection>
+              </div>
+            )}
+
+            {reportKind === "geo" && me?.admin && reportJobId && (
+              <div className="mt-12">
+                <DashSection id="line-plan" title="作戰清單（內部）" desc="選產品線，查 Google 和三家 AI，列出要做什麼。只有公司帳號看得到">
+                  <LinePlan jobId={reportJobId} />
                 </DashSection>
               </div>
             )}

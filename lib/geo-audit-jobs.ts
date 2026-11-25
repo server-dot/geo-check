@@ -11,6 +11,7 @@ import type { SentimentResult } from './geo-sentiment';
 import type { BrandProfile } from './geo-brand-profile';
 import type { MatchPage } from './geo-content-match';
 import type { AuditKind } from './quota';
+import type { LinePlan } from './line-plan-types';
 import { saveAuditHistory } from './audit-history';
 
 // ── GEO 深度健檢：背景工作進度存放（module 內 in-memory Map）────────────
@@ -64,6 +65,8 @@ export interface AuditJob {
   seoKeywords?: KeywordRank[] | null;
   // 給人勾的候選關鍵字（第一次打開關鍵字排名頁時產生、存起來）
   seoKeywordCandidates?: KeywordCandidate[] | null;
+  // 產品線作戰清單（公司內部用，見 lib/line-plan.ts）。一般用戶的回應會拿掉
+  linePlan?: LinePlan | null;
   // 這次健檢有 AI 步驟因為 OpenRouter 額度不足失敗（報告會缺幾塊），前端要標出來
   aiCreditShort?: boolean;
   error?: string;
@@ -109,7 +112,7 @@ export function updateAuditJob(id: string, patch: Partial<Omit<AuditJob, 'id' | 
   Object.assign(job, patch, { updatedAt: Date.now() });
   // 完成（或完成後改題重問）就存進檢測紀錄，重新整理、隔天回來都還看得到
   if (job.status === 'completed') {
-    saveAuditHistory({ id: job.id, email: job.email, kind: job.kind, url: job.url, createdAt: job.createdAt, data: auditJobPayload(job) }).catch(
+    saveAuditHistory({ id: job.id, email: job.email, kind: job.kind, url: job.url, createdAt: job.createdAt, data: { ...auditJobPayload(job), ...(job.linePlan ? { linePlan: job.linePlan } : {}) } }).catch(
       (e) => console.error('[history] 存檢測紀錄失敗', id, e),
     );
   }

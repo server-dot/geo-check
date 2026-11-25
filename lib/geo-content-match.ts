@@ -84,8 +84,46 @@ ${qList}
 - advice：partial 或 no 時給一句建議（40 字內），用「可以」開頭，具體說要在那一頁補什麼內容、或新增一頁講什麼，才算正面回答這個問題；可以參考同業頁面標題的寫法。不要寫「就會被推薦」這類保證。yes 時給空字串。
 - missing：問題或同業頁面標題裡用到、但你挑的那一頁沒有講到的關鍵字詞，最多 ${MAX_MISSING} 個，每個 2 到 8 個字，用原文的寫法（例如「導入」「顧問」「中小企業」「台灣」）。yes 也可以有 missing。不要列品牌名、不要列太泛的字（「服務」「推薦」「哪些」）。
 
-只回傳 JSON：{"matches":[{"q":0,"page":3,"verdict":"partial","about":"列出做過的自動化專案","advice":"可以新增一頁說明 n8n 導入顧問服務：服務對象、流程、費用","missing":["導入","顧問"]}]}
-沒有任何相關頁面時 page 給 -1、verdict 給 "no"。`;
+只回傳 JSON：{"matches":[{"q":0,"page":3,"alt":5,"verdict":"partial","about":"列出做過的自動化專案","advice":"可以新增一頁說明 n8n 導入顧問服務：服務對象、流程、費用","missing":["導入","顧問"]}]}
+沒有任何相關頁面時 page 給 -1、verdict 給 "no"。alt 是第二接近的頁的編號，沒有就 -1。missing 不要列「頁面用別的說法講過」的字（「內訓」就是「內部培訓」）。`;
+}
+
+// 同一件事的縮寫也算講過：「內部培訓」↔「內訓」。寧可少列一個缺的字，不要誤報
+export function saysIt(text: string, term: string): boolean {
+  if (text.includes(term)) return true;
+  if (!/^[\u4e00-\u9fff]+$/.test(term)) return false;
+  if (term.length === 4) return text.includes(term[0] + term[2]) || text.includes(term[0] + term[3]);
+  if (term.length === 2) return new RegExp(`${term[0]}[\u4e00-\u9fff]{1,2}${term[1]}`).test(text);
+  return false;
+}
+
+// 拆出題目裡的需求，逐條找頁面原文；引文在頁面上找不到的不算
+async function checkNeeds(question: string, pages: MatchPage[], apiKey: string): Promise<{ page: MatchPage; verdict: MatchVerdict } | null> {
+  const flat = (s: string) => s.replace(/\s+/g, '').toLowerCase();
+  const prompt = `客戶的問題：「${question}」
+
+${pages.map((p, i) => `【頁${i}】${p.title}\n${p.text.replace(/\s+/g, ' ').slice(0, 6000)}`).join('\n\n')}
+
+1. 把問題拆成 1～4 個需求（要找什麼、給誰用、什麼條件）。「推薦」「哪家好」這種問句用語、「台灣」不算需求。
+2. 對每一頁的每個需求，抄出那一頁「真的講到」這個需求的原文片段（4～30 字，一字不差）；沒講到給空字串。用別的說法講同一件事算講到。
+只回傳 JSON：{"needs":["…"],"pages":[{"page":0,"quotes":["…",""]}]}，quotes 跟 needs 同順序。`;
+  try {
+    const p = parseJson<{ needs?: unknown; pages?: { page?: unknown; quotes?: unknown }[] }>(await askJson(prompt, apiKey, 900));
+    const n = Array.isArray(p?.needs) ? Math.min(p.needs.length, 4) : 0;
+    if (n === 0 || !Array.isArray(p?.pages)) return null;
+    const scored = pages.flatMap((page, i) => {
+      const r = p.pages!.find((x) => x.page === i);
+      if (!r || !Array.isArray(r.quotes)) return [];
+      const body = flat(`${page.title}\n${page.text}`);
+      const hit = r.quotes.slice(0, n).filter((q) => typeof q === 'string' && flat(q).length >= 2 && body.includes(flat(q))).length;
+      return [{ page, hit }];
+    });
+    if (scored.length === 0) return null;
+    const best = scored.sort((a, b) => b.hit - a.hit)[0];
+    return { page: best.page, verdict: best.hit === n ? 'yes' : best.hit > 0 ? 'partial' : 'no' };
+  } catch {
+    return null;
+  }
 }
 
 export async function matchQuestionsToPages(
@@ -97,22 +135,30 @@ export async function matchQuestionsToPages(
   if (questions.length === 0 || usable.length === 0) return null;
 
   const items = questions.map((q) => ({ question: q.question, peers: peerPagesFor(q) }));
-  const raw = await askJson(buildPrompt(items, usable), apiKey, 1400);
-  const parsed = parseJson<{ matches?: { q?: number; page?: number; verdict?: string; about?: unknown; advice?: unknown; missing?: unknown }[] }>(raw);
+  const raw = await askJson(buildPrompt(items, usable), apiKey, Math.max(1400, items.length * 350));
+  const parsed = parseJson<{ matches?: { q?: number; page?: number; alt?: number; verdict?: string; about?: unknown; advice?: unknown; missing?: unknown }[] }>(raw);
   const rows = Array.isArray(parsed?.matches) ? parsed!.matches : [];
 
-  return items.map((it, qi) => {
+  return Promise.all(items.map(async (it, qi) => {
     const row = rows.find((r) => r.q === qi);
-    const page = typeof row?.page === 'number' && row.page >= 0 ? usable[row.page] : undefined;
+    const at = (n: unknown) => (typeof n === 'number' && n >= 0 ? usable[n] : undefined);
+    let page = at(row?.page);
     let verdict: MatchVerdict = row?.verdict === 'yes' || row?.verdict === 'partial' ? row.verdict : 'no';
     if (!page) verdict = 'no';
+    // 第一步每頁只看得到開頭；挑出來的頁再讀全文，題目的每個需求都要在頁面上找得到原文才算「有在回答」
+    const alt = at(row?.alt);
+    const checked = page ? await checkNeeds(it.question, alt && alt !== page ? [page, alt] : [page], apiKey) : null;
+    if (checked) {
+      page = checked.page;
+      verdict = checked.verdict;
+    }
     // 模型說「缺」的字，如果其實就在那一頁的內文或標題裡，就不是缺——擋掉模型亂講
     const pageText = page ? `${page.title}\n${page.text}`.toLowerCase() : '';
     const missing = (Array.isArray(row?.missing) ? row!.missing : [])
       .filter((m): m is string => typeof m === 'string')
       .map((m) => m.trim())
       .filter((m) => [...m].length >= 2 && [...m].length <= 8 && !NOT_A_TERM.test(m))
-      .filter((m) => !pageText.includes(m.toLowerCase()))
+      .filter((m) => !saysIt(pageText, m.toLowerCase()))
       .slice(0, MAX_MISSING);
     return {
       question: it.question,
@@ -124,5 +170,5 @@ export async function matchQuestionsToPages(
       pageAbout: page && typeof row?.about === 'string' ? row.about.trim().slice(0, 60) : '',
       advice: verdict !== 'yes' && typeof row?.advice === 'string' ? row.advice.trim().slice(0, 80) : '',
     };
-  });
+  }));
 }

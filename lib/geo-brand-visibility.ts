@@ -20,6 +20,7 @@ import { selfShortName } from "@/lib/geo-sentiment";
 import { noteOpenRouterFailure } from './openrouter-health';
 import { paidFetch } from './paid-fetch';
 export interface VisibilityAnswer {
+  truncated?: boolean; // 到字數上限被截斷（報告要標，不然像話沒講完）
   engine: string;
   query: string;
   answer: string;
@@ -76,7 +77,7 @@ async function askModel(
   query: string,
   apiKey: string,
   maxTokens: number,
-): Promise<{ content: string; citations: UrlCitation[] }> {
+): Promise<{ content: string; citations: UrlCitation[]; truncated: boolean }> {
   const model = cfg.model;
   const res = await paidFetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -94,7 +95,7 @@ async function askModel(
       ...cfg.extra,
     }),
     // 原生搜尋＋推理一題約 25～50 秒
-    signal: AbortSignal.timeout(cfg.reasoning ? 120000 : 30000),
+    signal: AbortSignal.timeout(cfg.reasoning ? 120000 : 60000),
   });
   if (!res.ok) {
     const body = await res.text();
@@ -102,10 +103,10 @@ async function askModel(
     throw new Error(`OpenRouter 錯誤（${model}）：${body}`);
   }
   const data = (await res.json()) as {
-    choices?: { message?: { content?: string; annotations?: UrlCitation[] } }[];
+    choices?: { finish_reason?: string; message?: { content?: string; annotations?: UrlCitation[] } }[];
   };
   const msg = data.choices?.[0]?.message ?? {};
-  return { content: msg.content ?? '', citations: msg.annotations ?? [] };
+  return { content: msg.content ?? '', citations: msg.annotations ?? [], truncated: data.choices?.[0]?.finish_reason === 'length' };
 }
 
 export function hostnameOf(url: string): string {
@@ -133,10 +134,12 @@ async function runOne(
 ): Promise<VisibilityAnswer | null> {
   let content: string;
   let rawCitations: UrlCitation[];
+  let truncated = false;
   try {
     const r = await askModel(cfg, query, apiKey, maxTokens);
     content = r.content;
     rawCitations = r.citations;
+    truncated = r.truncated;
   } catch {
     return null;
   }
@@ -150,7 +153,7 @@ async function runOne(
       isSelf: isSameSite(hostnameOf(c.url_citation.url!), domain),
     }));
 
-  return { engine: cfg.engine, query, answer: content, citedSelf: citations.some((c) => c.isSelf), citations };
+  return { engine: cfg.engine, query, answer: content, citedSelf: citations.some((c) => c.isSelf), citations, ...(truncated ? { truncated } : {}) };
 }
 
 // 對每個接好的引擎並行查詢同一個問題，個別失敗不影響其他引擎——
@@ -201,7 +204,7 @@ export async function checkBrandVisibility(brandName: string, origin: string): P
   const short = selfShortName(brandName);
   const query = profileQuery(short);
   const [llm, google] = await Promise.all([
-    runVisibilityQueries(query, origin, 1200),
+    runVisibilityQueries(query, origin, 1800),
     fetchGoogleAio(profileGoogleQuery(short), origin).catch(() => null),
   ]);
   if (!llm) return [];

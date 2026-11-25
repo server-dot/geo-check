@@ -116,9 +116,9 @@ async function findConflicts(brand: string, rows: ProfileRow[], apiKey: string):
   const multi = rows.filter((r) => CONFLICT_KEYS.includes(r.key) && r.cells.filter((c) => c.value).length >= 2);
   if (multi.length === 0) return {};
   const list = multi
-    .map((r) => `${r.key}（${r.label}）：${r.cells.filter((c) => c.value).map((c) => `${c.engine} 說「${c.value}」`).join('；')}`)
+    .map((r) => `${r.key}（${r.label}）：${r.cells.filter((c) => c.value).map((c) => `${c.engine} 說「${c.value}」（原句：${c.quote}）`).join('；')}`)
     .join('\n');
-  const prompt = `幾個 AI 介紹「${brand}」，各項目的說法如下。請判斷每一項的說法有沒有「互相矛盾」——例如一家說平價、一家說高價；一家說保養品、一家說保健食品。只是詳略不同、用詞不同、一家多講一點，都不算矛盾。
+  const prompt = `幾個 AI 介紹「${brand}」，各項目的說法如下。請判斷每一項的說法有沒有「互相矛盾」——例如一家說平價、一家說高價；一家說保養品、一家說保健食品。只是詳略不同、用詞不同、一家多講一點，都不算矛盾。價格要看原句講的是不是同一個品項、同一種計價方式；品項或單位不同、一個是起價一個是某方案，都不算矛盾。
 
 ${list}
 
@@ -147,29 +147,38 @@ export function firstSentence(answer: string): string {
   return (pick ?? plain.replace(/\n/g, ' ').trim()).slice(0, 90);
 }
 
+// 關鍵詞要能回到那一家的說法：依據片段要找得到；價格的評語（親民、平價…）原文自己要有這類字，
+// 不能從價格數字推（11-23 aiqkangber：只寫 NT$3,600 起，被寫成「價格親民」）
+const PRICE_OPINION = /親民|平價|便宜|實惠|划算|低價|高價|昂貴|偏貴/;
+export function backed(word: string, evidence: unknown, said: string): boolean {
+  if (typeof evidence !== 'string' || norm(evidence).length < 2) return false;
+  if (!norm(said).includes(norm(evidence))) return false;
+  return !PRICE_OPINION.test(word) || PRICE_OPINION.test(evidence);
+}
+
 // 各家講到的特點合併成一組關鍵詞，標出幾家 AI 這樣講：三家都講的就是 AI 對你的共識
 async function collectKeywords(brand: string, rows: ProfileRow[], engines: string[], apiKey: string): Promise<{ keywords: ProfileKeyword[]; summaries: string[] }> {
   const list = engines
-    .map((e, i) => `${e}：${rows.map((r) => r.cells[i].value && `${r.label}＝${r.cells[i].value}`).filter(Boolean).join('；') || '（沒有）'}`)
+    .map((e, i) => `${e}：${rows.map((r) => r.cells[i].value && `${r.label}＝${r.cells[i].value}（原句：${r.cells[i].quote}）`).filter(Boolean).join('；') || '（沒有）'}`)
     .join('\n');
-  const prompt = `幾個 AI 介紹「${brand}」時的說法如下。請整理成 8～14 個描述這個品牌的關鍵詞（五類都要有，某一類沒有任何 AI 提到才略過）（每個 8 字內，例如「私密保養」「台灣品牌」「價格親民」「藥妝通路」），意思相同的合併成一個，並標出是哪幾家 AI 講的，以及它屬於哪一類（field 只能填 ${PROFILE_FIELDS.map((f) => `${f.key}＝${f.label}`).join('、')}）。
+  const prompt = `幾個 AI 介紹「${brand}」時的說法如下。請整理成 8～14 個描述這個品牌的關鍵詞（五類都要有，某一類沒有任何 AI 提到才略過）（每個 8 字內），意思相同的合併成一個，並標出是哪幾家 AI 講的（engines 的 key 是 AI 名稱，值是從那一家的說法一字不差抄下的依據片段，4～30 字）。說法裡沒有的評語不要自己加（只寫價格數字，就不能寫成便宜或貴），以及它屬於哪一類（field 只能填 ${PROFILE_FIELDS.map((f) => `${f.key}＝${f.label}`).join('、')}）。
 另外替每一家 AI 各寫一段 60 字內的摘要（summaries，key 是 AI 名稱）：這家 AI 把「${brand}」介紹成什麼、主打什麼、價格和通路怎麼說（沒提到就寫沒提到）。只根據下面的說法，不要加形容詞或建議。
 
 ${list}
 
-只回傳 JSON：{"summaries":{"${engines[0]}":"…"},"keywords":[{"word":"私密保養","engines":["${engines.join('","')}"],"field":"category"}]}`;
+只回傳 JSON：{"summaries":{"${engines[0]}":"…"},"keywords":[{"word":"私密保養","engines":{"${engines[0]}":"原文片段"},"field":"category"}]}`;
   try {
-    const parsed = parseJson<{ summaries?: Record<string, unknown>; keywords?: { word?: unknown; engines?: unknown; field?: unknown }[] }>(await askJson(prompt, apiKey, 1200));
+    const parsed = parseJson<{ summaries?: Record<string, unknown>; keywords?: { word?: unknown; engines?: unknown; field?: unknown }[] }>(await askJson(prompt, apiKey, 2400));
     const keys: string[] = PROFILE_FIELDS.map((f) => f.key);
     const summaries = engines.map((e) => {
       const v = parsed?.summaries?.[e];
       return typeof v === 'string' ? v.trim().slice(0, 120) : '';
     });
     const keywords = (parsed?.keywords ?? [])
-      .filter((k): k is { word: string; engines: unknown[]; field?: unknown } => typeof k.word === 'string' && Array.isArray(k.engines))
+      .filter((k): k is { word: string; engines: Record<string, unknown>; field?: unknown } => typeof k.word === 'string' && !!k.engines && typeof k.engines === 'object')
       .map((k) => ({
         word: k.word.trim(),
-        engines: engines.filter((e) => k.engines.includes(e)),
+        engines: engines.filter((e, i) => backed(k.word, k.engines[e], rows.map((r) => `${r.cells[i].value}\n${r.cells[i].quote}`).join('\n'))),
         ...(typeof k.field === 'string' && keys.includes(k.field) ? { field: k.field as ProfileFieldKey } : {}),
       }))
       .filter((k) => k.word && k.engines.length > 0)

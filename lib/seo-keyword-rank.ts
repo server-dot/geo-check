@@ -189,7 +189,7 @@ H1：${home.h1}
 const brief = (p: PageOutline) =>
   `標題：${p.title}\n說明：${p.description || '（沒有）'}\nH1：${p.h1 || '（沒有）'}\n段落標題：${p.headings.length ? p.headings.join('／') : '（沒有）'}\n內文約 ${p.words} 字`;
 
-export async function checkKeyword(keyword: string, origin: string, brandName: string, apiKey: string): Promise<KeywordRank | null> {
+export async function checkKeyword(keyword: string, origin: string, brandName: string, apiKey: string, opts: { page?: string; rule?: string } = {}): Promise<KeywordRank | null> {
   const self = hostnameOf(origin);
   const organic = await googleOrganic(keyword);
   if (!organic) return null;
@@ -204,7 +204,8 @@ export async function checkKeyword(keyword: string, origin: string, brandName: s
   }));
   const mine = top.find((t) => t.isSelf);
   // 你最接近的那頁：有排名就是那頁；沒有就在你網站裡搜這個關鍵字，取第一筆；再沒有就首頁
-  let selfUrl = mine?.url;
+  // opts.page：呼叫的人已經知道由哪頁負責，就不用再猜
+  let selfUrl = mine?.url ?? opts.page;
   if (!selfUrl) {
     const site = await googleOrganic(`site:${self} ${keyword}`);
     selfUrl = site?.find((o) => o.resolved && isSameSite(o.domain, self))?.url ?? origin;
@@ -230,7 +231,7 @@ ${pairs.map((x) => `【第 ${x.rank} 名】${x.p.url}\n${brief(x.p)}`).join('\n\
 
 請比較後寫：
 - verdict：一句話講為什麼${mine ? '還沒排到更前面' : '排不上第一頁'}，40 字內，講具體差在哪（例如「前 3 名都是整理 10 家以上的比較文，你這頁只介紹自己的服務」）。
-- todos：這頁具體要補或改什麼，最多 5 點。每點 what 寫要加哪一段、寫什麼內容（例如「加一段『n8n 跟 Make 差在哪』，用表格比價格、彈性、適合誰」），basis 寫依據（例如「第 1、2 名都有這段」）。不要寫「優化關鍵字密度」「提升內容品質」這種空話；要加的內容必須是這個網站本來就做得到的。
+- todos：這頁具體要補或改什麼，最多 5 點。每點 what 寫要加哪一段、寫什麼內容（例如「加一段『n8n 跟 Make 差在哪』，用表格比價格、彈性、適合誰」），basis 寫依據（例如「第 1、2 名都有這段」）。不要寫「優化關鍵字密度」「提升內容品質」這種空話；要加的內容必須是這個網站本來就做得到的。${opts.rule ? `\n- ${opts.rule}` : ''}
 - titleSuggestion：這頁建議的新標題，28 字內，要有關鍵字，不要放品牌名（品牌名我們自己加）。
 
 看的人是不懂網路行銷的老闆：不要用 SEO 術語（H1、H2、meta、標題標籤、關鍵字密度、反向連結、內部連結、權重、SERP），用一般人聽得懂的話（「段落標題」「網頁標題」「別的網站連到你」）。

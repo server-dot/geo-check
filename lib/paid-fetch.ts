@@ -78,6 +78,20 @@ function findStandIn(family: string): Tape | null {
   return best?.tape ?? null;
 }
 
+// 沿用錄音（11-24，只限本機）：.data/replay-reuse.json ＝ {"since":"ISO 時間","capUsd":0.4}
+// 請求一模一樣、錄音比 since 新就不重付；其餘真的呼叫，OpenRouter 累計到 capUsd 就停。刪掉檔案＝關閉。
+const REUSE_FILE = path.join(process.cwd(), '.data', 'replay-reuse.json');
+const spent = { since: '', usd: 0 };
+function reuseConfig(): { since: string; capUsd: number } | null {
+  try {
+    const c = JSON.parse(readFileSync(REUSE_FILE, 'utf8')) as { since: string; capUsd: number };
+    if (spent.since !== c.since) Object.assign(spent, { since: c.since, usd: 0 });
+    return c;
+  } catch {
+    return null;
+  }
+}
+
 export async function paidFetch(url: string, init: RequestInit = {}): Promise<Response> {
   if (!isDev) return fetch(url, init);
   const body = typeof init.body === 'string' ? init.body : undefined;
@@ -98,8 +112,26 @@ export async function paidFetch(url: string, init: RequestInit = {}): Promise<Re
     return new Response(tape.body, { status: tape.status, headers: { 'Content-Type': 'application/json' } });
   }
 
+  const reuse = reuseConfig();
+  if (reuse) {
+    try {
+      const tape = JSON.parse(readFileSync(file, 'utf8')) as Tape;
+      if (Date.parse(tape.savedAt) >= Date.parse(reuse.since)) {
+        console.log(`[reuse] = ${family}`);
+        return new Response(tape.body, { status: tape.status, headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch {}
+    if (spent.usd >= reuse.capUsd) throw new Error(`[reuse] 已花 US$${spent.usd.toFixed(3)}，到上限停止`);
+    console.log(`[reuse] $ ${family}`);
+  }
+
   const res = await fetch(url, init);
   const text = await res.text();
+  if (reuse && family.startsWith('openrouter.ai')) {
+    try {
+      spent.usd += (JSON.parse(text) as { usage?: { cost?: number } }).usage?.cost ?? 0;
+    } catch {}
+  }
   // 空白回應不錄（Bright Data 偶爾回 200 空白），不然重播時永遠拿到空的
   if (res.ok && text.trim()) {
     try {

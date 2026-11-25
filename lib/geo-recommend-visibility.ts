@@ -609,9 +609,8 @@ export async function runRecommendVisibility(
   const domain = hostnameOf(origin);
   // 2026-11-12 拿掉「換個說法」：使用者已經自己勾了 3 題，每題再多問一個換句版本等於花兩倍錢，
   // 小積木覺得沒用。只問勾的原句。（paraphraseQuestions 先留著不刪，舊紀錄的 altQuestion 畫面照常顯示）
-  const ask = (q: string) => runVisibilityQueries(`${q} 請具體推薦幾個，並附上來源網址。`, origin, 900);
-  const perQuestion = await Promise.all(
-    questions.map(async (question) => {
+  const ask = (q: string) => runVisibilityQueries(`${q} 請具體推薦幾個，並附上來源網址。`, origin, 1800);
+  const askOne = async (question: string) => {
       // Google 用原題直接搜（一般人就是這樣打進 Google 的），不加「請附來源網址」那串
       const [answers, google] = await Promise.all([ask(question), fetchGoogleAio(question, origin)]);
       const tagged = [
@@ -625,8 +624,10 @@ export async function runRecommendVisibility(
       const p = byQuestion.get(question);
       const googleState: 'present' | 'absent' | 'failed' = google?.status ?? 'failed';
       return { question, ...(p?.source ? { source: p.source } : {}), origin: p?.origin ?? 'custom', google: googleState, results };
-    }),
-  );
+  };
+  // 一次最多同時問 3 題：作戰清單一次 8 題，全部一起送會撞代查服務的同時查詢上限
+  const perQuestion: RecommendQuestionResult[] = [];
+  for (let i = 0; i < questions.length; i += 3) perQuestion.push(...(await Promise.all(questions.slice(i, i + 3).map(askOne))));
   const questionsWithAnswers = perQuestion.filter((q) => q.results.length > 0);
   if (questionsWithAnswers.length === 0) return null;
 

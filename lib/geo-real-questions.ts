@@ -50,7 +50,7 @@ function mentions(text: string, keyword: string): boolean {
 
 // Serper 每秒最多 5 次，排隊每 250ms 放一個
 let serperNext = 0;
-async function serper(q: string, key: string) {
+export async function serper(q: string, key: string) {
   const wait = Math.max(0, serperNext - Date.now());
   serperNext = Date.now() + wait + 250;
   await new Promise((r) => setTimeout(r, wait));

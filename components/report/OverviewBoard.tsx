@@ -137,6 +137,7 @@ export function OverviewBoard({
   const lv = ratio >= 0.6 ? { t: "常被推薦", tone: "ok" as const } : ratio >= 0.3 ? { t: "有時被推薦", tone: "warn" as const } : { t: "很少被推薦", tone: "fail" as const };
   const found = brandChecks.filter((b) => b.citedSelf).length;
   const rank = table.selfRank;
+  const tied = !!rank && table.rows.filter((r) => r.count === self.count).length > 1;
   const pos = sentiment?.themes.filter((t) => t.polarity === "positive") ?? [];
   const neg = sentiment?.themes.filter((t) => t.polarity === "negative") ?? [];
   const brandsTop = table.rows.filter((r) => r.count > 0).slice(0, 6);
@@ -155,7 +156,7 @@ export function OverviewBoard({
       <div className="grid grid-cols-5 gap-4">
         <Kpi label="推薦次數" value={`${self.count}/${table.total}`} unit="次回答" tone={lv.tone} foot={<span className="font-semibold">{lv.t}</span>} />
         <Kpi label="官網引用" value={`${found}/${brandChecks.length}`} unit="家" tone={found === brandChecks.length ? "ok" : found > 0 ? "warn" : "fail"} foot="介紹品牌時引用官網的平台數" />
-        <Kpi label="推薦排名" value={rank ? `第 ${rank}` : "未上榜"} unit={rank ? "名" : ""} tone={rank && rank <= 3 ? "ok" : rank ? "warn" : "fail"} foot={`AI 點名的 ${table.rows.length} 個品牌裡`} />
+        <Kpi label="推薦排名" value={rank ? `${tied ? "並列" : ""}第 ${rank}` : "未上榜"} unit={rank ? "名" : ""} tone={rank && rank <= 3 ? "ok" : rank ? "warn" : "fail"} foot={`AI 點名的 ${table.rows.length} 個品牌裡`} />
         <Kpi
           label="品牌評價"
           value={
@@ -182,7 +183,7 @@ export function OverviewBoard({
         <Card title="各平台品牌推薦次數" sub="前 6 名品牌在各 AI 平台被推薦的次數" right={<GoLink onClick={() => onGo("brands")} />} className="col-span-8">
           <BrandEngineColumns rows={brandsTop} engines={table.engines} />
         </Card>
-        <Card title="聲量佔有率" sub="各品牌在所有推薦提及中的佔比" className="col-span-4">
+        <Card title="聲量佔有率" sub="各品牌在所有推薦提及中的佔比，次數相同標並列" className="col-span-4">
           <SovDonut rows={table.rows.filter((r) => r.count > 0)} />
         </Card>
       </div>

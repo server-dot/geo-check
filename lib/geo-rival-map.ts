@@ -184,7 +184,9 @@ ${list}
       const p = parseJson<{ items?: Record<string, unknown>[] }>(data.choices?.[0]?.message?.content ?? '');
       // 只收這一批的編號，模型偶爾會回別批的
       // 用名稱對回編號：你自己＝0，這一批的業者＝原本的編號＋1；對不上的丟掉
-      const same = (a: string, b: string) => a.replace(/\s/g, '').toLowerCase() === b.replace(/\s/g, '').toLowerCase();
+      // 11-24 Relove：Perplexity 把「名稱：說明」「名稱（官網 …）」整串抄回來，10 家全對不上；名稱後面接冒號或括號也算同一家
+      const flat = (t: string) => t.replace(/\s/g, '').toLowerCase();
+      const same = (a: string, b: string) => flat(a) === flat(b) || ['：', ':', '（', '('].some((c) => flat(a).startsWith(flat(b) + c));
       return (Array.isArray(p?.items) ? p!.items : []).flatMap((it) => {
         const n = String(it.name ?? '');
         if (same(n, rv.brandName)) return [{ ...it, id: 0, url: checkedSource(it.url, found, { domain, keys, isSelf: true }) }];

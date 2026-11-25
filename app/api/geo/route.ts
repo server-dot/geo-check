@@ -350,7 +350,7 @@ async function runSeo(jobId: string, origin: string, startedAt: number) {
 // 服務／產品頁：網址或標題有「服務、產品、商品、方案、價目」的頁（中文網址要先 decode 才比對得到），
 // 最多兩頁、每頁 1000 字。給出題用，題目才會分散到各項服務，不會只問首頁最常出現的那一項
 function serviceText(pages: { url: string; title: string; ok: boolean; nonHtml?: boolean; isHome: boolean; mainText: string }[]): string {
-  const re = /服務|產品|商品|方案|價目|收費|service|product|solution|pricing|shop/i;
+  const re = /服務|產品|商品|方案|價目|收費|service|product|solution|pricing|shop|categor|collection/i;
   const hits = pages.filter((p) => {
     if (!p.ok || p.nonHtml || p.isHome || !p.mainText) return false;
     let path = p.url;
@@ -361,7 +361,13 @@ function serviceText(pages: { url: string; title: string; ok: boolean; nonHtml?:
     const first = path.split('/').filter(Boolean)[0] ?? '';
     return re.test(first) || (path.split('/').filter(Boolean).length <= 1 && re.test(p.title));
   });
-  return hits.slice(0, 2).map((p) => `${p.title}\n${p.mainText.slice(0, 1000)}`).join('\n\n');
+  // 先列出全部分類／商品頁的標題：只讀兩頁內文時，排在後面的產品線整條不見
+  // （11-23 Relove 15 個候選題全是私密／理毛，官網選單第一條的臉部保養沒有半題）
+  const titles = [...new Set(hits.map((p) => p.title.split(/[｜|]/)[0].replace(/【[^】]*】/g, '').trim().slice(0, 28)).filter(Boolean))].slice(0, 40);
+  // Shopline 這類頁面內文開頭是 {{ }} 模板碼，佔掉字數
+  const clean = (s: string) => s.replace(/<!-[^>]*>/g, ' ').replace(/\{\{[\s\S]*?\}\}/g, ' ').replace(/\s+/g, ' ').trim();
+  const bodies = hits.slice(0, 2).map((p) => `${p.title}\n${clean(p.mainText).slice(0, 600)}`);
+  return titles.length > 0 ? [`全部分類與商品：${titles.join('、')}`, ...bodies].join('\n\n') : '';
 }
 
 async function runGeo(jobId: string, origin: string, engine: EngineResult, startedAt: number) {

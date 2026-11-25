@@ -116,6 +116,10 @@ export function googleConfigured(): boolean {
 // 用授權碼跟 Google 換 id_token。token 是我們自己用 TLS 直接跟 Google 拿的，
 // 依 Google 文件這種情況可以直接解 payload，不用再驗簽；但 aud、iss 還是要核對。
 export async function exchangeCode(code: string, req: NextRequest): Promise<SessionUser> {
+  return (await exchangeCodeWithToken(code, req)).user;
+}
+
+export async function exchangeCodeWithToken(code: string, req: NextRequest): Promise<{ user: SessionUser; accessToken: string; scope: string }> {
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -127,7 +131,7 @@ export async function exchangeCode(code: string, req: NextRequest): Promise<Sess
       grant_type: 'authorization_code',
     }),
   });
-  const data = (await res.json()) as { id_token?: string; error?: string; error_description?: string };
+  const data = (await res.json()) as { id_token?: string; access_token?: string; scope?: string; error?: string; error_description?: string };
   if (!res.ok || !data.id_token) throw new Error(data.error_description ?? data.error ?? 'Google 登入失敗');
   const claims = JSON.parse(Buffer.from(data.id_token.split('.')[1], 'base64url').toString('utf8')) as {
     aud?: string;
@@ -140,5 +144,5 @@ export async function exchangeCode(code: string, req: NextRequest): Promise<Sess
   if (claims.aud !== process.env.GOOGLE_CLIENT_ID) throw new Error('Google 登入驗證失敗（aud 不符）');
   if (claims.iss !== 'https://accounts.google.com' && claims.iss !== 'accounts.google.com') throw new Error('Google 登入驗證失敗（iss 不符）');
   if (!claims.email || !claims.email_verified) throw new Error('這個 Google 帳號的信箱還沒驗證');
-  return { email: claims.email.toLowerCase(), name: claims.name ?? claims.email, picture: claims.picture };
+  return { user: { email: claims.email.toLowerCase(), name: claims.name ?? claims.email, picture: claims.picture }, accessToken: data.access_token ?? '', scope: data.scope ?? '' };
 }

@@ -374,7 +374,7 @@ export function BrandRankTable({ table }: { table: BrandTable }) {
       <table className="w-full min-w-[560px] text-[15px]">
         <thead>
           <tr className="border-b border-line bg-inset/60 text-left text-[14px] font-medium text-ink3">
-            <th className="w-10 px-4 py-2.5 text-right font-medium">#</th>
+            <th className="w-24 whitespace-nowrap px-4 py-2.5 text-right font-medium">#</th>
             <th className="px-3 py-2.5 font-medium">品牌</th>
             <th className="px-3 py-2.5 font-medium">被推薦次數（{table.total} 次回答）</th>
             {table.engines.map((e) => (
@@ -387,9 +387,10 @@ export function BrandRankTable({ table }: { table: BrandTable }) {
         <tbody>
           {shown.map((r) => {
             const rank = table.rows.filter((o) => o.count > r.count).length + 1;
+            const tied = table.rows.filter((o) => o.count === r.count).length > 1;
             return (
               <tr key={(r.isSelf ? "self:" : "") + r.name} className={`border-b border-line last:border-0 ${r.isSelf ? "bg-lime/[.08]" : ""}`}>
-                <td className="mono px-4 py-2.5 text-right text-[14px] text-ink3">{r.count > 0 ? rank : "—"}</td>
+                <td className="mono px-4 py-2.5 text-right text-[14px] text-ink3">{r.count > 0 ? `${tied ? "並列 " : ""}${rank}` : "—"}</td>
                 <td className="px-3 py-2.5">
                   <span className={r.isSelf ? "font-bold text-ink" : "text-ink"}>{r.name}</span>
                   {r.isSelf && (
@@ -974,7 +975,7 @@ export function TopSitesCard({
   const selfRow = all.find((g) => g.type === "self")!;
   if (!top.includes(selfRow)) top.push(selfRow);
   const peak = Math.max(1, ...top.map((x) => x.count));
-  const rankOf = (g: (typeof all)[number]) => (g.count > 0 ? all.indexOf(g) + 1 : null);
+  const rankOf = (g: (typeof all)[number]) => (g.count > 0 ? all.filter((o) => o.count > g.count).length + 1 : null);
 
   return (
     <div className="rounded-xl border border-line bg-card p-6 shadow-[0_1px_3px_rgba(48,60,84,.07)]">
