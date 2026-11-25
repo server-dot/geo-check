@@ -10,7 +10,7 @@ export const SITE_NAME = '積木 GEO 健檢';
 export const SITE_TAGLINE = 'AI 搜尋能見度檢測';
 // 描述控制在 80 字內（健檢的 TKD 門檻）
 export const SITE_DESCRIPTION =
-  '免費檢測網站在 ChatGPT、Perplexity 等 AI 搜尋引擎眼中的能見度：以 AI 爬蟲身分實測、實際去問 AI 認不認得你，並跑多頁深度健檢。';
+  '免費實際去問 ChatGPT、Perplexity、Google AI 摘要：推薦了誰、怎麼說你、為什麼不是你，另有 SEO 排名與網站健檢。';
 
 // 經營者：積木媒體行銷（聯絡資訊跟 /contact 頁、頁尾一致）
 export const ORG = {

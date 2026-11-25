@@ -97,9 +97,8 @@ export default function ContentSignalsArticlePage() {
 
             <h2 className="mt-11 text-[24px] md:text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
-              回到 <Link href="/">健檢</Link> 重跑一次，「內容使用授權（Content Signals）」這一項的三個欄位
-              應該從 <span className="t-gray">未表態</span> 變成你設定的值，健檢也會把解析出來的原文照貼出來，
-              方便你核對格式有沒有寫對。
+              回到 <Link href="/">健檢</Link> 重跑一次 SEO 健檢，「內容使用授權」這一項應該變成{" "}
+              <span className="t-ok">正常</span>。三個欄位的值可以直接打開你的 robots.txt 核對。
             </p>
             <p className="note">
               （這個欄位目前還在標準化過程中，不是所有 AI 業者都保證會遵守；表態是把你的立場寫清楚，

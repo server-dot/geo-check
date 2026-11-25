@@ -40,6 +40,14 @@ function extractLinks(text: string): LlmsTxtLink[] {
   for (const line of text.split(/\r?\n/)) {
     const m = line.match(/\[([^\]]+)\]\(([^)]+)\)\s*:?\s*(.*)$/);
     if (m) links.push({ text: m[1].trim(), url: m[2].trim(), description: m[3].trim() });
+    // 直接寫網址也算（11-25 Relove 的 llms.txt 有 4844 字，網址沒用 [標題](網址) 寫法就被說「幾乎是空的」）
+    else {
+      const u = line.match(/https?:\/\/[^\s`<>()"'，。）]+/)?.[0].replace(/[.,;]+$/, '');
+      if (u && !u.includes('{') && !links.some((l) => l.url === u)) {
+        const label = line.replace(/`?https?:\/\/.*$/, '').replace(/[*>#\-`]/g, '').replace(/[:：\s]+$/, '').trim();
+        links.push({ text: label || u, url: u, description: label });
+      }
+    }
   }
   return links;
 }
@@ -65,7 +73,7 @@ export function analyzeLlmsTxt(text: string): LlmsTxtQuality {
       summary,
       links,
       charCount,
-      advice: `你有放 llms.txt，但裡面幾乎是空的（${charCount} 字、${links.length} 個連結）。AI 抓到這份檔案時讀不出你有什麼重點內容，等於白放。`,
+      advice: `你有放 llms.txt，但內容很少（${charCount} 字、${links.length} 個網址），沒有列出重點頁。`,
       technical: 'llmstxt.org 的標準格式是「# 標題」＋「> 摘要引言」＋逐條 markdown 連結（- [標題](網址): 說明）。',
     };
   }

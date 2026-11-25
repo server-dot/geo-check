@@ -109,7 +109,7 @@ export function SovDonut({ rows }: { rows: { name: string; isSelf: boolean; coun
   const sum = data.reduce((n, d) => n + d.value, 0);
   const tied = new Set(top.filter((r) => rows.filter((o) => o.count === r.count).length > 1).map((r) => r.name));
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex flex-col items-center gap-3 min-[1700px]:flex-row min-[1700px]:gap-4">
       <div className="h-[240px] w-[240px] shrink-0">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -122,7 +122,7 @@ export function SovDonut({ rows }: { rows: { name: string; isSelf: boolean; coun
           </PieChart>
         </ResponsiveContainer>
       </div>
-      <ul className="min-w-0 flex-1 space-y-2">
+      <ul className="w-full min-w-0 flex-1 space-y-2">
         {data.map((d) => (
           <li key={d.name} className="flex items-center gap-2 text-[14px]">
             <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: d.color, outline: d.color === "#eceef2" ? "1px solid #dcdfe6" : undefined }} />

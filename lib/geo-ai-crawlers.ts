@@ -136,6 +136,12 @@ function isBlocked(rules: Rule[], path = '/'): { blocked: boolean; matchedRule: 
   return { blocked: best.type === 'disallow', matchedRule: `${best.type === 'disallow' ? 'Disallow' : 'Allow'}: ${best.path}` };
 }
 
+// 某個爬蟲能不能讀這個路徑（沒有適用規則＝可以）
+export function robotsBlocks(robotsTxt: string, ua: string, path: string): boolean {
+  const rules = findRulesFor(parseGroups(robotsTxt), ua);
+  return rules ? isBlocked(rules, path).blocked : false;
+}
+
 // ── Content Signals ─────────────────────────────────────
 // Cloudflare 於 2025-09 提出、寫在 robots.txt 裡的新欄位，已隨其代管設定鋪到數百萬網域，
 // IETF 的 AIPREF 工作組正在標準化中。格式：

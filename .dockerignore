@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+.data
+.dev-fixtures
+blog-drafts
+.env*
+*.tsbuildinfo
+.claude

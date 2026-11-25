@@ -108,8 +108,8 @@ export default function WafBlocksDespiteAllowArticlePage() {
 
             <h2 className="mt-11 text-[24px] md:text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
-              回到 <Link href="/">健檢</Link> 重跑一次，這一項應該從{" "}
-              <span className="t-warn">政策允許但實測被擋</span> 變成 <span className="t-ok">可存取</span>。
+              回到 <Link href="/">健檢</Link> 重跑一次 GEO 健檢，「網站總體健檢」的「回答客人的 AI」應該從 <span className="t-fail">被擋</span> 變成{" "}
+              <span className="t-ok">進得來</span>。
             </p>
             <p className="note">
               （這個狀況跟「⚪ 無法判定」不是同一回事：無法判定是連 robots.txt 本身都讀不到，

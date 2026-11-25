@@ -269,12 +269,12 @@ export function extractPageFacts(html: string, url: string, depth: number, statu
   };
 }
 
-export async function fetchSitemapUrls(origin: string): Promise<string[]> {
+export async function fetchSitemapUrls(origin: string, maxUrls = 500, maxFiles = 10): Promise<string[]> {
   const seen = new Set<string>();
   const queue = [`${origin}/sitemap.xml`];
   const out = new Set<string>();
   let fetched = 0;
-  while (queue.length && out.size < 500 && fetched < 10) {
+  while (queue.length && out.size < maxUrls && fetched < maxFiles) {
     const sm = queue.shift()!;
     if (seen.has(sm)) continue;
     seen.add(sm);

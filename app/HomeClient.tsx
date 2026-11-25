@@ -16,6 +16,7 @@ import { buildDiagnosis, GATE_SYMBOL, VERDICT_LABEL, VERDICT_STATE, type Diagnos
 import type { ContentMatch } from "@/lib/geo-content-match";
 import { buildCategories5, computeOverallScore, CATEGORY5_KEY_MAP, CATEGORY5_ORDER, type Category5 } from "@/lib/geo-score";
 import { crawlersOnly } from "@/lib/geo-ai-crawlers";
+import { DEEP_AUDIT_KEYS } from "@/lib/geo-audit-rules";
 import { track } from "@/lib/ga";
 import { SITE_NAME } from "@/lib/site";
 // 報告目錄切換：每一頁要顯示哪些區塊（section id）。沒列的頁就只顯示同名那一區
@@ -26,7 +27,7 @@ const REPORT_PAGES: Record<string, string[]> = {
 type AuditKind = "geo" | "seo";
 const KIND_INFO: Record<AuditKind, { label: string; desc: string }> = {
   geo: { label: "GEO 健檢", desc: "AI 推薦了誰、怎麼評價你，加上網站總體健檢（AI 有沒有被擋、無障礙）" },
-  seo: { label: "SEO 健檢", desc: "多頁深度健檢：標題描述、大小標題、sitemap、結構化資料…" },
+  seo: { label: "SEO 健檢", desc: "Google 關鍵字排名，加上標題描述、大小標題、結構化資料等多頁健檢" },
 };
 
 interface MeResponse {
@@ -71,24 +72,24 @@ function useCountUpProgress(durationMs = 1100): number {
 }
 
 const HOME_CHECKS = [
-  { name: "AI 爬蟲的存取權限", why: "GPTBot / ClaudeBot / PerplexityBot 等 7 家實際請求" },
-  { name: "AI 讀到的內容", why: "關掉 JavaScript 後量可讀字數、title、h1" },
-  { name: "內容使用授權（Content Signals）", why: "search / ai-input / ai-train 三項的表態" },
-  { name: "llms.txt", why: "有沒有、格式完不完整、連結解不解得開" },
-  { name: "AI 認不認得你（實際去問）", why: "送出提問給 Perplexity 與 ChatGPT，原話與引用來源照貼" },
-  { name: "AI 推不推薦你（推薦題）", why: "參考網友在論壇問過的問題產生 10 題、加 5 個短關鍵字，勾最多三題，看 AI 點名推薦了誰、有沒有你" },
-  { name: "多頁 SEO + GEO 深度健檢", why: "結構化資料、索引、網站健康、外部權威等 21 項" },
+  { name: "AI 推不推薦你", why: "用客人會問的題目去問 Perplexity、ChatGPT、Google AI 摘要，看點名了誰、有沒有你（最多勾三題）" },
+  { name: "AI 為什麼沒推你", why: "每題列出你最接近的網頁、AI 推別人的理由原文、可以補什麼" },
+  { name: "AI 怎麼說你", why: "品牌輪廓和評價，附三家 AI 的回答原文" },
+  { name: "誰跟你搶客人", why: "AI 推過的業者各站在哪個市場位置，跟你差在哪" },
+  { name: "AI 參考了哪些網站、網友在問什麼", why: "引用的網頁分類整理；Dcard、PTT、Threads 等論壇的相關問題附連結" },
+  { name: "網站總體健檢", why: "回答客人的 AI 有沒有被擋、llms.txt、無障礙（WCAG）" },
+  { name: "SEO 健檢", why: `Google 關鍵字排名與可以補的內容，加上 ${DEEP_AUDIT_KEYS.length} 項多頁深度健檢` },
 ];
 
 const HOME_STEPS = [
   { no: "01", title: "輸入網址", body: "選 GEO 或 SEO，用 Google 帳號登入，每天各免費一次。", Icon: StepInputIcon },
   {
     no: "02",
-    title: "七層檢測 + 深度健檢",
-    body: "以 7 家爬蟲的身分實際請求、關掉 JavaScript 量內容、再去問 AI 引擎。",
+    title: "勾題目、問 AI",
+    body: "GEO 健檢列出網友問過的和客人可能會問的題目，勾最多三題去問三家 AI。",
     Icon: StepAuditIcon,
   },
-  { no: "03", title: "看報告、排順序", body: "總分與逐項判定，需處理的附上量到的值，可直接轉給工程師。", Icon: StepReportIcon },
+  { no: "03", title: "看報告", body: "AI 推薦了誰、為什麼不是你、可以先補哪一頁。", Icon: StepReportIcon },
 ];
 
 type BotStatus = "allowed" | "blocked" | "unknown" | "mismatch";
@@ -2958,19 +2959,17 @@ function kindUsed(me: MeResponse | null, k: AuditKind): boolean {
 }
 
 export default function HomeClient({
-  botCount,
   checkCount,
   checkedCount,
 }: {
-  botCount: number;
   checkCount: number;
   checkedCount: number;
 }) {
   const countUpT = useCountUpProgress();
   const stats = [
     { num: Math.round(checkedCount * countUpT), unit: "個網站", label: "已經跑過這份健檢", note: "多數是台灣的中小企業與品牌官網" },
-    { num: Math.round(botCount * countUpT), unit: "家 AI 爬蟲", label: "以它們的身分實際請求你的頁面", note: "GPTBot、ClaudeBot、PerplexityBot 等，不是只讀 robots.txt" },
-    { num: Math.round(checkCount * countUpT), unit: "項深度健檢", label: "多頁取樣，逐項給出量到的值", note: "結構化資料、索引與技術、網站健康、外部權威" },
+    { num: Math.round(3 * countUpT), unit: "家 AI", label: "實際去問它們推薦誰", note: "Perplexity、ChatGPT、Google AI 摘要" },
+    { num: Math.round(checkCount * countUpT), unit: "項 SEO 深度健檢", label: "多頁取樣，逐項給出量到的值", note: "結構化資料、技術與索引、內容與追蹤、品牌與權威" },
   ];
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -3283,7 +3282,7 @@ export default function HomeClient({
                 <mark className="bg-transparent whitespace-nowrap text-lime">答案裡</mark>嗎？
               </h1>
               <p className="mt-[22px] max-w-[32em] text-[17.5px] text-[#c6cdda]">
-                GEO 健檢用各家 AI 爬蟲的身分實際去讀你的網站，再實際去問 AI 推薦了誰；SEO 健檢多頁取樣，逐項檢查標題、結構與收錄。
+                GEO 健檢實際去問三家 AI：推薦了誰、怎麼說你、為什麼不是你；SEO 健檢查 Google 關鍵字排名，並多頁檢查標題、結構與收錄。
               </p>
               <form onSubmit={handleCheck} className="pointer-events-auto mt-9 max-w-[560px]">
                 <KindPicker kind={kind} onChange={setKind} />
@@ -3341,7 +3340,7 @@ export default function HomeClient({
           <>
             <Section k="01" eyebrow="THE CHECK" title="健檢會看什麼">
               <p className="prose mt-4">
-                七個檢測層，最後一項是多頁深度健檢。判定字彙與總分算法寫在{" "}
+                前六項是 GEO 健檢，最後一項是 SEO 健檢。怎麼判定、SEO 總分怎麼算，寫在{" "}
                 <a href="/scoring">判斷標準</a>。
               </p>
               <ul className="mt-[30px]">
@@ -3354,7 +3353,7 @@ export default function HomeClient({
               </ul>
             </Section>
 
-            <Section k="02" eyebrow="HOW IT WORKS" title="三個步驟，約 40 秒">
+            <Section k="02" eyebrow="HOW IT WORKS" title="三個步驟，健檢約 1 分鐘">
               {/* 小積木 2026-09-11 給的設計稿：長文字改成「圖示＋一句話」；間距數值是他用 tweaks 面板調出來的（靠左、圖示→編號 18px、左右 28px）。 */}
               <dl className="figs figs--steps mt-[30px] grid-cols-1 sm:grid-cols-3">
                 {HOME_STEPS.map((s) => (
@@ -3368,26 +3367,23 @@ export default function HomeClient({
               </dl>
             </Section>
 
-            <Section k="03" eyebrow="THE REPORT" title="你會拿到一份總分 0–100 的報告" noBorder>
+            <Section k="03" eyebrow="THE REPORT" title="你會拿到什麼報告" noBorder>
               <p className="prose mt-4">
-                每一項標成 <span className="t-ok">正常</span>、<span className="t-warn">可優化</span> 或{" "}
-                <span className="t-fail">需處理</span>，附上實際量到的數值與該怎麼改。我們讀不到的東西會標成 ⚪
-                無法判定。
+                GEO 報告看 AI 推薦了誰、怎麼說你、可以補什麼；SEO 報告看 Google 排名和 0–100 的總分。我們讀不到的東西會標成無法判定。
               </p>
-              {/* 兩張報告截圖橫向並排（總覽／深度健檢表格），各自維持原生比例，不裁切、
-                  不硬套單一寬高框。原本放三張，中間那張（品牌能見度）拿掉了——小積木反饋
-                  「字好小」，圖一多每張分到的寬度就變窄，圖裡的文字跟著縮小看不清楚；
-                  兩張比三張各自能分到更多寬度，文字自然變大、更好讀。 */}
-              <div className="mt-[30px] grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {/* 11-25 換成新版報告：一張一排，字才夠大（並排試過字太小）。用 Q kangber 自己的報告 */}
+              <div className="mt-[30px] grid grid-cols-1 gap-4">
                 {[
-                  { src: "/report-screenshot-1.webp", alt: "健檢報告圖：總分 80 分（B 級・良好）、需處理／可優化／正常計數、AI 爬蟲累積讀到的字數曲線" },
-                  { src: "/report-screenshot-3.webp", alt: "健檢報告截圖：21 項深度健檢表格，逐項列出狀態、現況、這代表什麼與問題頁面" },
+                  { src: "/report-geo-overview.webp", alt: "GEO 報告總覽：推薦次數、官網引用、推薦排名、品牌評價、各平台品牌推薦次數長條圖與聲量佔有率" },
+                  { src: "/report-site-health.webp", alt: "網站總體健檢：回答客人的 AI 進不進得來、llms.txt、無障礙有沒有問題" },
+                  { src: "/report-seo-keywords.webp", alt: "SEO 報告關鍵字排名：每個關鍵字的 Google 排名、差在哪、先補哪一段" },
                 ].map((img) => (
                   // eslint-disable-next-line @next/next/no-img-element -- 固定素材、非使用者上傳圖片，不需要 next/image 的最佳化/尺寸協商
                   <img
                     key={img.src}
                     src={img.src}
                     alt={img.alt}
+                    loading="lazy"
                     className="w-full rounded-[10px] border border-line"
                   />
                 ))}
@@ -3429,7 +3425,7 @@ export default function HomeClient({
                   <div className="progress-fill progress-fill--indeterminate" />
                 )}
               </div>
-              <p className="mt-3 text-xs text-ink3">多頁健檢通常需要 30–120 秒，關掉分頁不會保留結果，請稍候。</p>
+              <p className="mt-3 text-xs text-ink3">健檢通常需要 1 分鐘左右，關掉分頁不會保留結果，請稍候。</p>
             </div>
           </div>
         )}
@@ -3707,7 +3703,7 @@ export default function HomeClient({
 
             {/* 11-25 小積木：「AI 看不看得到你的網站」改成總體健檢＝被擋＋llms.txt＋WCAG */}
             {reportKind === "geo" && (
-              <DashSection id="health" title="網站總體健檢" desc="AI 有沒有被擋、有沒有給 AI 的網站導覽、視障和高齡的人用不用得了">
+              <DashSection id="health" title="網站總體健檢" desc="AI 讀不讀得到、網站好不好用">
                 <SiteHealth ai={engine} jobId={reportJobId} initial={status?.wcag} active={reportPage === "health"} onDone={(r) => setStatus((s) => (s ? { ...s, wcag: r } : s))} />
               </DashSection>
             )}

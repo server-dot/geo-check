@@ -68,7 +68,8 @@ export default function RobotsTxtArticlePage() {
             <h2 className="mt-11 text-[24px] md:text-[30px]">問題長什麼樣</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
               健檢會用 7 家 AI 爬蟲各自真實的 User-Agent 實際發送請求，對照 robots.txt 的規則，
-              只要有任何一家被 Disallow 擋下，這一項就會標成 <span className="t-fail">需處理</span>。
+              會即時回答客人的（ChatGPT 搜尋、ChatGPT 讀網頁、Perplexity）只要有一家進不來，就會標成{" "}
+              <span className="t-fail">被擋</span>；抓資料訓練模型的（例如 GPTBot）被擋只會註明。
               下面是一個典型會連 AI 爬蟲一起擋掉的規則：
             </p>
             <div className="excerpt whitespace-pre-wrap">{"User-agent: GPTBot\nDisallow: /"}</div>
@@ -93,8 +94,8 @@ export default function RobotsTxtArticlePage() {
 
             <h2 className="mt-11 text-[24px] md:text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
-              回到 <Link href="/">健檢</Link> 重跑一次，這一項應該從 <span className="t-fail">需處理</span> 變成{" "}
-              <span className="t-ok">正常</span>，爬蟲清單會收合成一行「8 個 AI 爬蟲的結果一致：可存取」。
+              回到 <Link href="/">健檢</Link> 重跑一次 GEO 健檢，「網站總體健檢」的「回答客人的 AI」應該從 <span className="t-fail">被擋</span> 變成{" "}
+              <span className="t-ok">進得來</span>。
               如果仍然標成 ⚪ 無法判定，代表 robots.txt 我們讀不到，通常是 WAF 的問題——見{" "}
               <Link href="/scoring">判斷標準</Link>。
             </p>

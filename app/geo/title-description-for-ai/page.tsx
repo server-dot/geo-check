@@ -146,7 +146,7 @@ export default function TitleDescriptionArticlePage() {
 
             <h2 className="mt-11 text-[24px] md:text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
-              回到 <Link href="/">健檢</Link> 重跑一次，「每頁的標題與描述完不完整」的逐頁清單會變短，
+              回到 <Link href="/">健檢</Link> 重跑一次 SEO 健檢，「每頁的標題與描述完不完整」的逐頁清單會變短，
               全部修完就是 <span className="t-ok">正常</span>。要看 Google 實際顯示什麼，用 Search Console
               的網址檢查工具；AI 那邊拿一個跟這頁相關的問題去問 ChatGPT 搜尋或 Perplexity，
               看引用卡片上的標題是不是你寫的那一個。

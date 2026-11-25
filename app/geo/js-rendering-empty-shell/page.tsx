@@ -98,14 +98,12 @@ export default function JsRenderingArticlePage() {
 
             <h2 className="mt-11 text-[24px] md:text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
-              回到 <Link href="/">健檢</Link> 重跑一次，「AI 讀到的內容」這一項應該從{" "}
-              <span className="t-fail">內容單薄</span> 或 <span className="t-warn">可優化</span> 變成{" "}
-              <span className="t-ok">正常</span>，字數也會明顯變多。你也可以自己用瀏覽器開發者工具停用
+              回到 <Link href="/">健檢</Link> 重跑一次 SEO 健檢，報告圖「AI 眼中的你」量到的可讀字數會明顯變多。你也可以自己用瀏覽器開發者工具停用
               JavaScript 重新整理頁面，用肉眼確認內容還在不在——這就是 AI 爬蟲看到的版本。
             </p>
             <p className="note">
-              （這一項只看首頁。如果產品頁、文章頁也是純前端渲染，同樣的問題會發生在那些頁面上，深度健檢的
-              21 項裡有另外幾項會抽樣檢查其他頁面。）
+              （這一項只看首頁。如果產品頁、文章頁也是純前端渲染，同樣的問題會發生在那些頁面上，深度健檢
+              另有幾項會抽樣檢查其他頁面。）
             </p>
           </div>
 

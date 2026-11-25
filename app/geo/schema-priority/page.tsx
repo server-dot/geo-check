@@ -92,7 +92,7 @@ export default function SchemaArticlePage() {
 
             <h2 className="mt-11 text-[24px] md:text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
-              回到 <Link href="/">健檢</Link> 重跑一次，「結構化資料」這一項會列出每個型別欄位完整度，
+              回到 <Link href="/">健檢</Link> 重跑一次 SEO 健檢，「結構化資料」這一項會列出每個型別欄位完整度，
               健檢報告的結構化資料區塊會依你的業務型別各給一張卡片，逐欄位標示哪些已經填、哪些還缺，
               不用自己一個一個對照 schema.org 文件。
             </p>

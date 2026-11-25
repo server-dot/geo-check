@@ -95,8 +95,8 @@ export default function WafFalseUnknownArticlePage() {
 
             <h2 className="mt-11 text-[24px] md:text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
-              回到 <Link href="/">健檢</Link> 重跑一次，這一項應該從 ⚪ 無法判定 變成{" "}
-              <span className="t-ok">可存取</span>。你也可以先自己在瀏覽器打開{" "}
+              回到 <Link href="/">健檢</Link> 重跑一次 GEO 健檢，「回答客人的 AI」應該從無法判定變成{" "}
+              <span className="t-ok">進得來</span>。你也可以先自己在瀏覽器打開{" "}
               <span className="mono">https://你的網域/robots.txt</span>
               人工確認——如果連你自己都打不開或跳出驗證頁，代表擋的範圍比 AI 爬蟲更廣，要先確認網站本身沒有故障。
             </p>

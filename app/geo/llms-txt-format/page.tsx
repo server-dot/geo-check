@@ -97,9 +97,8 @@ export default function LlmsTxtArticlePage() {
 
             <h2 className="mt-11 text-[24px] md:text-[30px]">改完怎麼複驗</h2>
             <p className="mt-3.5 text-[15.5px] leading-[1.75] text-ink2">
-              回到 <Link href="/">健檢</Link> 重跑一次，這一項應該從 <span className="t-fail">沒有</span> 或{" "}
-              <span className="t-warn">內容單薄</span> 變成 <span className="t-ok">格式完整</span>
-              ，健檢會把解析出來的標題、摘要跟每個連結展開給你看，可以直接核對內容有沒有寫對。
+              回到 <Link href="/">健檢</Link> 重跑一次 GEO 健檢，「網站總體健檢」的「給 AI 的網站導覽」應該變成{" "}
+              <span className="t-ok">有</span>。
             </p>
             <p className="note">
               （llms.txt 目前還沒有任何 AI 業者正式承諾一定會讀取，這是一個社群提出、還在推廣中的慣例。
