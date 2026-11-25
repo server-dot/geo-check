@@ -82,7 +82,14 @@ async function shoot(targets: ShotTarget[]): Promise<void> {
                     }
                     return true;
                   };
-                  const n = list.find(visible);
+                  // 同網址、同樣式可能有另一個有文字的（選單「私密清潔系列」），那個沒問題，不能框它
+                  const nameless = (n: Element) => {
+                    if (!loc || !/^(a|button|img)$/.test(loc.tag)) return true;
+                    if (n.getAttribute('aria-label')?.trim() || n.getAttribute('aria-labelledby') || n.getAttribute('title')?.trim()) return false;
+                    if (loc.tag === 'img') return !n.hasAttribute('alt');
+                    return !n.textContent?.trim() && ![...n.querySelectorAll('img,[aria-label]')].some((x) => x.getAttribute('alt')?.trim() || x.getAttribute('aria-label')?.trim());
+                  };
+                  const n = list.find((x) => nameless(x) && visible(x));
                   if (!n) return null;
                   n.scrollIntoView({ block: 'center' });
                   const r = n.getBoundingClientRect();

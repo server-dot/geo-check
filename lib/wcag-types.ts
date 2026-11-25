@@ -23,7 +23,7 @@ export interface WcagItem {
   examples: WcagExample[]; // 每一個有問題的東西（同一個東西在多頁出現只列一次），前三個先顯示
 }
 // 內容格式改了就加一，舊報告打開時會重測
-export const WCAG_VERSION = 9;
+export const WCAG_VERSION = 10;
 export type SkipReason = '翻譯頁' | '設定不收錄' | '重複的頁' | '功能頁' | '打不開';
 export interface WcagScan {
   status: 'running' | 'done' | 'stopped'; // stopped＝對方網站開始擋，查到一半停
