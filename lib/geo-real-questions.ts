@@ -50,14 +50,14 @@ function mentions(text: string, keyword: string): boolean {
 
 // Serper 每秒最多 5 次，排隊每 250ms 放一個
 let serperNext = 0;
-export async function serper(q: string, key: string) {
+export async function serper(q: string, key: string, page = 1) {
   const wait = Math.max(0, serperNext - Date.now());
   serperNext = Date.now() + wait + 250;
   await new Promise((r) => setTimeout(r, wait));
   const res = await paidFetch('https://google.serper.dev/search', {
     method: 'POST',
     headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ q, gl: 'tw', hl: 'zh-tw' }),
+    body: JSON.stringify({ q, gl: 'tw', hl: 'zh-tw', ...(page > 1 ? { page } : {}) }),
     signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) throw new Error(`Serper ${res.status}`);
@@ -96,17 +96,23 @@ ${PRODUCT_NOT_CONTENT}
 // 2. 論壇裡標題是問句、有提到需求詞、不像業配的貼文
 // failed：Serper 呼叫失敗的次數（額度用完、逾時）。全部失敗時不能說成「論壇上沒人問」
 export async function forumPosts(keyword: string, key: string): Promise<{ posts: Post[]; failed: number; total: number }> {
+  const r = await forumSearch(keyword, key);
+  return { ...r, posts: r.posts.filter(asksForNeed) };
+}
+// 兩段都出現最準；冷門品類常只寫領域那段（「私密處清潔推薦」不會寫「用品」），退一步只要第一段
+function asksForNeed(p: Post): boolean {
+  const head = p.keyword.split(/\s+/)[0];
+  return ASK.test(p.title) && !AD.test(p.title) && (mentions(p.title, p.keyword) || (head.length >= 2 && mentions(p.title, head)));
+}
+
+// 六個論壇搜到的原始貼文，還沒篩
+async function forumSearch(keyword: string, key: string, page = 1, only = ''): Promise<{ posts: Post[]; failed: number; total: number }> {
   let failed = 0;
   const lists = await Promise.all(
-    Object.entries(FORUMS).map(async ([site, domain]) => {
+    Object.entries(FORUMS).filter(([site]) => !only || site === only).map(async ([site, domain]) => {
       try {
-        const data = await serper(`${keyword} site:${domain}`, key);
-        return (data.organic ?? [])
-          .filter((o) => { const t = cleanTitle(o.title); // 兩段都出現最準；冷門品類常只寫領域那段（「私密處清潔推薦」不會寫「用品」），退一步只要第一段
-            const head = keyword.split(/\s+/)[0];
-            return ASK.test(t) && !AD.test(t) && (mentions(t, keyword) || (head.length >= 2 && mentions(t, head))); })
-          .filter((o) => site !== 'FB' || o.link.includes('/groups/'))
-          .map((o) => ({ site, keyword, title: cleanTitle(o.title), link: o.link }));
+        const data = await serper(`${keyword} site:${domain}`, key, page);
+        return (data.organic ?? []).filter((o) => site !== 'FB' || o.link.includes('/groups/')).map((o) => ({ site, keyword, title: cleanTitle(o.title), link: o.link }));
       } catch {
         failed += 1;
         return [];
@@ -114,6 +120,59 @@ export async function forumPosts(keyword: string, key: string): Promise<{ posts:
     }),
   );
   return { posts: lists.flat(), failed, total: Object.keys(FORUMS).length };
+}
+
+// ── 「網友相關問題」那頁的清單（11-25 小積木：真的相關的都要列，有幾則列幾則，不設目標數也不設上限）──────────────
+// 原本借用挑題目的清單，只留「在找推薦」的，290 篇只剩 10 則。這份留所有相關的發問（症狀、用法、價格、經驗），只用規則、不叫 AI
+// 標題沒問號但在問的：「問私密處異味怎解」「關於男性私密處清潔」
+const ASK_LOOSE = /怎|^#?問|^關於|困擾|大家|想知道|該不該|要不要|會不會|有沒有|是不是|好不好|用什麼|什麼牌/;
+// 一個搜尋的第一頁有這麼多則相關，後面多半還有，就往下翻；最多翻到第 3 頁
+const DIG_IF = 4;
+const MAX_PAGE = 3;
+// 媒體衛教、講座、業者口吻：不是網友在問
+const NOT_ASKING = /醫[：:師生教曝揭]|婦產科|營養師|專家|盤點|\d+\s*[招種]|講座|影片更新|直播|小編|教你|避免？|揭密|詢問「|上線啦|大推|^\[?(公告|新聞|情報|廣告|分享)/;
+const COMMON = /^(推薦|價格|費用|多少|哪裡|哪家|怎麼|如何|方法|問題|用品|產品|服務|公司|清潔|保養|設計|系統|工具|女性|男性|台灣|台北|台中|高雄)$/;
+
+// 這個網站的主題字：至少兩個需求詞都有的兩個字（私密）；太通用的字不算
+function topicStems(needs: string[]): string[] {
+  const n = new Map<string, number>();
+  for (const k of needs) {
+    const set = new Set<string>();
+    for (const part of k.split(/\s+/)) {
+      if (/^[\x00-\x7f]+$/.test(part)) set.add(part.toLowerCase());
+      else for (let i = 0; i + 2 <= part.length; i++) set.add(part.slice(i, i + 2));
+    }
+    for (const x of set) n.set(x, (n.get(x) ?? 0) + 1);
+  }
+  return [...n].filter(([x, c]) => c >= 2 && !COMMON.test(x)).map(([x]) => x);
+}
+
+export function relatedPosts(posts: Post[], needs: string[], brand: string): RealQuestionSource[] {
+  const stems = topicStems(needs);
+  const b = brand.trim().toLowerCase();
+  const seen = new Set<string>();
+  const out: RealQuestionSource[] = [];
+  for (const p of posts) {
+    // 「…(第2頁)」是同一篇；「Re: [問題]」是回文
+    const title = p.title.replace(/\s*[(（]第\s*\d+\s*頁[)）]/g, '').replace(/^Re:\s*/i, '').replace(/\s*-\s*PTT$/i, '').trim();
+    if (!(ASK.test(title) || ASK_LOOSE.test(title)) || AD.test(title) || NOT_ASKING.test(title) || (b && title.toLowerCase().includes(b))) continue;
+    const head = p.keyword.split(/\s+/)[0];
+    const related = mentions(title, p.keyword) || (stems.length > 0 ? stems.some((x) => mentions(title, x)) : head.length >= 2 && mentions(title, head));
+    const same = title.replace(/^\s*(\[[^\]]*\]|【[^】]*】|#)\s*/, '').replace(/[\s\p{P}\p{S}]/gu, '').toLowerCase();
+    if (!related || same.length < 4 || seen.has(same) || seen.has(p.link)) continue;
+    seen.add(same);
+    seen.add(p.link);
+    out.push({ site: p.site, title, link: p.link });
+  }
+  return out;
+}
+
+// 每個論壇輪流取，才不會前面都是同一個論壇
+function spread(list: RealQuestionSource[]): RealQuestionSource[] {
+  const by = [...new Set(list.map((x) => x.site))].map((s) => list.filter((x) => x.site === s));
+  const out: RealQuestionSource[] = [];
+  for (let i = 0; by.some((b) => b.length > i); i++) for (const b of by) if (b[i]) out.push(b[i]);
+  return out;
 }
 
 // 3. 留下「在找推薦」的貼文，整理成問 AI 的句子（盡量保留網友原話）
@@ -151,24 +210,37 @@ export async function listForumQuestions(
   input: RecommendInput,
   apiKey: string,
   count = MAX_FORUM_QUESTIONS,
-): Promise<{ questions: { question: string; source: RealQuestionSource }[]; status: 'ok' | 'failed' }> {
+): Promise<{ questions: { question: string; source: RealQuestionSource }[]; all: RealQuestionSource[]; status: 'ok' | 'failed' }> {
   const key = process.env.SERPER_API_KEY;
-  if (!key) return { questions: [], status: 'failed' };
+  if (!key) return { questions: [], all: [], status: 'failed' };
   try {
     const needs = await findNeeds(input, apiKey);
     if (process.env.DEBUG_REALQ) console.log('[realq] needs', needs);
-    if (needs.length === 0) return { questions: [], status: 'ok' };
-    const results = await Promise.all(needs.map((k) => forumPosts(k, key)));
-    const failed = results.reduce((n, r) => n + r.failed, 0);
-    const total = results.reduce((n, r) => n + r.total, 0);
+    if (needs.length === 0) return { questions: [], all: [], status: 'ok' };
+    const raw = await Promise.all(needs.map((k) => forumSearch(k, key)));
+    const failed = raw.reduce((n, r) => n + r.failed, 0);
+    const total = raw.reduce((n, r) => n + r.total, 0);
+    const found = raw.flatMap((r) => r.posts);
+    // 哪個論壇的哪個詞還有相關的，就往下翻（每翻一頁 US$0.001）
+    const extra: Post[] = [];
+    let dig = needs.flatMap((k) => Object.keys(FORUMS).map((site) => ({ k, site, hits: found.filter((p) => p.keyword === k && p.site === site) })));
+    for (let page = 2; page <= MAX_PAGE; page++) {
+      dig = dig.filter((d) => relatedPosts(d.hits, needs, input.brandName).length >= DIG_IF);
+      dig = await Promise.all(dig.map(async (d) => ({ ...d, hits: (await forumSearch(d.k, key, page, d.site)).posts })));
+      extra.push(...dig.flatMap((d) => d.hits));
+    }
+    const all = spread(relatedPosts([...found, ...extra], needs, input.brandName));
+    // 挑題目去問 AI 的那份：照舊，標題要有需求詞、只留在找推薦的
     const seen = new Set<string>();
-    const posts = results.flatMap((r) => r.posts).filter((p) => (seen.has(p.link) ? false : (seen.add(p.link), true)));
-    if (process.env.DEBUG_REALQ) console.log('[realq] posts', posts.length, 'failed', failed, '/', total);
-    if (posts.length === 0) return { questions: [], status: total > 0 && failed === total ? 'failed' : 'ok' };
-    return { questions: await pickQuestions(input, posts, count, apiKey), status: 'ok' };
+    const posts = found
+      .filter(asksForNeed)
+      .filter((p) => (seen.has(p.link) ? false : (seen.add(p.link), true)));
+    if (process.env.DEBUG_REALQ) console.log('[realq] posts', posts.length, 'all', all.length, 'failed', failed, '/', total);
+    if (posts.length === 0) return { questions: [], all, status: total > 0 && failed === total ? 'failed' : 'ok' };
+    return { questions: await pickQuestions(input, posts, count, apiKey).catch(() => []), all, status: 'ok' };
   } catch (e) {
     if (process.env.DEBUG_REALQ) console.log('[realq] error', e);
-    return { questions: [], status: 'failed' };
+    return { questions: [], all: [], status: 'failed' };
   }
 }
 
@@ -183,5 +255,5 @@ export async function buildRecommendCandidates(input: RecommendInput, apiKey: st
   const forum = forumResult.questions;
   const ai = await generateRecommendQuestions(input, apiKey, undefined, forum.map((f) => f.source.title)).catch(() => [] as string[]);
   if (ai.length === 0 && keywords.length === 0) return null;
-  return { forum, ...(forumResult.status === 'failed' ? { forumFailed: true } : {}), ai, keywords, input };
+  return { forum, forumAll: forumResult.all, ...(forumResult.status === 'failed' ? { forumFailed: true } : {}), ai, keywords, input };
 }

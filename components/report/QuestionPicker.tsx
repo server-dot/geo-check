@@ -11,6 +11,7 @@ import { track } from "@/lib/ga";
 
 export interface QuestionCandidates {
   forum: { question: string; source: { site: string; title: string; link: string } }[];
+  forumAll?: { site: string; title: string; link: string }[];
   forumFailed?: boolean;
   ai: string[];
   keywords?: string[]; // 短關鍵字「品項＋推薦」；11-11 前的紀錄沒有

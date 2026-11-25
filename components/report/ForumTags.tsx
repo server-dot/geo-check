@@ -65,16 +65,16 @@ const KINDS: { id: string; label: string; test: RegExp | null; color: string; ic
   },
 ];
 
-// 平台圓標：字＋底色，不用別人的商標圖
-const SITE: Record<string, { mark: string; color: string }> = {
-  Dcard: { mark: "D", color: "#0b6a94" },
-  PTT: { mark: "P", color: "#303c54" },
-  Threads: { mark: "@", color: "#111111" },
-  Mobile01: { mark: "01", color: "#3a7a1e" },
-  FB: { mark: "f", color: "#1660c4" },
-  BabyHome: { mark: "B", color: "#b04a6f" },
+// 平台用真正的 Logo（11-25 小積木），檔案在 public/forum。color 是長條的顏色；small＝官網只有 16px 的圖，縮小放在同色底上才不會糊
+const SITE: Record<string, { logo: string; color: string; small?: string }> = {
+  Dcard: { logo: "dcard", color: "#0b6a94" },
+  PTT: { logo: "ptt", color: "#303c54" },
+  Threads: { logo: "threads", color: "#111111" },
+  Mobile01: { logo: "mobile01", color: "#1f9a55" },
+  FB: { logo: "fb", color: "#0866ff" },
+  BabyHome: { logo: "babyhome", color: "#d9669b", small: "#ea80af" },
 };
-const siteOf = (s: string) => SITE[s] ?? { mark: s.slice(0, 1), color: "#5f6a80" };
+const siteOf = (s: string) => SITE[s] ?? { logo: "", color: "#5f6a80" };
 
 // 「[請益] 電商訂單管理系統」「#發問Line有電話客服嗎？」→ 去掉版上的分類標記
 const clean = (f: Forum) => f.source.title.replace(/^\s*(?:\[[^\]]*\]|【[^】]*】|#\S{2}(?=\S))\s*/, "").trim() || f.question;
@@ -82,20 +82,28 @@ const kindOf = (f: Forum) => KINDS.find((k) => k.test?.test(clean(f))) ?? KINDS[
 
 function SiteMark({ site, size }: { site: string; size: number }) {
   const s = siteOf(site);
+  if (!s.logo)
+    return (
+      <span aria-hidden="true" className="inline-flex shrink-0 items-center justify-center rounded-full font-bold text-white" style={{ width: size, height: size, background: s.color, fontSize: size * 0.42 }}>
+        {site.slice(0, 1)}
+      </span>
+    );
+  const inner = s.small ? Math.min(size * 0.6, 18) : size;
   return (
-    <span
-      aria-hidden="true"
-      className="inline-flex shrink-0 items-center justify-center rounded-full font-bold text-white"
-      style={{ width: size, height: size, background: s.color, fontSize: size * 0.42 }}
-    >
-      {s.mark}
+    <span aria-hidden="true" className="inline-flex shrink-0 items-center justify-center overflow-hidden" style={{ width: size, height: size, borderRadius: size * 0.24, background: s.small }}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- 固定小圖 */}
+      <img src={`/forum/${s.logo}.webp`} alt="" width={inner} height={inner} />
     </span>
   );
 }
 
+const FIRST = 10; // 每類先列幾則
+
 export function ForumTags({ candidates }: { candidates: QuestionCandidates }) {
-  const { forum } = candidates;
+  // 舊報告只有挑題目那份
+  const forum: Forum[] = candidates.forumAll?.length ? candidates.forumAll.map((source) => ({ question: source.title, source })) : candidates.forum;
   const [pick, setPick] = useState<string | null>(null);
+  const [open, setOpen] = useState<Set<string>>(new Set());
   if (forum.length === 0)
     return (
       <p className="text-[15px] text-ink3">
@@ -170,7 +178,7 @@ export function ForumTags({ candidates }: { candidates: QuestionCandidates }) {
             <div className="min-w-0">
               <p className="text-[16px] font-bold text-ink">{g.label}</p>
               <ul className="mt-2.5 flex flex-wrap gap-2.5">
-                {g.list.map((f) => (
+                {(on === g.id || open.has(g.id) ? g.list : g.list.slice(0, FIRST)).map((f) => (
                   <li key={f.source.link} className="max-w-full">
                     <a
                       href={f.source.link}
@@ -186,6 +194,11 @@ export function ForumTags({ candidates }: { candidates: QuestionCandidates }) {
                   </li>
                 ))}
               </ul>
+              {on !== g.id && !open.has(g.id) && g.list.length > FIRST && (
+                <button type="button" onClick={() => setOpen(new Set([...open, g.id]))} className="mt-3 text-[15px] font-semibold text-ink2 underline hover:text-ink">
+                  看全部（還有 {g.list.length - FIRST} 則）
+                </button>
+              )}
             </div>
           </div>
         ))}

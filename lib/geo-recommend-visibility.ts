@@ -51,6 +51,7 @@ export interface PickedQuestion {
 // 健檢時先準備好的候選題：網友在論壇問過的（全部列出，只給人看、不能勾）＋ AI 參考網友問題與首頁產生的（給人勾）
 export interface RecommendCandidates {
   forum: { question: string; source: RealQuestionSource }[];
+  forumAll?: RealQuestionSource[]; // 「網友相關問題」那頁：所有相關的發問（11-25 前的報告沒有）
   forumFailed?: boolean; // 論壇搜尋本身失敗（Serper 額度用完、逾時），不是沒人問
   ai: string[];
   // 短關鍵字：從首頁商品／服務分類抓「品項＋推薦」，一般人打進搜尋框的那種。11-11 前的紀錄沒有這欄
