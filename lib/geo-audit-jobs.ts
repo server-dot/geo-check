@@ -65,6 +65,8 @@ export interface AuditJob {
   seoKeywords?: KeywordRank[] | null;
   // 給人勾的候選關鍵字（第一次打開關鍵字排名頁時產生、存起來）
   seoKeywordCandidates?: KeywordCandidate[] | null;
+  // 無障礙檢查（打開那一頁才跑，見 lib/wcag.ts）
+  wcag?: import('./wcag-types').WcagReport | null;
   // 產品線作戰清單（公司內部用，見 lib/line-plan.ts）。一般用戶的回應會拿掉
   linePlan?: LinePlan | null;
   // 這次健檢有 AI 步驟因為 OpenRouter 額度不足失敗（報告會缺幾塊），前端要標出來
@@ -138,6 +140,7 @@ export function auditJobPayload(job: AuditJob) {
     recommendCandidates: done ? job.recommendCandidates : undefined,
     brandInsights: done ? job.brandInsights : undefined,
     seoKeywords: done ? job.seoKeywords : undefined,
+    wcag: done ? job.wcag : undefined,
     seoKeywordCandidates: done ? job.seoKeywordCandidates : undefined,
     aiCreditShort: done ? job.aiCreditShort || undefined : undefined,
     error: job.error,

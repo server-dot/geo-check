@@ -1,7 +1,7 @@
 "use client";
 
 import { BrandProfileView } from "@/components/report/BrandProfile";
-import { CrawlerTiles } from "@/components/report/CrawlerTiles";
+import { SiteHealth } from "@/components/report/SiteHealth";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { StepAuditIcon, StepInputIcon, StepReportIcon } from "@/components/marketing/StepIcons";
@@ -15,7 +15,7 @@ import { DiagnosisCards } from "@/components/report/DiagnosisCards";
 import { buildDiagnosis, GATE_SYMBOL, VERDICT_LABEL, VERDICT_STATE, type Diagnosis, type GateState } from "@/lib/geo-diagnosis";
 import type { ContentMatch } from "@/lib/geo-content-match";
 import { buildCategories5, computeOverallScore, CATEGORY5_KEY_MAP, CATEGORY5_ORDER, type Category5 } from "@/lib/geo-score";
-import { crawlersOnly, geminiPermission } from "@/lib/geo-ai-crawlers";
+import { crawlersOnly } from "@/lib/geo-ai-crawlers";
 import { track } from "@/lib/ga";
 import { SITE_NAME } from "@/lib/site";
 // 報告目錄切換：每一頁要顯示哪些區塊（section id）。沒列的頁就只顯示同名那一區
@@ -25,7 +25,7 @@ const REPORT_PAGES: Record<string, string[]> = {
 
 type AuditKind = "geo" | "seo";
 const KIND_INFO: Record<AuditKind, { label: string; desc: string }> = {
-  geo: { label: "GEO 健檢", desc: "AI 推薦了誰、怎麼評價你、AI 爬蟲讀不讀得到" },
+  geo: { label: "GEO 健檢", desc: "AI 推薦了誰、怎麼評價你，加上網站總體健檢（AI 有沒有被擋、無障礙）" },
   seo: { label: "SEO 健檢", desc: "多頁深度健檢：標題描述、大小標題、sitemap、結構化資料…" },
 };
 
@@ -274,6 +274,7 @@ interface StatusResponse {
   schemaCards?: SchemaTypeCard[];
   // SEO 關鍵字排名（使用者填關鍵字按「查排名」之後才有）
   seoKeywords?: import("@/lib/seo-keyword-rank").KeywordRank[] | null;
+  wcag?: import("@/lib/wcag-types").WcagReport | null;
   // 逐頁可讀字數（爬取順序），健檢報告圖的累積曲線用
   pageWords?: number[];
   // 推薦題查詢結果。2026-11-11 起健檢不自動問：使用者勾題按「問 AI」之後才有，沒問過是 null
@@ -290,21 +291,6 @@ interface StatusResponse {
 // 十六進位值的地方（狀態磚、報告圖）都從這裡拿，跟 token 保持一致。
 const STATUS_COLOR = { ok: "#1f7a4d", warn: "#96590a", fail: "#b8342c" } as const;
 const STATUS_LABEL = { ok: "正常", warn: "可優化", fail: "需處理" } as const;
-
-// 「不允許」刻意不用紅色：那是網站主動的表態（例如故意擋 AI 訓練），不是缺陷，
-// 塗紅色會讓人以為自己做錯了什麼。真正需要處理的是「未表態」那一態——留白讓各家
-// AI 自行認定。glyph 一律跟著色走，不靠顏色單獨表意。
-const SIGNAL_BADGE: Record<SignalValue, { text: string; className: string; glyph: string; color: string }> = {
-  yes: { text: "允許", className: "border-ok/30 bg-ok/10 text-ok", glyph: "✓", color: STATUS_COLOR.ok },
-  no: { text: "不允許", className: "border-ink/25 bg-ink/5 text-ink2", glyph: "✕", color: "#4a5468" },
-  unset: { text: "未表態", className: "border-warn/30 bg-warn/10 text-warn", glyph: "?", color: STATUS_COLOR.warn },
-};
-
-const VISIBILITY: Record<VisibilityStatus, { label: string; className: string }> = {
-  ok: { label: "🟢 AI 讀得到你的內容", className: "border-ok/25 bg-ok/[.06]" },
-  thin: { label: "🟡 AI 讀到的內容偏少", className: "border-warn/25 bg-warn/[.06]" },
-  empty: { label: "🔴 AI 讀到的是一片空白", className: "border-fail/25 bg-fail/[.06]" },
-};
 
 const BADGE: Record<BotStatus, { text: string; className: string }> = {
   allowed: { text: "可存取", className: "border-ok/30 bg-ok/10 text-ok" },
@@ -467,89 +453,6 @@ function CheckBody({ c, origin, withAdvice = true }: { c: CheckItem; origin?: st
       )}
       <TechDetails technical={technicalNode} evidence={c.evidence} />
     </>
-  );
-}
-
-
-// 爬蟲狀態磚：8 家並排時要能一眼掃完，所以做成色塊＋符號，不是 8 列文字。
-// 一定要帶符號——warn 跟 fail 兩個色在正常視覺下 ΔE 只有 10.3，橘紅並排分不出來
-// （見下方狀態格陣的說明）。unknown 用中性灰：那不是「壞」，是「我們讀不到」，
-// 塗成紅色會變成假警報，跟 robots.txt 三態同一個紀律。
-const BOT_TILE: Record<BotStatus, { glyph: string; color: string }> = {
-  allowed: { glyph: "✓", color: STATUS_COLOR.ok },
-  blocked: { glyph: "✕", color: STATUS_COLOR.fail },
-  mismatch: { glyph: "!", color: STATUS_COLOR.warn },
-  unknown: { glyph: "?", color: "#5f6a80" },
-};
-
-// AI 讀到的內容是由什麼組成的：正文 vs 選單／標籤那些「網站家具」。
-// 原本是一行 mono 文字（「共 X 字：正文約 Y 字、選單／標籤約 Z 字（占 N%）」），
-// 三個數字擠在一句話裡要自己換算比例；改成一條兩段的比例條，比例本身就是圖。
-//
-// 兩個色跑過 dataviz 驗證（2026-09-09 換品牌色後重驗）：品牌金 #e09c0a 對中性藍灰
-// #b0b7c4，正常視覺 ΔE 17.7、綠色覺 17.4，都高於 15 的門檻。兩者對白底的對比都
-// 低於 3:1，規範要求這種情況必須有「可見標籤」當補償——所以兩段都直接標上名稱與
-// 字數，不是只靠顏色配圖例。
-const MIX_COLOR = { body: "#e09c0a", furniture: "#b0b7c4" };
-
-function ContentMixBar({
-  total,
-  substantive,
-  furniture,
-}: {
-  total: number;
-  substantive: number;
-  furniture: number;
-}) {
-  if (total <= 0) return null;
-  const pct = (n: number) => Math.round((n / total) * 100);
-  const segs = [
-    { key: "body", label: "正文", value: substantive, color: MIX_COLOR.body },
-    { key: "furniture", label: "選單／標籤", value: furniture, color: MIX_COLOR.furniture },
-  ].filter((x) => x.value > 0);
-
-  return (
-    <div className="mt-3 rounded-lg border border-line bg-paper p-4">
-      <div className="mb-2 flex items-baseline justify-between gap-3">
-        <p className="text-xs font-medium text-ink3">AI 讀到的內容是由什麼組成的</p>
-        <p className="mono text-xs text-ink2">
-          共 <b className="font-semibold text-ink">{total.toLocaleString()}</b> 字
-        </p>
-      </div>
-      {/* 段與段之間留 2px 底色縫，兩端 4px 圓角 */}
-      <div className="flex h-4 w-full gap-[2px] overflow-hidden">
-        {segs.map((sg, i) => (
-          <div
-            key={sg.key}
-            title={`${sg.label} ${sg.value.toLocaleString()} 字（${pct(sg.value)}%）`}
-            className={`h-full ${i === 0 ? "rounded-l" : ""} ${i === segs.length - 1 ? "rounded-r" : ""}`}
-            style={{ width: `${(sg.value / total) * 100}%`, backgroundColor: sg.color }}
-          />
-        ))}
-      </div>
-      {/* 直接標籤：文字一律用 ink 色階，識別靠旁邊的色點，不讓文字染上資料色 */}
-      <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
-        {segs.map((sg) => (
-          <span key={sg.key} className="flex items-center gap-1.5 text-xs text-ink2">
-            <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: sg.color }} />
-            {sg.label} <span className="mono text-ink3">{sg.value.toLocaleString()} 字 · {pct(sg.value)}%</span>
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// 一格狀態方塊，格陣、爬蟲磚、內容授權卡共用同一個視覺語言
-function StatusChip({ glyph, color, size = 18 }: { glyph: string; color: string; size?: number }) {
-  return (
-    <span
-      aria-hidden
-      className="inline-flex shrink-0 items-center justify-center rounded font-bold text-paper"
-      style={{ width: size, height: size, backgroundColor: color, fontSize: size * 0.62 }}
-    >
-      {glyph}
-    </span>
   );
 }
 
@@ -2569,200 +2472,6 @@ function AuditTable({ checks, origin, defaultOpen = false }: { checks: CheckItem
   );
 }
 
-// 各家 AI 爬蟲存取權限：全部結果一致時（常見情況——多數網站的 robots.txt
-// 對所有 bot 一視同仁）收成一行摘要，不要 8 列一字不差的重複；
-// 有落差時（真正有故事可講——部分被擋、政策跟實測不一致）才展開逐項列表。
-// 收合只是預設呈現方式，不是藏資訊——一鍵可以展開看明細。
-// blocked／mismatch 才有話講：allowed 沒什麼好說的，unknown 是我們讀不到答案，
-// 硬塞一段影響說明只是空話。回傳白話影響 + 技術細節兩段，跟深度健檢同一套結構。
-function botAccessImpact(status: BotStatus, label: string): { impact: string; technical: string } | null {
-  if (status === "blocked") {
-    return {
-      impact: `${label}被你的 robots.txt 擋在門外。它讀不到你的頁面，就不可能在回答裡引用你——這不是「排名比較後面」，是根本不在名單裡。`,
-      technical: `robots.txt 有一條 Disallow 規則命中這個爬蟲。加一條 Allow: /，或拿掉那條 Disallow 規則。`,
-    };
-  }
-  if (status === "mismatch") {
-    return {
-      impact: `你的 robots.txt 明明允許${label}，但實際連線被擋下來了。問題出在 WAF，不是 robots.txt——你以為開著的門，其實是關的，而且從外面看不出來。`,
-      technical: `政策層允許，但用該爬蟲的 User-Agent 實測請求被擋。到防火牆設定把這個 User-Agent，或官方公告的來源 IP 段加進白名單。注意進階 WAF 會同時核對來源 IP，我們的探測不是從官方 IP 發出的，這裡只能說「UA 測試被擋」。`,
-    };
-  }
-  return null;
-}
-
-// 內容使用授權：三張並排的狀態卡。原本是三列「標籤＋說明＋徽章」的文字，
-// 但這一項的重點就是「搜尋索引／AI 引用／AI 訓練是三個獨立的開關」——並排才
-// 看得出是三個開關，直排會被讀成一份清單。
-function ContentSignalsSection({ signals }: { signals: ContentSignals }) {
-  return (
-    <div className="mt-8">
-      <h2 className="eyebrow mb-3">內容使用授權（Content Signals）</h2>
-    <div className="rounded-[10px] border border-line bg-card p-5">
-        <p className="mb-4 max-w-[38em] text-sm leading-relaxed text-ink2">
-          {signals.declared
-            ? "這個網站有表態，分別宣告了內容可以被拿去做什麼："
-            : "這個網站三項都還沒表態。這是 Cloudflare 在 2025 年提出、寫在 robots.txt 裡的欄位，可以把下面三件事分開講——想擋訓練但保留 AI 引用，只有它做得到，用 Allow / Disallow 表達不了。"}
-        </p>
-
-        {/* 三張並排的狀態卡取代原本三列文字：這一項的重點就是「三件事是
-            分開的」，並排才看得出那是三個獨立的開關，直排會讀成一份清單。 */}
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-          {signals.items.map((s) => (
-            <div key={s.key} className={`rounded-lg border p-3 ${SIGNAL_BADGE[s.value].className}`}>
-              <div className="flex items-center gap-1.5">
-                <StatusChip glyph={SIGNAL_BADGE[s.value].glyph} color={SIGNAL_BADGE[s.value].color} size={16} />
-                <span className="text-[11px] font-semibold">{SIGNAL_BADGE[s.value].text}</span>
-              </div>
-              <p className="mt-2 text-sm font-medium text-ink">{s.label}</p>
-              <p className="mt-0.5 text-xs leading-snug text-ink3">{s.meaning}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* 只對「未表態」講影響：有明確表態（不管允許或不允許）都是網站主動
-            的立場，不是缺陷，不該去建議別人改立場。 */}
-        {signals.items.filter((s) => s.value === "unset").length > 0 && (
-          <div className="mt-4">
-            <CheckBody
-              c={{
-                key: "contentSignals",
-                level: "",
-                category: "",
-                item: "內容使用授權",
-                status: "warn",
-                advice: "",
-                impact: `${signals.items
-                  .filter((s) => s.value === "unset")
-                  .map((s) => s.label)
-                  .join("、")}你還沒表態，等於留給各家 AI 引擎自己認定要不要這樣用你的內容。它們認定的方向不一定跟你想的一樣，而且不會通知你。`,
-                technical: `在 robots.txt 的 Content-Signal 欄位加上 ${signals.items
-                  .filter((s) => s.value === "unset")
-                  .map((s) => `${s.key}=yes`)
-                  .join(" 或 ")}（要封鎖就寫 =no）就是明確表態。`,
-              }}
-              withAdvice={false}
-            />
-          </div>
-        )}
-
-        {signals.declared && (
-          <p className="mono mt-4 text-xs break-all text-ink3">
-            Content-Signal: {signals.raw}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function BotAccessList({ results, origin }: { results: AiBotResult[]; origin?: string }) {
-  const [showRules, setShowRules] = useState(false);
-  if (results.length === 0) return null;
-
-  const count = (st: BotStatus) => results.filter((r) => r.status === st).length;
-  const blocked = results.filter((r) => r.status === "blocked");
-  const mismatch = results.filter((r) => r.status === "mismatch");
-  const unknown = count("unknown");
-
-  // 一句話結論擺最上面，磚牆是佐證。原本這裡是「結果一致就收合、不一致才展開
-  // 逐項」兩套分支——改成磚之後不需要分支了：8 塊全綠本身就是最好的一致性表達，
-  // 而且比一句「結果一致」更有說服力（看得到是哪 8 家）。
-  const headline =
-    blocked.length + mismatch.length === 0
-      ? unknown === results.length
-        ? `${results.length} 家 AI 爬蟲全部無法判定`
-        : `${results.length} 家 AI 爬蟲都讀得到你的網站`
-      : `${results.length} 家裡有 ${blocked.length + mismatch.length} 家進不來`;
-
-  // 有問題的才給影響說明，而且依狀態合併成一則，不是每家各講一次同樣的話
-  const problems: { status: BotStatus; list: AiBotResult[] }[] = [
-    { status: "blocked" as const, list: blocked },
-    { status: "mismatch" as const, list: mismatch },
-  ].filter((p) => p.list.length > 0);
-
-  return (
-    <div className="rounded-[10px] border border-line bg-card p-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <p className="text-sm font-medium text-ink">{headline}</p>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink3">
-          {(["allowed", "mismatch", "blocked", "unknown"] as const)
-            .filter((st) => count(st) > 0)
-            .map((st) => (
-              <span key={st} className="flex items-center gap-1.5">
-                <StatusChip glyph={BOT_TILE[st].glyph} color={BOT_TILE[st].color} size={13} />
-                {BADGE[st].text} {count(st)}
-              </span>
-            ))}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-        {results.map((r) => (
-          <div
-            key={r.ua}
-            title={`${r.ua} · ${r.matchedRule}`}
-            className="rounded-lg border border-line bg-paper p-2.5"
-          >
-            <div className="flex items-center gap-1.5">
-              <StatusChip glyph={BOT_TILE[r.status].glyph} color={BOT_TILE[r.status].color} size={16} />
-              <span className="truncate text-[11px] font-medium text-ink2">{BADGE[r.status].text}</span>
-            </div>
-            <p className="mt-1.5 text-xs leading-snug font-medium text-ink">{r.label}</p>
-            <p className="mono mt-0.5 truncate text-[10px] text-ink3">{r.ua}</p>
-          </div>
-        ))}
-      </div>
-
-      {problems.map((p) => {
-        const names = p.list.length === results.length ? `這 ${results.length} 家 AI 引擎` : p.list.map((r) => r.label).join("、");
-        const detail = botAccessImpact(p.status, names);
-        if (!detail) return null;
-        return (
-          <div key={p.status} className="mt-4">
-            <CheckBody
-              c={{
-                key: `bot-${p.status}`,
-                level: "",
-                category: "",
-                item: "AI 爬蟲的存取權限",
-                status: p.status === "blocked" ? "fail" : "warn",
-                advice: "",
-                impact: detail.impact,
-                technical: `${p.list.map((r) => `${r.ua}：${r.matchedRule}`).join("；")}。${detail.technical}`,
-              }}
-              origin={origin}
-              withAdvice={false}
-            />
-          </div>
-        );
-      })}
-
-      {/* 全部正常時也要給得出「憑什麼這樣判」——判定依據收在這裡，不佔版面 */}
-      {problems.length === 0 && (
-        <div className="mt-4">
-          <button
-            type="button"
-            onClick={() => setShowRules((v) => !v)}
-            className="mono text-xs text-ink3 underline decoration-limeDark decoration-2 underline-offset-2 hover:text-ink"
-          >
-            {showRules ? "收合判定依據" : "判定依據"}
-          </button>
-          {showRules && (
-            <div className="mt-2 space-y-1 rounded-lg border border-line bg-paper p-3">
-              {results.map((r) => (
-                <p key={r.ua} className="mono text-[11px] leading-relaxed text-ink3">
-                  <span className="text-ink2">{r.ua}</span>：{r.matchedRule}
-                </p>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // AI 的回答不是純段落：Perplexity 常回 Markdown 表格、清單，還會把很長的網址
 // 直接寫進正文。原本整段當一個 <p> 丟出去，表格的 `|` 會擠成一長串、長網址
 // 撐破卡片（2026-09-15 小積木回報「跑版」）。這裡按行處理：連續的 `|` 開頭行
@@ -3176,72 +2885,6 @@ function CompactAnswerCard({ result }: { result: VisibilityCardData }) {
   );
 }
 
-// llms.txt 卡片：不只給「格式完整」的判決，把實際解析出來的標題、摘要、
-// 連結清單都亮出來，讓人自己看得到底稿裡寫了什麼、哪些連結有說明、哪些沒有。
-function LlmsTxtCard({ llmsTxt }: { llmsTxt: { exists: boolean | null; quality: LlmsTxtQuality | null } }) {
-  const [expanded, setExpanded] = useState(false);
-  const quality = llmsTxt.quality;
-
-  return (
-    <div className="mt-4 rounded-[10px] border border-line bg-card px-5 py-4">
-      <div className="flex items-center justify-between gap-4">
-        <p className="font-medium text-ink">llms.txt</p>
-        <span
-          className={`shrink-0 rounded-full border px-3 py-1 text-sm font-medium ${
-            llmsTxt.exists && quality?.status === "ok"
-              ? "border-ok/30 bg-ok/10 text-ok"
-              : "border-warn/30 bg-warn/10 text-warn"
-          }`}
-        >
-          {!llmsTxt.exists ? "沒有" : quality?.status === "ok" ? "格式完整" : "內容單薄"}
-        </span>
-      </div>
-      <p className="mt-2 text-xs leading-relaxed text-ink3">
-        {llmsTxt.exists
-          ? quality?.advice
-          : "尚未部署。這是給 AI 讀的網站地圖，能主動告訴 AI 你有哪些重要內容。"}
-      </p>
-
-      {quality && (
-        <>
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            className="mono mt-2 text-xs text-ink3 underline decoration-limeDark decoration-2 underline-offset-2 hover:text-ink"
-          >
-            {expanded ? "收合" : `看實際內容（${quality.links.length} 個連結）`}
-          </button>
-          {expanded && (
-            <div className="mt-3 space-y-3 border-t border-line pt-3">
-              <div>
-                <p className="text-xs font-medium text-ink3"># 標題</p>
-                <p className="mt-0.5 text-sm text-ink">{quality.title || "（缺）"}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-ink3">摘要引言</p>
-                <p className="mt-0.5 text-sm text-ink">{quality.summary || "（缺）"}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-ink3">頁面連結（{quality.links.length} 個，共 {quality.charCount} 字）</p>
-                <div className="mt-1 max-h-64 space-y-1.5 overflow-y-auto rounded-lg border border-line2 bg-paper p-2">
-                  {quality.links.map((l, i) => (
-                    <div key={i} className="text-xs">
-                      <a href={l.url} target="_blank" rel="noopener noreferrer" className="font-medium">
-                        {l.text}
-                      </a>
-                      <p className="text-ink3">{l.description || "（沒有附說明）"}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
 // 首頁／報告側欄的檢測類型切換：GEO、SEO 是兩條獨立的檢測，每個 Google 帳號每天各免費一次。
 // 今天用過了不在這裡標，按「開始檢測」時才跳提示框（管理員／公司網域不受限）。
 function KindPicker({
@@ -3338,7 +2981,6 @@ export default function HomeClient({
   const activeJobId = useRef<string | null>(null);
   // ref 改值不會重繪，但「AI 可讀版」連結要跟著這次健檢的 id 出現在畫面上，所以另外存一份 state
   const [reportJobId, setReportJobId] = useState<string | null>(null);
-  const [showRawContent, setShowRawContent] = useState(false);
   const [recommendOverride, setRecommendOverride] = useState<RecommendVisibility | null>(null);
   // 問過推薦題之後按「換題目重問」：在結果上方打開勾選清單
   const [repick, setRepick] = useState(false);
@@ -3553,7 +3195,6 @@ export default function HomeClient({
   const rawEngine = status?.engine;
   const engine = useMemo(() => (rawEngine ? { ...rawEngine, results: crawlersOnly(rawEngine.results) } : rawEngine), [rawEngine]);
   const reportKind: AuditKind = status?.kind ?? "geo";
-  const unknownCount = engine?.results.filter((r) => r.status === "unknown").length ?? 0;
 
   // 使用者改題目重問過，就用重問的結果蓋掉健檢時自動問的那份
   const recommend = recommendOverride ?? status?.recommendVisibility ?? null;
@@ -3836,7 +3477,7 @@ export default function HomeClient({
                 ...(engine.brandVisibility.length > 0 ? [{ id: "brand-check", label: "品牌輪廓" }] : []),
                 ...(candidates ? [{ id: "forum", label: "網友相關問題" }] : []),
                 ...(me?.admin && reportJobId ? [{ id: "line-plan", label: "作戰清單（內部）" }] : []),
-                { id: "tech", label: "AI 看得到你嗎" },
+                { id: "health", label: "網站總體健檢" },
               ]}
               active={reportPage}
               onSelect={goPage}
@@ -4064,175 +3705,11 @@ export default function HomeClient({
               </div>
             )}
 
-            {/* GEO 健檢的「AI 爬蟲存取」頁：11-02 封存的技術檢測＋改善建議，11-04 加回來。
-                23 項深度健檢、結構化資料、總分報告圖搬到 SEO 健檢（兩條獨立的檢測）。 */}
+            {/* 11-25 小積木：「AI 看不看得到你的網站」改成總體健檢＝被擋＋llms.txt＋WCAG */}
             {reportKind === "geo" && (
-            <DashSection id="tech" title="AI 看不看得到你的網站" desc="AI 進不進得來、讀不讀得懂你的網站">
-            {/* 11-13 小積木：「沒人看得懂…去技術話、用圖示圖表」。第一眼四張卡，其他全收進技術細節；
-                有 AI 被擋或判定不出來時，下面那段說明照樣攤開（假綠燈比不給答案傷害更大） */}
-            <CrawlerTiles bots={engine.results} visibility={engine.visibility} signals={engine.contentSignals} llms={engine.llmsTxt} />
-            <div className="mt-6 flex flex-col gap-6">
-            <div className={unknownCount === 0 && engine.results.every((r) => r.status !== "blocked") ? "hidden" : ""}>
-            {/* 判定不出來時必須明講。給假綠燈比不給答案傷害更大 */}
-            <div
-              className={`rounded-[10px] border p-6 text-center ${
-                unknownCount > 0
-                  ? "border-line bg-card"
-                  : engine.results.every((r) => r.status !== "blocked")
-                    ? "border-ok/25 bg-ok/[.06]"
-                    : engine.results.filter((r) => r.status === "blocked").length >= 4
-                      ? "border-fail/25 bg-fail/[.06]"
-                      : "border-warn/25 bg-warn/[.06]"
-              }`}
-            >
-              <p className="text-2xl font-bold text-ink">
-                {unknownCount > 0
-                  ? "⚪ 無法判定"
-                  : engine.results.every((r) => r.status !== "blocked")
-                    ? "🟢 AI 引擎都能存取你的網站"
-                    : engine.results.filter((r) => r.status === "blocked").length >= 4
-                      ? "🔴 主要 AI 引擎被擋住了"
-                      : `🟡 有 ${engine.results.filter((r) => r.status === "blocked").length} 個 AI 引擎被擋住`}
-              </p>
-
-              {unknownCount > 0 && (
-                <div className="mt-3 space-y-2 text-[15px] text-ink2">
-                  <p>{engine.robotsNote}</p>
-                  <p>
-                    這<strong>不代表</strong>你的網站對 AI 開放——很可能有 robots.txt
-                    但我們讀不到。請直接在瀏覽器打開{" "}
-                    <a href={engine.robotsUrl} target="_blank" rel="noopener noreferrer">
-                      {engine.robotsUrl}
-                    </a>{" "}
-                    人工確認。
-                  </p>
-                  {engine.wafHint && (
-                    <div className="mt-3 rounded-lg border border-line bg-paper p-3 text-left">
-                      <p className="text-[14px] font-semibold text-ink3">偵測到可能的原因：{engine.wafHint.vendor}</p>
-                      <div className="mt-2 text-[15px] text-ink2">
-                        <CheckBody
-                          c={{
-                            key: "waf",
-                            level: "",
-                            category: "",
-                            item: "防火牆把 AI 爬蟲擋在外面",
-                            status: "fail",
-                            advice: "",
-                            impact: engine.wafHint.impact,
-                            technical: engine.wafHint.technical,
-                          }}
-                          origin={engine.origin}
-                          withAdvice={false}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {engine.robotsStatus === "none" && (
-                <p className="mt-2 text-[15px] text-ink3">（這個網站沒有 robots.txt，依規範預設所有爬蟲都能存取）</p>
-              )}
-              {engine.robotsStatus === "found" && (
-                <p className="mono mt-2 text-[14px] text-ink3">規則來源：{engine.robotsUrl}</p>
-              )}
-            </div>
-
-            </div>
-
-            <details className="rounded-xl border border-line bg-card px-6 py-4">
-            <summary className="cursor-pointer text-[15px] font-semibold text-ink2 hover:text-ink">技術細節（各家 AI 機器人、robots.txt、AI 讀到的原文、llms.txt）</summary>
-            <div className="mt-5 flex flex-col gap-6">
-            {engine.robotsStatus === "found" && <p className="mono text-[14px] text-ink3">robots.txt：{engine.robotsUrl}</p>}
-            {engine.visibility && (
-              <div>
-                <h2 className="eyebrow mb-3">AI 讀到的首頁</h2>
-                <div className={`rounded-[10px] border p-6 ${VISIBILITY[engine.visibility.status].className}`}>
-                  <p className="text-lg font-bold text-ink">{VISIBILITY[engine.visibility.status].label}</p>
-                  <p className="mt-2 text-[15px] font-medium leading-relaxed text-ink">{engine.visibility.summary}</p>
-                  <ContentMixBar
-                    total={engine.visibility.textLength}
-                    substantive={engine.visibility.substantiveChars}
-                    furniture={engine.visibility.furnitureChars}
-                  />
-
-                  <div className="mt-4 rounded-lg border border-line bg-paper p-4">
-                    <p className="text-[14px] font-medium text-ink3">AI 從這幾項判斷你網站是做什麼的：</p>
-                    <p className="mt-2 text-[15px] font-semibold text-ink">
-                      {engine.visibility.title || "（沒有寫標題）"}
-                    </p>
-                    {engine.visibility.description ? (
-                      <p className="mt-1 text-[15px] leading-relaxed text-ink2">{engine.visibility.description}</p>
-                    ) : (
-                      <p className="mt-1 text-[15px] text-warn">
-                        （這頁沒有寫摘要，AI 只能自己從標題和正文猜你這頁在講什麼）
-                      </p>
-                    )}
-                    {engine.visibility.h1.length > 0 && (
-                      <p className="mt-2 text-[14px] text-ink3">H1：{engine.visibility.h1.join("、")}</p>
-                    )}
-                    {engine.visibility.leadParagraphs.length > 0 && (
-                      <div className="mt-3 border-t border-line2 pt-3">
-                        <p className="text-[14px] text-ink3">頁面內容摘錄：</p>
-                        <div className="mt-1 space-y-2">
-                          {engine.visibility.leadParagraphs.map((p, i) => (
-                            <p key={i} className="text-[15px] leading-relaxed text-ink2">
-                              {p}
-                            </p>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowRawContent((v) => !v)}
-                    className="mono mt-3 text-[14px] text-ink3 underline decoration-limeDark decoration-2 underline-offset-2 hover:text-ink"
-                  >
-                    {showRawContent ? "收起" : "查看"} AI 實際讀到的原始文字片段（技術細節，一般不用看）
-                  </button>
-                  {showRawContent &&
-                    (() => {
-                      const blocks = engine.visibility.previewBlocks;
-                      return (
-                        <div className="mt-2 space-y-3 rounded-lg border border-line bg-paper p-4">
-                          {blocks.length === 0 && <p className="text-[15px] text-ink3">（完全沒有可讀的文字）</p>}
-                          {blocks.map((block, i) =>
-                            block.kind === "tags" ? (
-                              <p key={i} className="border-l-2 border-line2 pl-2 text-[14px] leading-relaxed text-ink3">
-                                {block.items.join("、")}
-                              </p>
-                            ) : (
-                              <p key={i} className="text-[15px] leading-relaxed text-ink2">
-                                {block.text}
-                              </p>
-                            )
-                          )}
-                        </div>
-                      );
-                    })()}
-
-                </div>
-              </div>
-            )}
-
-            {engine.visibilityNote && <p className="mt-4 text-center text-[15px] text-ink3">{engine.visibilityNote}</p>}
-
-            <div>
-            <h2 className="eyebrow mb-3">各家 AI 爬蟲的存取權限</h2>
-            <BotAccessList results={engine.results} origin={engine.origin} />
-            {rawEngine && geminiPermission(rawEngine.results) && <p className="mt-3 text-[14px] text-ink3">{geminiPermission(rawEngine.results)}</p>}
-            </div>
-
-            {engine.contentSignals && <ContentSignalsSection signals={engine.contentSignals} />}
-
-            {engine.llmsTxt.exists !== null && <LlmsTxtCard llmsTxt={engine.llmsTxt} />}
-            </div>
-            </details>
-
-            </div>
-            </DashSection>
+              <DashSection id="health" title="網站總體健檢" desc="AI 有沒有被擋、有沒有給 AI 的網站導覽、視障和高齡的人用不用得了">
+                <SiteHealth ai={engine} jobId={reportJobId} initial={status?.wcag} active={reportPage === "health"} onDone={(r) => setStatus((s) => (s ? { ...s, wcag: r } : s))} />
+              </DashSection>
             )}
 
             {/* SEO 健檢：多頁爬蟲＋23 項規則＋結構化資料，每項附改善建議 */}
