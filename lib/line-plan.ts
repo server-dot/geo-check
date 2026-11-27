@@ -317,7 +317,7 @@ async function findRivalSites(input: LinePlanInput, analysis: RecommendVisibilit
     if (out.length < MAX_RIVAL_SITES && h && !isSameSite(h, domain) && !out.some((o) => isSameSite(hostnameOf(o.url), h))) out.push(r);
   };
   const isNamed = (n: string) => input.rivals.some((r) => n.toLowerCase().includes(r.name.toLowerCase()) || r.name.toLowerCase().includes(n.toLowerCase()));
-  const peers = (analysis?.rivalMap?.points ?? []).map((p) => p.name).filter((n) => !isNamed(n));
+  const peers = [...(analysis?.rivalMap?.points ?? []).map((p) => p.name), ...(analysis?.rivalMap?.missing ?? [])].filter((n) => !isNamed(n));
   const key = process.env.SERPER_API_KEY;
   const missing: string[] = [];
   if (key)

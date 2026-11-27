@@ -5,7 +5,7 @@
 // 兩個軸都看 AI 怎麼描述每一家（lib/geo-rival-map.ts 依產業挑軸，每個位置都附 AI 原話），不用任何次數。
 // 第一眼看：誰跟你站在同一區（真正的對手）、哪一區沒人（可以主打的位置）。點一家看 AI 原話。
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 interface ResultLike {
   answer?: string;
@@ -20,45 +20,67 @@ interface AxisLike {
   high: string;
 }
 export interface RivalMapLike {
+  v?: number;
+  missing?: string[];
+  product?: string;
   x: AxisLike;
   y: AxisLike;
-  self: { x: number; y: number; why: string; url?: string; type?: string; dims?: (DimLike | null)[] };
+  self: { x: number; y: number; why: string; url?: string; type?: string; dims?: (DimLike | null)[]; off?: boolean };
   points: { name: string; x: number; y: number; type: string; quote: string; url?: string; dims?: (DimLike | null)[] }[];
   axes?: AxisLike[];
 }
 interface DimLike {
   v: number;
   why: string;
+  label?: string;
+  url?: string;
 }
 
-// 一條軸上你（金）跟它（深）的位置，-2～2
-function Track({ a, me, it }: { a: AxisLike; me: DimLike | null; it: DimLike | null }) {
-  const pos = (v: number) => `${((v + 2) / 4) * 100}%`;
+const Dot = ({ me }: { me?: boolean }) => <span aria-hidden="true" className={`inline-block h-[12px] w-[12px] shrink-0 rounded-full ${me ? "border-[1.5px] border-[var(--goldInk)] bg-lime" : "bg-ink"}`} />;
+const num = (d?: DimLike | null) => Number(d?.label?.match(/[\d,]+(?= (元|個))/)?.[0].replace(/,/g, "") ?? 0);
+
+// 一句話：單價是它的幾倍、通路差幾個
+function brief(me?: (DimLike | null)[], it?: (DimLike | null)[], name = ""): string {
+  const [p0, p1] = [num(me?.[0]), num(it?.[0])];
+  const [c0, c1] = [num(me?.[1]), num(it?.[1])];
+  const out: string[] = [];
+  if (p0 && p1) out.push(Math.abs(p0 - p1) / p1 < 0.1 ? `單價跟${name}差不多` : p0 > p1 ? `單價是${name}的 ${(p0 / p1).toFixed(1)} 倍` : `單價比${name}低 ${Math.round((1 - p0 / p1) * 100)}%`);
+  if (c0 && c1) out.push(c0 === c1 ? "通路數一樣" : c0 > c1 ? `通路多 ${c0 - c1} 個` : `通路少 ${c1 - c0} 個`);
+  return out.join("，") + (out.length ? "。" : "");
+}
+
+// 長條圖：由高到低；點一家就換比較對象
+function Bars({ title, sub, k, map, selfName, pick, onPick }: { title: string; sub: string; k: number; map: RivalMapLike; selfName: string; pick: string; onPick: (n: string) => void }) {
+  const rows = [{ name: "__self", d: map.self.dims?.[k] }, ...map.points.map((p) => ({ name: p.name, d: p.dims?.[k] }))].filter((r) => r.d).sort((a, b) => num(b.d) - num(a.d));
+  const max = Math.max(...rows.map((r) => num(r.d)), 1);
   return (
-    <div>
-      <div className="flex justify-between text-[12.5px] text-ink3">
-        <span>{a.low}</span>
-        <span>{a.high}</span>
-      </div>
-      <div className="relative mt-1.5 h-[10px]">
-        <div className="absolute inset-x-0 top-1/2 h-[2px] -translate-y-1/2 rounded bg-line" />
-        {/* 同一格時兩點錯開一點，不然它被你蓋住 */}
-        {it && (
-          <span
-            className="absolute top-1/2 h-[12px] w-[12px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink"
-            style={{ left: me && me.v === it.v ? `calc(${pos(it.v)} + 9px)` : pos(it.v) }}
-          />
-        )}
-        {me && (
-          <span className="absolute top-1/2 h-[13px] w-[13px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[1.5px] border-[var(--goldInk)] bg-lime" style={{ left: it && me.v === it.v ? `calc(${pos(me.v)} - 9px)` : pos(me.v) }} />
-        )}
-      </div>
-      <dl className="mt-1.5 grid grid-cols-[2.2em_minmax(0,1fr)] gap-x-1.5 gap-y-0.5 text-[13.5px] leading-snug">
-        <dt className="font-bold text-[var(--goldInk)]">你</dt>
-        <dd className="text-ink2">{me?.why || "—"}</dd>
-        <dt className="font-bold text-ink">它</dt>
-        <dd className="text-ink2">{it?.why || "—"}</dd>
-      </dl>
+    <div className="rounded-[10px] border border-line bg-card p-4">
+      <p className="text-[16px] font-bold text-ink">
+        {title}
+        <span className="ml-2 text-[13px] font-normal text-ink3">{sub}</span>
+      </p>
+      <ul className="mt-3 space-y-2">
+        {rows.map((r) => {
+          const me = r.name === "__self";
+          const on = r.name === pick;
+          return (
+            <li key={r.name}>
+              <button type="button" disabled={me} onClick={() => onPick(r.name)} title={r.d!.why} className="grid w-full grid-cols-[8.5em_1fr_4.2em] items-center gap-2 text-left text-[14px]">
+                <span className={`flex min-w-0 items-center gap-1.5 ${me ? "font-bold text-[var(--goldInk)]" : on ? "font-bold text-ink" : "text-ink2"}`}>
+                  {(me || on) && <Dot me={me} />}
+                  <span className="truncate">{me ? selfName : shortName(r.name)}</span>
+                </span>
+                <span className="h-4">
+                  <span className={`block h-full rounded ${me ? "bg-lime" : on ? "bg-ink" : "bg-[#b9c0cc]"}`} style={{ width: `${Math.max(4, (num(r.d) / max) * 100)}%` }} />
+                </span>
+                <span className="text-right tabular-nums text-ink">
+                  {num(r.d)} {k === 0 ? "元" : "個"}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -73,6 +95,7 @@ const shortName = (n: string) => {
 // 改成照順序平均攤開：每個軸上把出現過的分數由小到大排，等距放；順序不變、同分的還是同一個位置。
 // 圖上看的是「各家互相比誰比較偏哪邊」，不是絕對分數。
 function spreadOut(m: RivalMapLike): RivalMapLike {
+  if (m.v === 3) return m; // 新做法是實際數字換算的位置，照原位置畫
   const rank = (vs: number[]) => {
     const u = [...new Set(vs)].sort((a, b) => a - b);
     return (v: number) => (u.length < 2 ? 0 : -1.6 + (3.2 * u.indexOf(v)) / (u.length - 1));
@@ -88,6 +111,7 @@ const W = SIZE + 120;
 const PAD = 48;
 
 function Plot({ map, selfName, pick, onPick }: { map: RivalMapLike; selfName: string; pick: string; onPick: (n: string) => void }) {
+  const clip = useId(); // 總覽縮圖和這頁各有一張，id 不能一樣
   const inner = SIZE - PAD * 2;
   // 分數 ±2 的點不要壓在框線上（會跟軸的文字疊在一起），內縮 22
   const IN = 22;
@@ -120,9 +144,9 @@ function Plot({ map, selfName, pick, onPick }: { map: RivalMapLike; selfName: st
         rx={(NEAR / 4) * (inner - IN * 2)}
         ry={(NEAR / 4) * (inner - IN * 2)}
         fill="var(--limeTint)"
-        clipPath="url(#plot-clip)"
+        clipPath={`url(#${clip})`}
       />
-      <clipPath id="plot-clip">
+      <clipPath id={clip}>
         <rect x={PAD} y={PAD} width={inner} height={inner} />
       </clipPath>
       <line x1={PAD} y1={mid} x2={SIZE - PAD} y2={mid} stroke="var(--line)" />
@@ -168,16 +192,51 @@ export function RivalMapMini({ names, rivalMap, onOpen }: { names: NameLike[]; r
   return <Plot map={spreadOut(rivalMap)} selfName={selfName} pick="" onPick={onOpen} />;
 }
 
+function Renew({ text, jobId, onDone, done }: { done?: boolean; text: string; jobId: string | null; onDone: (m: RivalMapLike) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  async function go() {
+    setBusy(true);
+    setErr("");
+    try {
+      const res = await fetch("/api/geo/rival-map", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId }) });
+      const d = (await res.json()) as { rivalMap?: RivalMapLike; error?: string };
+      if (!res.ok || !d.rivalMap) throw new Error(d.error || "分析失敗，請稍後再試。");
+      onDone(d.rivalMap);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "分析失敗，請稍後再試。");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="rounded-[10px] border border-line bg-card p-5 text-[15px] text-ink2">
+      <p>{text}</p>
+      {jobId && !done && (
+        <button type="button" onClick={go} disabled={busy} className="mt-3 rounded-lg bg-ink px-4 py-2 font-semibold text-paper disabled:opacity-50">
+          {busy ? "重新分析中，約 30 秒…" : "用新做法重新分析"}
+        </button>
+      )}
+      {err && <p className="mt-2 text-fail">✗ {err}</p>}
+    </div>
+  );
+}
+
 export function CompetitorCompare({
   names,
   rivalMap,
+  jobId,
+  onRenew,
 }: {
   names: NameLike[];
   questions?: { question: string; results: ResultLike[] }[];
   rivalMap?: RivalMapLike | null;
+  jobId: string | null;
+  onRenew: (m: RivalMapLike) => void;
 }) {
   const selfName = shortName(names.find((n) => n.isSelf)?.name ?? "你");
-  const map = rivalMap ? spreadOut(rivalMap) : null;
+  const fresh = rivalMap?.v === 3;
+  const map = rivalMap && fresh ? spreadOut(rivalMap) : null;
   // 跟你同一區的（兩個軸都同一邊）就是正面對手，先給人看最近的那家
   // 離你最近的＝距離 NEAR 以內、最多 3 家（你剛好在中線上時，用象限判斷會變成「沒有」）
   const near = (p: { x: number; y: number }) => Math.hypot(p.x - map!.self.x, p.y - map!.self.y);
@@ -187,6 +246,10 @@ export function CompetitorCompare({
   const first = [...(same.length ? same : map?.points ?? [])].sort((a, b) => dist(a) - dist(b))[0];
   const [pick, setPick] = useState(first?.name ?? "");
 
+  if (rivalMap && !fresh)
+    return <Renew jobId={jobId} onDone={onRenew} text="這份定位是舊做法（AI 打分數），位置可能不對，已停用。" />;
+  if (map && map.points.length < 3)
+    return <Renew jobId={jobId} onDone={onRenew} text="不畫定位圖：這個行業沒有容量可以換算單價，或查得到售價的同業不到 3 家。下面是 AI 的文字比較。" done />;
   if (!map || !first)
     return (
       <p className="text-[15px] text-ink3">
@@ -204,45 +267,27 @@ export function CompetitorCompare({
           <Plot map={map} selfName={selfName} pick={cur.name} onPick={setPick} />
         </div>
 
-        <div className="rounded-[10px] border border-line bg-card p-4">
-          <p className="text-[16px] font-bold text-ink">
-            <span className="text-[var(--goldInk)]">{selfName}</span>
-            <span className="mx-2 font-normal text-ink3">vs</span>
-            {cur.name}
-          </p>
-          {/* 圖例：金點＝你、深點＝它，順便帶各自的類型 */}
-          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[14px]">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-[12px] w-[12px] rounded-full border-[1.5px] border-[var(--goldInk)] bg-lime" />
-              <span className="font-bold text-[var(--goldInk)]">你</span>
-              {map.self.type && <span className="text-ink3">{map.self.type}</span>}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-[11px] w-[11px] rounded-full bg-ink" />
-              <span className="font-bold text-ink">它</span>
-              {cur.type && <span className="text-ink3">{cur.type}</span>}
-            </span>
+        <div className="space-y-4">
+          {[0, 1].map((k) => (
+            <Bars key={k} title={k === 0 ? "單價" : "買得到的通路"} sub={k === 0 ? `${map.product ?? ""}，每 100ml` : "購物搜尋看得到的"} k={k} map={map} selfName={selfName} pick={cur.name} onPick={setPick} />
+          ))}
+          <div className="rounded-[10px] border border-line bg-card p-4">
+            <p className="flex flex-wrap items-center gap-x-2 text-[16px] font-bold">
+              <Dot me />
+              <span className="text-[var(--goldInk)]">{selfName}</span>
+              <span className="font-normal text-ink3">vs</span>
+              <Dot />
+              <span className="text-ink">{cur.name}</span>
+            </p>
+            <p className="mt-2 text-[15px] text-ink2">{brief(map.self.dims, cur.dims, shortName(cur.name))}</p>
           </div>
-          {map.axes && cur.dims && map.self.dims ? (
-            <div className="mt-3 space-y-4">
-              {map.axes.map((a, k) => (
-                <Track key={k} a={a} me={map.self.dims![k] ?? null} it={cur.dims![k] ?? null} />
-              ))}
-            </div>
-          ) : (
-            <p className="mt-2 text-[15px] leading-relaxed text-ink2">AI 查到：{cur.quote}</p>
-          )}
-          <p className="mt-3 text-[13px] text-ink3">
-            {same.length > 0 && <>離你最近：{same.map((p) => shortName(p.name)).join("、")}。</>}點圖上其他家換著比
-            {cur.url && (
-              <a href={cur.url} target="_blank" rel="noopener noreferrer" className="report-table-link ml-2">
-                {shortName(cur.name)} 的資料來源 ↗
-              </a>
-            )}
-          </p>
         </div>
       </div>
-      <p className="text-[13px] text-ink3">只畫 AI 這次推過的業者（平台、通路不算）。兩個軸依你的產業挑，每家的位置是另外請 AI 上網查官網、價目、案例判斷的，圖上是各家互相比的相對位置；點一家看理由和來源。</p>
+      <p className="text-[13px] leading-relaxed text-ink3">
+        只比 AI 這次推過的同類業者。
+        {map.product && `價格是「${map.product}」單品換算每 100ml（或 100g），取購物搜尋各通路的中間價，不含組合；促銷會變動。通路是購物搜尋看得到的，不代表全部。`}
+        {map.missing && map.missing.length > 0 && `查不到足夠資料、沒畫的：${map.missing.map(shortName).join("、")}。`}
+      </p>
     </div>
   );
 }

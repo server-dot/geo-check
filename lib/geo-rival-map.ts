@@ -1,61 +1,51 @@
-import { SITE_URL } from './site';
-import { paidFetch } from './paid-fetch';
-import { brandKeys, handleIsBrand, sameUrl } from './geo-owned-sources';
-import { hostnameOf, isSameSite } from './geo-brand-visibility';
+import { channelsOf, pickPrice, sameBrand, shopItems, type ChannelFact, type PriceFact } from './geo-rival-facts';
 import { askJson, parseJson, type RecommendInput, type RecommendVisibility } from './geo-recommend-visibility';
 
 // ── 競爭對手分析：市場定位圖 ───────────────────────────────
-// 11-18 小積木：縱軸用「被推幾次」→「好醜而且完全用不到」；從推薦題回答裡挖定位 →
-// 回答本來就不是在講定位，資料太少，軸挑得怪（保養品出現「大公司↔小品牌」）、點擠成一團。
-// 小積木：「這類型的圖可以額外問 AI」。改成兩步：
-//   1. gpt-4.1 依產業列 4 個客人真的會比的候選軸（接案：個人工作室↔大公司、動手做↔教你；保養品：平價↔高價…），
-//      軸只能是連續的光譜，不准用次數、也不准用二選一的（台灣／國際只有兩種答案，當軸一定擠成兩坨）
-//   2. Perplexity 上網查每一家（含你自己）在 4 個軸上站哪、為什麼，附來源網址；看完資料挑最分散的兩軸畫
-// 只放 AI 這次推過的品牌（平台、通路不算），挑誰不看被推幾次。
+// 11-18 起用兩軸定位圖，不用被推幾次。11-25 小積木：Relove 被歸到低價、怕其他點也錯——逐點核對後整個換做法：
+//   1. gpt-4.1 只挑同類同業、定出要比價的同類商品
+//   2. 圖只畫程式算得出來的：同類單品每 100ml 單價、購物搜尋看得到的通路數
+//   3. 其他面向（成分、適合誰、優缺點）用文字比較，見 geo-compare.ts
+// 試過讓 AI 從原文選邊（台灣製／醫療路線…），逐點核對仍錯一成以上（「應先諮詢醫師」被當成醫療路線），整個拿掉。
+// 服務業沒有容量可比，不畫圖。
 
 export interface MapAxis {
   low: string; // 軸的 -2 端
   high: string; // 軸的 +2 端
+  kind?: 'price' | 'channel';
 }
-// 每個候選軸的分數＋理由（右邊「你 vs 它」對照表用；沒查到是 null）
+// 每個軸的位置＋依據（右邊「你 vs 它」對照表用；沒查到是 null）
 export interface DimScore {
   v: number;
   why: string;
+  label?: string; // 放在哪一邊、或每 100ml 多少
+  url?: string; // 原文出處
 }
 export interface MapPoint {
   name: string;
   dims?: (DimScore | null)[];
   x: number; // -2～2
   y: number;
-  type: string; // 它是哪一類，10 字內
-  quote: string; // AI 查到的理由（放位置的依據）
-  url?: string; // 出處
+  type: string;
+  quote: string;
+  url?: string;
 }
 export interface RivalMap {
+  v?: number; // 3＝11-25 新做法；沒有這欄的舊圖不可信，不畫
   x: MapAxis;
   y: MapAxis;
-  self: { x: number; y: number; why: string; url?: string; type?: string; dims?: (DimScore | null)[] };
+  self: { x: number; y: number; why: string; url?: string; type?: string; dims?: (DimScore | null)[]; off?: boolean }; // off＝你自己的資料不足，不畫點
   points: MapPoint[];
-  axes?: MapAxis[]; // 全部候選軸（x、y 是其中兩個）
+  axes?: MapAxis[];
+  missing?: string[]; // 查過但證據不夠、沒畫的業者
+  product?: string; // 比價的商品
+  topic?: string; // 類別字（私密清潔、n8n 自動化），問 AI 比較時用
+  peers?: string[]; // 挑出來的同業，像你的排前面
 }
+export const RIVAL_MAP_VERSION = 3;
 
 const MAX_POINTS = 10;
-// AI 自己的網站不是任何一家的出處
-const AI_HOSTS = ['chatgpt.com', 'openai.com', 'gemini.google.com', 'perplexity.ai', 'claude.ai', 'copilot.microsoft.com', 'grok.com'];
-
-// 出處要是這次真的查到的網址（sonar 回的 annotations）；對手的出處不能是你自己的站或帳號頁。
-// 11-23 aiqkangber：對手的出處出現 chatgpt.com 和受測者自己的官網，都是模型隨手填的。對不上就不附出處。
-export function checkedSource(url: unknown, found: string[], self: { domain: string; keys: string[]; isSelf: boolean }): string | undefined {
-  if (typeof url !== 'string' || !/^https?:\/\//.test(url)) return undefined;
-  const hit = found.find((f) => sameUrl(f, url));
-  if (!hit) return undefined;
-  const host = hostnameOf(hit);
-  if (AI_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) return undefined;
-  if (!self.isSelf && (isSameSite(host, self.domain) || handleIsBrand(new URL(hit), self.keys))) return undefined;
-  return hit;
-}
 const AXIS_MODEL = 'openai/gpt-4.1';
-const SEARCH_MODEL = 'perplexity/sonar';
 
 const clean = (s: string) => s.replace(/\*\*|__|`/g, '').replace(/\[\d+\]/g, '').replace(/\s+/g, ' ');
 
@@ -79,22 +69,13 @@ function describe(name: string, answers: string[]): string {
   return clean([...new Set(out.filter(Boolean))].join(' ')).trim().slice(0, 200);
 }
 
-const clamp = (n: unknown) => {
-  const v = Math.round(Number(n) * 2) / 2;
-  return n !== null && n !== '' && Number.isFinite(v) ? Math.max(-2, Math.min(2, v)) : null;
-};
+interface Plan { peers: number[]; topic: string; product: string; words: string[]; skip: string[] }
 
-// 11-18 小積木：「怎麼都是大公司，這很諷刺，因為我就是競品分析」——原本取名單前 10 家（依被推次數排），
-// 前面全是「AI 客服顧問」題帶出來的系統商。改成請模型從 AI 推過的全部業者裡，挑規模和服務最像你的。
-async function pickPeersAndAxes(
-  brandName: string,
-  self: string,
-  all: { name: string; text: string }[],
-  apiKey: string,
-): Promise<{ axes: MapAxis[]; peers: number[] } | null> {
-  const prompt = `我們要替「${brandName}」畫一張市場定位圖。請做兩件事：
-1. 從下面「AI 推薦過的業者」裡，挑出最多 ${MAX_POINTS} 家「規模和服務內容最像${brandName}」、客人會拿來跟它比的同類業者。大公司、系統商、軟體平台如果${brandName}不是同一類，就不要挑。只有人名、沒有公司或工作室名稱的（例如「Antonio」「Max」）查不到是誰，不要挑。
-2. 依這個產業，列 4 個「客人選店家時真的會比」的軸，要能把挑出來的這幾家分開。
+// 11-18 小積木：「怎麼都是大公司，這很諷刺，因為我就是競品分析」——請模型從 AI 推過的全部業者裡，挑規模和服務最像你的。
+async function makePlan(brandName: string, self: string, all: { name: string; text: string }[], apiKey: string): Promise<Plan | null> {
+  const prompt = `我們要替「${brandName}」畫市場定位圖，只放查得到證據的位置。請做兩件事：
+1. 從「AI 推薦過的業者」挑最多 ${MAX_POINTS} 家規模和內容最像${brandName}、客人會拿來比的同類業者。大公司、平台、只有人名的不要挑。
+2. 這些業者如果都賣有容量的消費品（保養、清潔、食品），指定一種大家都有賣的主力商品來比價；服務業、家具、軟體等沒有容量可比的，product 給空字串。
 
 「${brandName}」官網介紹：
 ${self}
@@ -102,22 +83,16 @@ ${self}
 AI 推薦過的業者：
 ${all.map((r, i) => `[${i}] ${r.name}${r.text ? `：${r.text.slice(0, 80)}` : ''}`).join('\n')}
 
-規則：
-- 每個軸是一條連續的光譜，兩端用台灣人平常講的話，各 8 字內。例如：
-  接案／顧問業：「個人工作室 ↔ 大公司／系統商」「幫你動手做 ↔ 教你、給建議」「專做一件事 ↔ 什麼都做」
-  保養品：「平價 ↔ 高價」「日常保養 ↔ 專業醫療」「天然溫和 ↔ 科學功效」
-  家具：「現成品 ↔ 全客製」「平價 ↔ 高價」「個人居家 ↔ 商空／企業」
-- 不能用次數、聲量、知名度。不能用只有兩種答案的（例如台灣／國際、有沒有門市）——大家會擠成兩坨。
-- 4 個軸要彼此獨立（不要一個是價格、一個是高級感）。
-- 挑能讓這幾家分散開的軸。
+topic：搜尋這些業者時加的類別字，6 字內（例如「私密清潔」「n8n 自動化」）。
+product：比價的商品類別，8 字內（例如「私密清潔凝露」）。words：這種商品標題會出現的字 3～8 個（例如 凝露、潔淨露、潔膚露、慕斯、沐浴露）。skip：標題有就代表不是同一種或不同用途的字（例如清潔類要排除擦的保養：緊實、美白凝露、精華；也排除 噴霧、濕紙巾、美白凝膠、男、洗衣、手洗精、除毛）。
 
-只回傳 JSON：{"peers":[編號,…],"axes":[{"low":"…","high":"…"}]}`;
+只回傳 JSON：{"peers":[編號],"topic":"","product":"","words":[""],"skip":[""]}`;
   try {
-    const p = parseJson<{ peers?: unknown[]; axes?: Partial<MapAxis>[] }>(await askJson(prompt, apiKey, 500, AXIS_MODEL));
-    const ok = (a?: Partial<MapAxis>): a is MapAxis => !!a?.low?.trim() && !!a?.high?.trim();
-    const axes = (p?.axes ?? []).filter(ok).map((a) => ({ low: a.low.trim(), high: a.high.trim() })).slice(0, 4);
+    const p = parseJson<{ peers?: unknown[]; topic?: unknown; product?: unknown; words?: unknown[]; skip?: unknown[] }>(await askJson(prompt, apiKey, 900, AXIS_MODEL));
+    const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
     const peers = [...new Set((p?.peers ?? []).map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < all.length))].slice(0, MAX_POINTS);
-    return axes.length >= 2 && peers.length >= 3 ? { axes, peers } : null;
+    const list = (v?: unknown[]) => (v ?? []).map(str).filter((x) => x.length >= 1).slice(0, 12);
+    return peers.length >= 2 ? { peers, topic: str(p?.topic).slice(0, 12), product: str(p?.product).slice(0, 14), words: list(p?.words), skip: list(p?.skip) } : null;
   } catch {
     return null;
   }
@@ -134,120 +109,47 @@ export async function buildRivalMap(
     .filter((n) => !n.isSelf && n.kind !== 'channel')
     .slice(0, 60)
     .map((n) => ({ name: n.name, text: describe(n.name, answers) }));
-  if (all.length < 3) return null;
+  if (all.length < 3 || !process.env.SERPER_API_KEY) return null;
 
-  const self = [input.title, input.description, input.services?.slice(0, 400)].filter(Boolean).join('\n').slice(0, 700);
-  // 11-18 先挑兩軸再查 → 縱軸 11 家有 9 家擠在「高度客製」；改成 4 個候選軸都查，看完資料再挑最分散的兩個
-  const picked = await pickPeersAndAxes(rv.brandName, self, all, apiKey);
-  if (!picked) return null;
-  const { axes } = picked;
-  const rivals = picked.peers.map((i) => all[i]);
+  const self = [input.title, input.description, input.services?.slice(0, 600)].filter(Boolean).join('\n').slice(0, 900);
+  const plan = await makePlan(rv.brandName, self, all, apiKey);
+  if (!plan) return null;
+  const me = rv.brandName.split(/[｜|]/)[0].trim().slice(0, 24);
+  const names = [me, ...plan.peers.map((i) => all[i].name).filter((n, i, l) => !sameBrand(n, me) && l.findIndex((x) => sameBrand(x, n)) === i)];
 
-  const domain = hostnameOf(origin);
-  const keys = brandKeys([rv.brandName], domain);
-  // 一次丟 10 家，Perplexity 只查了 2 家就交差、4 家一批也常整批跳過或編號對錯（11-18 aiqkangber）；
-  // 3 家一批平行查，回傳用名稱對回去（不信編號），你自己放在每一批當參考點
-  const BATCH = 3;
-  const batches: number[][] = [];
-  for (let i = 0; i < rivals.length; i += BATCH) batches.push(rivals.slice(i, i + BATCH).map((_, j) => i + j));
-  const ask = async (ids: number[]): Promise<Record<string, unknown>[]> => {
-    const list = [`[0] ${rv.brandName}（官網 ${domain}）`, ...ids.map((i) => `[${i + 1}] ${rivals[i].name}${rivals[i].text ? `：${rivals[i].text}` : ''}`)].join('\n');
-    const prompt = `請上網查下面這幾家台灣業者，判斷它們在每個軸上各站在哪裡：
+  const shops = plan.product && plan.words.length > 0 ? await Promise.all(names.map((n) => shopItems(n, plan.product))) : names.map(() => []);
 
-${axes.map((a, i) => `a${i}：${a.low}（-2） ↔ ${a.high}（2）`).join('\n')}
+  const prices = names.map((n, i) => pickPrice(shops[i], n, plan.words, plan.skip, plan.product.slice(0, 2)));
+  const priced = prices.filter((p): p is PriceFact => !!p);
+  const usePrice = !!prices[0] && priced.length >= 4;
+  const logs = priced.map((p) => Math.log(p.per));
+  const [lo, hi] = [Math.min(...logs), Math.max(...logs)];
+  const priceDim = (p: PriceFact | null): DimScore | null =>
+    p ? { v: hi > lo ? -1.8 + (3.6 * (Math.log(p.per) - lo)) / (hi - lo) : 0, label: `每 ${p.unit} 約 ${p.per} 元`, why: `${p.price.toLocaleString()} 元／${p.size}ml，${p.source}${p.n > 1 ? `（${p.n} 筆取中間值）` : ''}` } : null;
 
-${list}
+  // 通路：購物搜尋實際看得到幾個（有容量可比的消費品才有）
+  const channels = names.map((n, i) => channelsOf(shops[i], n));
+  const withCh = channels.filter((c): c is ChannelFact => !!c);
+  const useChannel = usePrice && !!channels[0] && withCh.length >= 4;
+  const cs = withCh.map((c) => c.n);
+  const [c0, c1] = [Math.min(...cs), Math.max(...cs)];
+  const channelDim = (c: ChannelFact | null): DimScore | null => (c ? { v: c1 > c0 ? -1.8 + (3.6 * (c.n - c0)) / (c1 - c0) : 0, label: `${c.n} 個通路`, why: c.names.slice(0, 5).join('、') + (c.n > 5 ? '…' : '') } : null);
 
-規則：
-- 每一家都要查，每個軸給 -2～2（可以用 .5），依你查到的官網、價目、商品、案例等實際資料判斷，各家要拉開差別，不要全給一樣的分數。
-- reason：每個軸各一句為什麼放這裡，25 字內，講查到的具體事實（例如「一枚板 NT$3 萬起」「一人接案、主做 n8n」）。
-- url：查到這個事實的網址。
-- type：它是哪一類，10 字內。
-- name 照抄上面列的名稱。每一家都要回，真的查不到、不確定是哪一家的才不列。
-
-只回傳 JSON，不要其他文字：{"items":[{"name":"照抄上面的名稱","scores":{${axes.map((_, i) => `"a${i}":[0,"理由"]`).join(',')}},"type":"…","url":"https://…"}]}（我在台灣，請找台灣的資料，用繁體中文回答）`;
-    try {
-      const res = await paidFetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': SITE_URL,
-          'X-Title': 'GEO Check Rival Map',
-        },
-        body: JSON.stringify({ model: SEARCH_MODEL, messages: [{ role: 'user', content: prompt }], max_tokens: 2000, temperature: 0.2 }),
-        signal: AbortSignal.timeout(60000),
-      });
-      if (!res.ok) return [];
-      const data = (await res.json()) as { choices?: { message?: { content?: string; annotations?: { url_citation?: { url?: string } }[] } }[] };
-      const found = (data.choices?.[0]?.message?.annotations ?? []).flatMap((a) => a.url_citation?.url ?? []);
-      const p = parseJson<{ items?: Record<string, unknown>[] }>(data.choices?.[0]?.message?.content ?? '');
-      // 只收這一批的編號，模型偶爾會回別批的
-      // 用名稱對回編號：你自己＝0，這一批的業者＝原本的編號＋1；對不上的丟掉
-      // 11-24 Relove：Perplexity 把「名稱：說明」「名稱（官網 …）」整串抄回來，10 家全對不上；名稱後面接冒號或括號也算同一家
-      const flat = (t: string) => t.replace(/\s/g, '').toLowerCase();
-      const same = (a: string, b: string) => flat(a) === flat(b) || ['：', ':', '（', '('].some((c) => flat(a).startsWith(flat(b) + c));
-      return (Array.isArray(p?.items) ? p!.items : []).flatMap((it) => {
-        const n = String(it.name ?? '');
-        if (same(n, rv.brandName)) return [{ ...it, id: 0, url: checkedSource(it.url, found, { domain, keys, isSelf: true }) }];
-        const i = ids.find((k) => same(n, rivals[k].name));
-        return i === undefined ? [] : [{ ...it, id: i + 1, url: checkedSource(it.url, found, { domain, keys, isSelf: false }) }];
-      });
-    } catch {
-      return [];
-    }
+  const x: MapAxis = { low: '單價低', high: '單價高', kind: 'price' };
+  const y: MapAxis = { low: '通路少', high: '通路多', kind: 'channel' };
+  const dims = names.map((_, i) => [usePrice ? priceDim(prices[i]) : null, useChannel ? channelDim(channels[i]) : null]);
+  const ok = usePrice && useChannel && !!dims[0][0] && !!dims[0][1];
+  const on = ok ? names.map((_, i) => i).slice(1).filter((r) => dims[r][0] && dims[r][1]) : [];
+  return {
+    v: RIVAL_MAP_VERSION,
+    x,
+    y,
+    self: { x: dims[0][0]?.v ?? 0, y: dims[0][1]?.v ?? 0, why: '', dims: dims[0], off: !ok },
+    points: on.map((r) => ({ name: names[r], x: dims[r][0]!.v, y: dims[r][1]!.v, type: '', quote: '', dims: dims[r] })),
+    axes: [x, y],
+    missing: names.slice(1).filter((_, i) => !on.includes(i + 1)),
+    ...(usePrice ? { product: plan.product } : {}),
+    topic: plan.topic,
+    peers: names.slice(1),
   };
-  const results = await Promise.all(batches.map(ask));
-  // 你自己用第一批的位置（每批各給一次，取第一個查到的）
-  const items = [...results.flatMap((r) => r.filter((it) => it.id === 0)).slice(0, 1), ...results.flatMap((r) => r.filter((it) => it.id !== 0))];
-
-  // 每一家、每個軸的分數＋理由
-  type Row = { id: number; type: string; url?: string; s: Map<number, { v: number; why: string }> };
-  const rows: Row[] = [];
-  for (const it of items) {
-    const id = typeof it.id === 'number' ? it.id : -1;
-    if (id < 0 || id > rivals.length || rows.some((r) => r.id === id)) continue;
-    const sc = (it.scores ?? {}) as Record<string, unknown>;
-    const s = new Map<number, { v: number; why: string }>();
-    axes.forEach((_, i) => {
-      const val = sc[`a${i}`];
-      const v = clamp(Array.isArray(val) ? val[0] : val);
-      const why = Array.isArray(val) ? clean(String(val[1] ?? '')).trim().slice(0, 50) : '';
-      if (v !== null) s.set(i, { v, why });
-    });
-    const url = typeof it.url === 'string' ? it.url : undefined;
-    rows.push({ id, type: String(it.type ?? '').trim().slice(0, 16), url, s });
-  }
-  const selfRow = rows.find((r) => r.id === 0);
-  const others = rows.filter((r) => r.id !== 0);
-  if (!selfRow) return null;
-
-  // 挑兩個軸：兩軸都有分數的家數 × 兩軸裡比較少的那個「分出幾種位置」最大的組合
-  const sd = (vs: number[]) => {
-    const m = vs.reduce((a, b) => a + b, 0) / vs.length;
-    return Math.sqrt(vs.reduce((a, b) => a + (b - m) ** 2, 0) / vs.length);
-  };
-  let best: { i: number; j: number; score: number } | null = null;
-  for (let i = 0; i < axes.length; i++)
-    for (let j = i + 1; j < axes.length; j++) {
-      if (!selfRow.s.has(i) || !selfRow.s.has(j)) continue;
-      const on = others.filter((r) => r.s.has(i) && r.s.has(j));
-      if (on.length < 3) continue;
-      const vi = [selfRow.s.get(i)!.v, ...on.map((r) => r.s.get(i)!.v)];
-      const vj = [selfRow.s.get(j)!.v, ...on.map((r) => r.s.get(j)!.v)];
-      // 先看分出幾種位置（11-18 原沐「現成品↔全客製」6 家同分、只有木百貨一家不同，標準差卻被它拉高而被選中），
-      // 同樣多的再看標準差
-      const levels = (vs: number[]) => new Set(vs).size;
-      const score = on.length * Math.min(levels(vi), levels(vj)) * 10 + Math.min(sd(vi), sd(vj));
-      if (!best || score > best.score) best = { i, j, score };
-    }
-  if (!best) return null;
-  const { i, j } = best;
-  const why = (r: Row) => [r.s.get(i)!.why, r.s.get(j)!.why].filter(Boolean).join('；');
-  const dims = (r: Row) => axes.map((_, k) => r.s.get(k) ?? null);
-  const points: MapPoint[] = others
-    .filter((r) => r.s.has(i) && r.s.has(j))
-    .map((r) => ({ name: rivals[r.id - 1].name, x: r.s.get(i)!.v, y: r.s.get(j)!.v, type: r.type, quote: why(r), url: r.url, dims: dims(r) }));
-  const selfPt = { x: selfRow.s.get(i)!.v, y: selfRow.s.get(j)!.v, why: why(selfRow), url: selfRow.url, type: selfRow.type, dims: dims(selfRow) };
-  return { x: axes[i], y: axes[j], self: selfPt, points, axes };
 }

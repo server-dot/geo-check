@@ -108,10 +108,11 @@ function analysisSheets(wb: ExcelJS.Workbook, plan: LinePlan, report: Partial<Au
     if (an) chips(an, `C5:C${end(ansRows)}`, { '✓ 有推': GRN, '✗ 沒推': RED });
 
     const m = a.rivalMap;
-    if (m) {
+    // 舊做法（AI 打分數）的位置不可信，不放
+    if (m?.v === 3) {
       const axes = m.axes ?? [m.x, m.y];
-      const dim = (d: { v: number; why: string } | null | undefined, i: number): string => (d ? `${d.v < 0 ? axes[i].low : d.v > 0 ? axes[i].high : '中間'}：${d.why}` : '沒查到');
-      rows('市場定位', '市場定位', `AI 上網查每一家的位置。定位圖兩軸：${m.x.low}↔${m.x.high}、${m.y.low}↔${m.y.high}。`, ['品牌', '類型', ...axes.map((x) => `${x.low} ↔ ${x.high}`), '出處'], [{ name: plan.brand, type: m.self.type ?? '', dims: m.self.dims, url: m.self.url, why: m.self.why }, ...m.points.map((x) => ({ ...x, why: x.quote }))].map((p) => [p.name, p.type, ...axes.map((_, i) => (p.dims ? dim(p.dims[i], i) : i === 0 ? p.why : '')), p.url ? { link: p.url, text: hostnameOf(p.url) } : '']), [24, 18, ...axes.map(() => 34), 24], { bold: [1] });
+      const dim = (d: { v: number; why: string; label?: string } | null | undefined): string => (d ? `${d.label ?? ''}：${d.why}` : '查不到可靠資料');
+      rows('市場定位', '市場定位', `同類單品每 100ml 單價、購物搜尋看得到的通路。定位圖兩軸：${m.x.low}↔${m.x.high}、${m.y.low}↔${m.y.high}。`, ['品牌', '類型', ...axes.map((x) => `${x.low} ↔ ${x.high}`), '出處'], [{ name: plan.brand, type: m.self.type ?? '', dims: m.self.dims, url: m.self.url, why: m.self.why }, ...m.points.map((x) => ({ ...x, why: x.quote }))].map((p) => [p.name, p.type, ...axes.map((_, i) => (p.dims ? dim(p.dims[i]) : i === 0 ? p.why : '')), p.url ? { link: p.url, text: hostnameOf(p.url) } : '']), [24, 18, ...axes.map(() => 34), 24], { bold: [1] });
     }
     rows('AI怎麼說各家', 'AI 怎麼形容你和對手', '每一條都附 AI 回答原文。', ['品牌', '特色', '原文', '哪家 AI'], (a.positioning ?? []).flatMap((p) => p.traits.map((t): Cell[] => [p.brand, t.text, t.quote, t.engine])), [24, 30, 80, 16], { bold: [1], center: [4] });
 

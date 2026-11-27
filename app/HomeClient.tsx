@@ -1,6 +1,7 @@
 "use client";
 
 import { BrandProfileView } from "@/components/report/BrandProfile";
+import { AiCompareView, AskCompare } from "@/components/report/AiCompare";
 import { SiteHealth } from "@/components/report/SiteHealth";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -194,6 +195,7 @@ interface RecommendVisibility {
   } | null;
   positioning?: { brand: string; isSelf: boolean; traits: { text: string; quote: string; engine: string }[] }[] | null;
   rivalMap?: import("@/lib/geo-rival-map").RivalMap | null;
+  aiCompare?: import("@/lib/geo-compare").AiCompare | null;
 }
 
 interface LlmsTxtLink {
@@ -3529,7 +3531,7 @@ export default function HomeClient({
                   profile={profile}
                   citedPages={citedPagesAll}
                   names={recommend.names}
-                  rivalMap={recommend.rivalMap}
+                  rivalMap={recommend.rivalMap?.v === 3 && recommend.rivalMap.points.length >= 3 ? recommend.rivalMap : null}
                   onGo={goPage}
                 />
               ) : (
@@ -3571,7 +3573,14 @@ export default function HomeClient({
               <div className="mt-12">
                 <DashSection id="competitors" title="競爭對手分析" desc="AI 推過的業者各站在哪個位置，誰跟你搶同一群客人">
                   <div className="space-y-4">
-                    <CompetitorCompare names={recommend.names} questions={recommend.questions} rivalMap={recommend.rivalMap} />
+                    <CompetitorCompare names={recommend.names} questions={recommend.questions} rivalMap={recommend.rivalMap} jobId={reportJobId} onRenew={(m) => setRecommendOverride({ ...recommend, rivalMap: m as typeof recommend.rivalMap })} />
+                    <div className="mt-5">
+                      {recommend.aiCompare ? (
+                        <AiCompareView data={recommend.aiCompare} map={recommend.rivalMap} />
+                      ) : (
+                        <AskCompare jobId={reportJobId} onDone={(d) => setRecommendOverride({ ...recommend, ...(d as Partial<typeof recommend>) })} />
+                      )}
+                    </div>
                   </div>
                 </DashSection>
               </div>
