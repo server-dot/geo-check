@@ -2,6 +2,7 @@ import { runVisibilityQueries, type VisibilityAnswer } from './geo-brand-visibil
 import { fetchGoogleAio } from './geo-google-aio';
 import { askJson, parseJson } from './geo-recommend-visibility';
 import { brandTokens } from './geo-rival-facts';
+import { trimLeadIn } from './geo-compare-text';
 
 // ── AI 怎麼比較你和對手（11-25）──────────────────────────────
 // 直接問三家 AI「差在哪、各適合誰」，列原文；這是 AI 的看法，不當成事實、不打分數。
@@ -19,7 +20,7 @@ export interface AiCompare {
   dropped: number; // 對不上原文或對錯家，沒放的
 }
 
-const bare = (s: string) => s.replace(/[\s\p{P}\p{S}]/gu, '').toLowerCase();
+export const bare = (s: string) => s.replace(/[\s\p{P}\p{S}]/gu, '').toLowerCase();
 const lower = (s: string) => s.toLowerCase().replace(/[\s'’.&·・-]/g, '');
 const mentions = (text: string, brand: string) => {
   const t = lower(text);
@@ -27,7 +28,7 @@ const mentions = (text: string, brand: string) => {
 };
 
 // 這句在回答裡的哪一行、那一行在講哪一家
-function ownerOf(answer: string, quote: string, brands: string[]): string[] | null {
+export function ownerOf(answer: string, quote: string, brands: string[]): string[] | null {
   const lines = answer.split('\n');
   const q = bare(quote);
   const at = lines.findIndex((l) => bare(l).includes(q));
@@ -87,7 +88,7 @@ ${a.answer.slice(0, 7000)}
   for (const r of p?.rows ?? []) {
     const brand = brands.find((b) => b === r.brand);
     const aspect = aspects.find((x) => x === r.aspect);
-    const quote = typeof r.quote === 'string' ? r.quote.trim() : '';
+    const quote = typeof r.quote === 'string' ? trimLeadIn(r.quote.trim()) : '';
     if (!brand || !aspect || bare(quote).length < 3 || NO_DATA.test(quote)) continue;
     const owner = ownerOf(a.answer, quote, brands);
     if (!owner || !owner.includes(brand) || owner.length > 1) {
@@ -104,9 +105,10 @@ ${a.answer.slice(0, 7000)}
 export async function askCompare(brand: string, rivals: string[], topic: string, goods: boolean, origin: string, apiKey: string): Promise<AiCompare | null> {
   const brands = [brand, ...rivals];
   const aspects = goods ? GOODS : SERVICE;
-  const question = goods ? `${brands.join('、')}的${topic}產品差在哪裡？請逐一比較價格、主要成分、適合誰、優點和缺點，並附上來源網址。` : `做${topic}的${brands.join('、')}差在哪裡？請逐一比較價格、服務內容、適合誰、優點和缺點，並附上來源網址。`;
+  const base = goods ? `${brands.join('、')}的${topic}產品差在哪裡？請逐一比較價格、主要成分、適合誰、優點和缺點，並附上來源網址。` : `做${topic}的${brands.join('、')}差在哪裡？請逐一比較價格、服務內容、適合誰、優點和缺點，並附上來源網址。`;
+  const question = base;
   const [llm, google] = await Promise.all([
-    runVisibilityQueries(question, origin, 2500),
+    runVisibilityQueries(question, origin, 8000), // 上限只防失控，照實際字數計費
     fetchGoogleAio(`${brands.join(' ')} ${topic} 比較`, origin).catch(() => null),
   ]);
   const answers = [...(llm ?? []), ...(google?.status === 'present' ? [google.answer] : [])];

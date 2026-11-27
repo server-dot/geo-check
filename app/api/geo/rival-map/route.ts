@@ -5,6 +5,7 @@ import { getSessionUser, isAdmin } from '@/lib/auth';
 import { askCompare } from '@/lib/geo-compare';
 import { selfShortName } from '@/lib/geo-sentiment';
 import { buildRivalMap, RIVAL_MAP_VERSION } from '@/lib/geo-rival-map';
+import { applyStance, findStanceHits } from '@/lib/geo-rival-stance';
 import { LIMITS, clientIp, hoursLeft, takeDaily } from '@/lib/rate-limit';
 
 // 舊報告的競爭對手分析換成新做法（不重問推薦題）。約 US$0.1
@@ -41,11 +42,17 @@ export async function POST(req: NextRequest) {
     const input = r.data.recommendCandidates?.input ?? { title: '', description: '' };
     const origin = new URL(r.data.url).origin;
     // 比較要用圖挑出來的同業；圖是舊的就先換新
-    const rivalMap = ready ? rv.rivalMap! : await buildRivalMap(rv, input, origin, apiKey);
+    let rivalMap = ready ? rv.rivalMap! : await buildRivalMap(rv, input, origin, apiKey, (rv.aiCompare?.answers ?? []).map((a) => ({ engine: a.engine, answer: a.answer })));
     if (!rivalMap) return NextResponse.json({ error: '這次沒有查到足夠的資料，請稍後再試。' }, { status: 502 });
     const onMap = rivalMap.points.map((p) => p.name);
-    const peers = [...onMap, ...(rivalMap.peers ?? []).filter((n) => !onMap.includes(n))].slice(0, 4);
+    // 圖上的全部一起問（11-27：只問 4 家，沒被問到的 AI 講得少、定位分數會偏低）
+    const peers = [...onMap, ...(rivalMap.peers ?? []).filter((n) => !onMap.includes(n))].slice(0, Math.max(4, onMap.length));
     const aiCompare = compare && peers.length >= 2 ? await askCompare(selfShortName(rv.brandName), peers, rivalMap.topic ?? '', !!rivalMap.product, origin, apiKey).catch(() => null) : null;
+    // 比較題的回答也拿來重算定位分數（原文越多越準）
+    if (aiCompare) {
+      const texts = [...rv.questions.flatMap((q) => q.results.map((x) => ({ engine: x.engine, answer: x.answer ?? '' }))), ...aiCompare.answers];
+      rivalMap = applyStance(rivalMap, await findStanceHits(rivalMap, texts, apiKey).catch(() => null));
+    }
     // 跑的期間報告可能被別的步驟改過，存之前重讀
     const cur = await load(jobId, user.email);
     const merge = (d: Partial<AuditJob>) => ({ ...d, recommendVisibility: d.recommendVisibility ? { ...d.recommendVisibility, rivalMap, ...(aiCompare ? { aiCompare } : {}) } : d.recommendVisibility });

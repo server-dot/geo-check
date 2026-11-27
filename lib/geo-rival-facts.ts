@@ -59,11 +59,13 @@ const median = (v: number[]) => { const s = [...v].sort((a, b) => a - b); return
 export interface ShopItem { title: string; price: number; source: string }
 // 同類單品換算每 100ml（或 100g）。words＝這類商品標題會有的字；skip＝不同類的字
 // must：這類商品的主題字（私密）。施巴的私密護潔露不能拿 1000ml 身體潔膚露來比
+// words 給空陣列＝全系列（11-27 起定位圖看品牌整體價位，不挑單品）：各種商品都算，離中位數 3 倍內都留
 export function pickPrice(items: ShopItem[], name: string, words: string[], skip: string[], must = ''): PriceFact | null {
+  const wide = words.length === 0;
   const tokens = brandTokens(name);
   const ok = items.flatMap((it) => {
     const t = promo(it.title);
-    if (!has(t, tokens) || BUNDLE.test(t) || !words.some((w) => t.includes(w)) || skip.some((w) => t.includes(w))) return [];
+    if (!has(t, tokens) || BUNDLE.test(t) || (!wide && !words.some((w) => t.includes(w))) || skip.some((w) => t.includes(w))) return [];
     const z = sizeOf(t);
     if (!z || z.size < 50 || z.size > 1500 || !(it.price > 20)) return [];
     return [{ ...it, size: z.size, per: (it.price / z.size) * 100 }];
@@ -80,7 +82,8 @@ export function pickPrice(items: ShopItem[], name: string, words: string[], skip
   // 同通路同容量重複的只留一筆；離中位數太遠的（代購、標錯）拿掉再取中位數
   const uniq = [...new Map(pool.map((x) => [`${x.source}|${x.size}|${x.price}`, x])).values()];
   const m0 = median(uniq.map((x) => x.per));
-  const keep = uniq.filter((x) => x.per >= m0 * 0.5 && x.per <= m0 * 2);
+  const band = wide ? 3 : 2;
+  const keep = uniq.filter((x) => x.per >= m0 / band && x.per <= m0 * band);
   if (new Set(keep.map((x) => x.source)).size < 2) return null; // 只有一個通路可能是代購價，不算
   const m = median(keep.map((x) => x.per));
   const rep = [...keep].sort((a, b) => Math.abs(a.per - m) - Math.abs(b.per - m))[0];

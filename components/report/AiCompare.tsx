@@ -4,6 +4,7 @@
 import { useState } from "react";
 import type React from "react";
 import type { AiCompare } from "@/lib/geo-compare";
+import { trimLeadIn } from "@/lib/geo-compare-text";
 import type { RivalMapLike } from "./CompetitorCompare";
 
 const ASPECTS = ["價格", "成分配方", "適合誰", "優點", "缺點或限制"];
@@ -12,7 +13,7 @@ const CHIP: Record<string, string> = { ChatGPT: "#1f7a4d", Perplexity: "#2a78d6"
 
 // 跟查到的售價對不上的說法：只抓「最貴、最便宜、平價」這種明確的
 function priceConflict(quote: string, brand: string, map: RivalMapLike | null | undefined): string {
-  if (map?.v !== 3 || map.axes?.[0]?.low !== "單價低") return "";
+  if (map?.v !== 4 || map.axes?.[0]?.kind !== "price") return "";
   const rows = [{ name: "__self", d: map.self.dims?.[0] }, ...map.points.map((p) => ({ name: p.name, d: p.dims?.[0] }))].filter((x) => x.d);
   const key = (n: string) => n.toLowerCase().replace(/\s/g, "");
   const me = rows.find((x) => key(x.name) === key(brand) || key(x.name).includes(key(brand.split(" ")[0])));
@@ -22,6 +23,16 @@ function priceConflict(quote: string, brand: string, map: RivalMapLike | null | 
   const rank = sorted.indexOf(row);
   if (/最貴|單價最高|價格最高/.test(quote) && rank !== 0) return `查到的單價不是最高（${row.d.label}）`;
   if (/平價|便宜|親民|最低/.test(quote) && rank < sorted.length / 3) return `查到的單價偏高（${row.d.label}）`;
+  // 有寫容量又有金額的，換算每 100ml 跟查到的比；差超過三成就標。
+  // 金額取句子裡所有 NT$ 的範圍（原價／促銷價都算進去）；「NT$1xx」這種、或一句講兩種容量的，對不準就不比
+  const found = Number(row.d.label?.match(/約\s*([\d,]+)\s*元/)?.[1]?.replace(/,/g, ""));
+  const mls = [...quote.matchAll(/(\d+)(?:\s*[–～~-]\s*(\d+))?\s*(?:ml|g|毫升)/gi)];
+  const prices = [...quote.matchAll(/NT\$\s?([\d,]+)(?![\dx,])(?:\s*[–～~-]\s*(?:NT\$)?\s?([\d,]+)(?![\dx,]))?/gi)].flatMap((m) => [m[1], m[2]].filter(Boolean).map((s) => Number(s.replace(/,/g, ""))));
+  if (found && mls.length === 1 && prices.length && !/NT\$\s?\d*x/i.test(quote)) {
+    const v1 = Number(mls[0][1]), v2 = Number(mls[0][2] ?? mls[0][1]);
+    const lo = (Math.min(...prices) / Math.max(v1, v2)) * 100, hi = (Math.max(...prices) / Math.min(v1, v2)) * 100;
+    if (found < lo * 0.7 || found > hi * 1.3) return `跟查到的不合：換算每 100ml 約 ${Math.round(lo)}${hi - lo >= 1 ? `～${Math.round(hi)}` : ""} 元，查到的全系列是${row.d.label}`;
+  }
   return "";
 }
 
@@ -127,7 +138,8 @@ export function AskCompare({ jobId, onDone }: { jobId: string | null; onDone: (d
 export function AiCompareView({ data, map }: { data: AiCompare; map?: RivalMapLike | null }) {
   const [me, ...rivals] = data.brands;
   const [pick, setPick] = useState(rivals[0] ?? "");
-  const of = (brand: string, aspect: string) => data.cells.filter((c) => c.brand === brand && c.aspect === aspect);
+  // 舊存檔可能還有「…包括：」這種引言句，顯示前一樣剪掉
+  const of = (brand: string, aspect: string) => data.cells.filter((c) => c.brand === brand && c.aspect === aspect).map((c) => ({ ...c, quote: trimLeadIn(c.quote) })).filter((c) => c.quote);
   return (
     <div className="rounded-[10px] border border-line bg-card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-3">

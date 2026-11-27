@@ -18,6 +18,7 @@ interface NameLike {
 interface AxisLike {
   low: string;
   high: string;
+  kind?: "price" | "channel" | "stance";
 }
 export interface RivalMapLike {
   v?: number;
@@ -28,6 +29,16 @@ export interface RivalMapLike {
   self: { x: number; y: number; why: string; url?: string; type?: string; dims?: (DimLike | null)[]; off?: boolean };
   points: { name: string; x: number; y: number; type: string; quote: string; url?: string; dims?: (DimLike | null)[] }[];
   axes?: AxisLike[];
+  unsure?: { name: string; status: "mixed" | "one" | "none"; quotes: StanceQuote[] }[];
+  selfUnsure?: "mixed" | "one" | "none";
+  selfQuotes?: StanceQuote[];
+  stanceAxis?: { low: string; high: string; features?: { tag: string; words: string[] }[] };
+  allPoints?: RivalMapLike["points"];
+}
+interface StanceQuote {
+  engine: string;
+  quote: string;
+  score?: number;
 }
 interface DimLike {
   v: number;
@@ -37,21 +48,25 @@ interface DimLike {
 }
 
 const Dot = ({ me }: { me?: boolean }) => <span aria-hidden="true" className={`inline-block h-[12px] w-[12px] shrink-0 rounded-full ${me ? "border-[1.5px] border-[var(--goldInk)] bg-lime" : "bg-ink"}`} />;
-const num = (d?: DimLike | null) => Number(d?.label?.match(/[\d,]+(?= (元|個))/)?.[0].replace(/,/g, "") ?? 0);
+const num = (d?: DimLike | null) => Number(d?.label?.match(/[\d,]+(?= (元|個|分))/)?.[0].replace(/,/g, "") ?? 0);
 
 // 一句話：單價是它的幾倍、通路差幾個
-function brief(me?: (DimLike | null)[], it?: (DimLike | null)[], name = ""): string {
+function brief(me?: (DimLike | null)[], it?: (DimLike | null)[], name = "", stance?: { low: string; high: string }): string {
   const [p0, p1] = [num(me?.[0]), num(it?.[0])];
   const [c0, c1] = [num(me?.[1]), num(it?.[1])];
   const out: string[] = [];
   if (p0 && p1) out.push(Math.abs(p0 - p1) / p1 < 0.1 ? `單價跟${name}差不多` : p0 > p1 ? `單價是${name}的 ${(p0 / p1).toFixed(1)} 倍` : `單價比${name}低 ${Math.round((1 - p0 / p1) * 100)}%`);
   if (c0 && c1) out.push(c0 === c1 ? "通路數一樣" : c0 > c1 ? `通路多 ${c0 - c1} 個` : `通路少 ${c1 - c0} 個`);
+  const [s0, s1] = [num(me?.[2]), num(it?.[2])];
+  if (me?.[2] && it?.[2] && stance) out.push(Math.abs(s0 - s1) <= 10 ? `定位差不多（${s0} 分、${s1} 分）` : `你比${name}更偏「${s0 > s1 ? stance.high : stance.low}」（${s0} 分 vs ${s1} 分）`);
   return out.join("，") + (out.length ? "。" : "");
 }
 
 // 長條圖：由高到低；點一家就換比較對象
 function Bars({ title, sub, k, map, selfName, pick, onPick }: { title: string; sub: string; k: number; map: RivalMapLike; selfName: string; pick: string; onPick: (n: string) => void }) {
-  const rows = [{ name: "__self", d: map.self.dims?.[k] }, ...map.points.map((p) => ({ name: p.name, d: p.dims?.[k] }))].filter((r) => r.d).sort((a, b) => num(b.d) - num(a.d));
+  // 價位、通路照列全部查到的；定位只列畫得上去的
+  const pts = k < 2 ? (map.allPoints ?? map.points) : map.points;
+  const rows = [{ name: "__self", d: map.self.dims?.[k] }, ...pts.map((p) => ({ name: p.name, d: p.dims?.[k] }))].filter((r) => r.d).sort((a, b) => num(b.d) - num(a.d));
   const max = Math.max(...rows.map((r) => num(r.d)), 1);
   return (
     <div className="rounded-[10px] border border-line bg-card p-4">
@@ -74,7 +89,7 @@ function Bars({ title, sub, k, map, selfName, pick, onPick }: { title: string; s
                   <span className={`block h-full rounded ${me ? "bg-lime" : on ? "bg-ink" : "bg-[#b9c0cc]"}`} style={{ width: `${Math.max(4, (num(r.d) / max) * 100)}%` }} />
                 </span>
                 <span className="text-right tabular-nums text-ink">
-                  {num(r.d)} {k === 0 ? "元" : "個"}
+                  {num(r.d)} {k === 0 ? "元" : k === 1 ? "個" : "分"}
                 </span>
               </button>
             </li>
@@ -95,7 +110,7 @@ const shortName = (n: string) => {
 // 改成照順序平均攤開：每個軸上把出現過的分數由小到大排，等距放；順序不變、同分的還是同一個位置。
 // 圖上看的是「各家互相比誰比較偏哪邊」，不是絕對分數。
 function spreadOut(m: RivalMapLike): RivalMapLike {
-  if (m.v === 3) return m; // 新做法是實際數字換算的位置，照原位置畫
+  if ((m.v ?? 0) >= 3) return m; // 新做法是實際數字換算的位置，照原位置畫
   const rank = (vs: number[]) => {
     const u = [...new Set(vs)].sort((a, b) => a - b);
     return (v: number) => (u.length < 2 ? 0 : -1.6 + (3.2 * u.indexOf(v)) / (u.length - 1));
@@ -222,6 +237,52 @@ function Renew({ text, jobId, onDone, done }: { done?: boolean; text: string; jo
   );
 }
 
+const ENGINE_COLOR: Record<string, string> = { ChatGPT: "#1f7a4d", Perplexity: "#2a78d6", Google: "#6550d2" };
+
+// 定位：每家提到哪幾項（原文收合）＋沒畫的（AI 沒講到這家）
+function Stance({ map, selfName }: { map: RivalMapLike; selfName: string }) {
+  const rows = [{ name: "__self", d: map.self.dims?.[2] }, ...map.points.map((p) => ({ name: p.name, d: p.dims?.[2] }))].filter((r) => r.d).sort((a, b) => num(b.d) - num(a.d));
+  const label = (n: string) => (n === "__self" ? selfName : shortName(n));
+  const off = map.unsure ?? [];
+  return (
+    <div className="rounded-[10px] border border-line bg-card p-4 text-[14px]">
+      <p className="text-ink3">
+        偏「{map.y.high}」的訴求：{(map.stanceAxis?.features ?? []).map((f) => f.tag).join("、")}。每提到一項加分，全部都有＝100 分。
+      </p>
+      {off.length > 0 && <p className="mt-1 text-ink3">沒畫：{off.map((u) => `${label(u.name)}（AI 沒講到這家）`).join("、")}</p>}
+      <details className="mt-2">
+        <summary className="cursor-pointer text-[13px] text-ink3 hover:text-ink">看每家提到哪幾項（附原文）</summary>
+        <div className="mt-2 space-y-3 text-ink2">
+          {rows.map((r) => {
+            const [head, ...lines] = r.d!.why.split("\n");
+            return (
+              <div key={r.name}>
+                <p className="font-semibold text-ink">
+                  {label(r.name)}：{r.d!.label}
+                  <span className="ml-2 font-normal text-ink3">{head}</span>
+                </p>
+                <ul className="mt-1 space-y-1">
+                  {lines.map((line, i) => {
+                    const [tag, rest = ""] = line.split("｜");
+                    const e = rest.match(/^(\S+?)「/)?.[1] ?? "";
+                    return (
+                      <li key={i}>
+                        <span className="mr-1.5 font-semibold text-ink">{tag}</span>
+                        <span className="mr-1 font-semibold" style={{ color: ENGINE_COLOR[e] }}>{e}</span>
+                        {rest.slice(e.length)}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      </details>
+    </div>
+  );
+}
+
 export function CompetitorCompare({
   names,
   rivalMap,
@@ -235,7 +296,7 @@ export function CompetitorCompare({
   onRenew: (m: RivalMapLike) => void;
 }) {
   const selfName = shortName(names.find((n) => n.isSelf)?.name ?? "你");
-  const fresh = rivalMap?.v === 3;
+  const fresh = rivalMap?.v === 4;
   const map = rivalMap && fresh ? spreadOut(rivalMap) : null;
   // 跟你同一區的（兩個軸都同一邊）就是正面對手，先給人看最近的那家
   // 離你最近的＝距離 NEAR 以內、最多 3 家（你剛好在中線上時，用象限判斷會變成「沒有」）
@@ -247,7 +308,7 @@ export function CompetitorCompare({
   const [pick, setPick] = useState(first?.name ?? "");
 
   if (rivalMap && !fresh)
-    return <Renew jobId={jobId} onDone={onRenew} text="這份定位是舊做法（AI 打分數），位置可能不對，已停用。" />;
+    return <Renew jobId={jobId} onDone={onRenew} text={rivalMap.v === 3 ? "這份定位只比了單一商品，不是品牌整體，已停用。" : "這份定位是舊做法（AI 打分數），位置可能不對，已停用。"} />;
   if (map && map.points.length < 3)
     return <Renew jobId={jobId} onDone={onRenew} text="不畫定位圖：這個行業沒有容量可以換算單價，或查得到售價的同業不到 3 家。下面是 AI 的文字比較。" done />;
   if (!map || !first)
@@ -268,9 +329,19 @@ export function CompetitorCompare({
         </div>
 
         <div className="space-y-4">
-          {[0, 1].map((k) => (
-            <Bars key={k} title={k === 0 ? "單價" : "買得到的通路"} sub={k === 0 ? `${map.product ?? ""}，每 100ml` : "購物搜尋看得到的"} k={k} map={map} selfName={selfName} pick={cur.name} onPick={setPick} />
+          {(map.y.kind === "stance" ? [0, 2, 1] : [0, 1]).map((k) => (
+            <Bars
+              key={k}
+              title={k === 0 ? "價位" : k === 1 ? "買得到的通路" : "定位"}
+              sub={k === 0 ? "全系列每 100ml 中間價" : k === 1 ? "購物搜尋看得到的" : `偏「${map.y.high}」的訴求提到幾項`}
+              k={k}
+              map={map}
+              selfName={selfName}
+              pick={cur.name}
+              onPick={setPick}
+            />
           ))}
+          {map.y.kind === "stance" && <Stance map={map} selfName={selfName} />}
           <div className="rounded-[10px] border border-line bg-card p-4">
             <p className="flex flex-wrap items-center gap-x-2 text-[16px] font-bold">
               <Dot me />
@@ -279,13 +350,14 @@ export function CompetitorCompare({
               <Dot />
               <span className="text-ink">{cur.name}</span>
             </p>
-            <p className="mt-2 text-[15px] text-ink2">{brief(map.self.dims, cur.dims, shortName(cur.name))}</p>
+            <p className="mt-2 text-[15px] text-ink2">{brief(map.self.dims, cur.dims, shortName(cur.name), map.y.kind === "stance" ? map.y : undefined)}</p>
           </div>
         </div>
       </div>
       <p className="text-[13px] leading-relaxed text-ink3">
         只比 AI 這次推過的同類業者。
-        {map.product && `價格是「${map.product}」單品換算每 100ml（或 100g），取購物搜尋各通路的中間價，不含組合；促銷會變動。通路是購物搜尋看得到的，不代表全部。`}
+        {map.product && `價位是這個品牌「${map.product}」全系列商品換算每 100ml（或 100g）的中間價，不含組合；促銷會變動。通路是購物搜尋看得到的，不代表全部。`}
+        {map.y.kind === "stance" && `定位分數由程式算：在三家 AI 的回答原文裡，數每家被提到幾項偏「${map.y.high}」的訴求（「較少、沒有、不含」後面的不算）。AI 只決定清單，不打分數。`}
         {map.missing && map.missing.length > 0 && `查不到足夠資料、沒畫的：${map.missing.map(shortName).join("、")}。`}
       </p>
     </div>

@@ -1,5 +1,6 @@
 import { channelsOf, pickPrice, sameBrand, shopItems, type ChannelFact, type PriceFact } from './geo-rival-facts';
 import { askJson, parseJson, type RecommendInput, type RecommendVisibility } from './geo-recommend-visibility';
+import { applyStance, findStanceHits, pickStanceAxis, type StanceAxis, type StanceStatus } from './geo-rival-stance';
 
 // ── 競爭對手分析：市場定位圖 ───────────────────────────────
 // 11-18 起用兩軸定位圖，不用被推幾次。11-25 小積木：Relove 被歸到低價、怕其他點也錯——逐點核對後整個換做法：
@@ -8,11 +9,14 @@ import { askJson, parseJson, type RecommendInput, type RecommendVisibility } fro
 //   3. 其他面向（成分、適合誰、優缺點）用文字比較，見 geo-compare.ts
 // 試過讓 AI 從原文選邊（台灣製／醫療路線…），逐點核對仍錯一成以上（「應先諮詢醫師」被當成醫療路線），整個拿掉。
 // 服務業沒有容量可比，不畫圖。
+// 11-27 小積木：「單價為何是比某個產品，這是總體評分」→ v4：
+//   橫軸＝品牌全系列每 100ml 中間價（購物搜尋「品牌＋類別」和「品牌＋主力商品」合起來算）
+//   縱軸＝品牌整體定位分數（geo-rival-stance.ts：AI 只列訴求清單，程式數每家提到幾項）；算不出來才退回通路數
 
 export interface MapAxis {
   low: string; // 軸的 -2 端
   high: string; // 軸的 +2 端
-  kind?: 'price' | 'channel';
+  kind?: 'price' | 'channel' | 'stance';
 }
 // 每個軸的位置＋依據（右邊「你 vs 它」對照表用；沒查到是 null）
 export interface DimScore {
@@ -41,8 +45,15 @@ export interface RivalMap {
   product?: string; // 比價的商品
   topic?: string; // 類別字（私密清潔、n8n 自動化），問 AI 比較時用
   peers?: string[]; // 挑出來的同業，像你的排前面
+  stanceAxis?: StanceAxis; // 定位軸＋偏 high 端的訴求清單（程式照這份算分數，重算也用同一份）
+  stanceSelf?: string; // 你在 AI 回答裡的名字（算定位分數時找段落用）
+  allPoints?: MapPoint[]; // 換成定位軸前的全部點
+  unsure?: { name: string; status: StanceStatus; quotes: StanceQuoteLike[] }[]; // 有價格但定位分數說法不一／只有一家給分，沒畫
+  selfUnsure?: StanceStatus; // 你自己的定位不確定：點放中線
+  selfQuotes?: StanceQuoteLike[];
 }
-export const RIVAL_MAP_VERSION = 3;
+export const RIVAL_MAP_VERSION = 4;
+export interface StanceQuoteLike { engine: string; quote: string; score?: number }
 
 const MAX_POINTS = 10;
 const AXIS_MODEL = 'openai/gpt-4.1';
@@ -103,6 +114,7 @@ export async function buildRivalMap(
   input: Pick<RecommendInput, 'title' | 'description' | 'services'>,
   origin: string,
   apiKey: string,
+  extra: { engine: string; answer: string }[] = [], // 另外問過的回答（AI 比較題），定位多一點原文可看
 ): Promise<RivalMap | null> {
   const answers = rv.questions.flatMap((q) => q.results.map((r) => r.answer ?? ''));
   const all = rv.names
@@ -117,17 +129,25 @@ export async function buildRivalMap(
   const me = rv.brandName.split(/[｜|]/)[0].trim().slice(0, 24);
   const names = [me, ...plan.peers.map((i) => all[i].name).filter((n, i, l) => !sameBrand(n, me) && l.findIndex((x) => sameBrand(x, n)) === i)];
 
-  const shops = plan.product && plan.words.length > 0 ? await Promise.all(names.map((n) => shopItems(n, plan.product))) : names.map(() => []);
+  // 全系列：「品牌＋類別」和「品牌＋主力商品」兩次購物搜尋合起來（同一筆只算一次）
+  const shops = plan.product
+    ? await Promise.all(
+        names.map(async (n) => {
+          const [a, b] = await Promise.all([shopItems(n, plan.topic || plan.product), shopItems(n, plan.product)]);
+          return [...new Map([...a, ...b].map((it) => [`${it.source}|${it.title}|${it.price}`, it])).values()];
+        }),
+      )
+    : names.map(() => []);
 
-  const prices = names.map((n, i) => pickPrice(shops[i], n, plan.words, plan.skip, plan.product.slice(0, 2)));
+  const prices = names.map((n, i) => pickPrice(shops[i], n, [], plan.skip, (plan.topic || plan.product).slice(0, 2)));
   const priced = prices.filter((p): p is PriceFact => !!p);
   const usePrice = !!prices[0] && priced.length >= 4;
   const logs = priced.map((p) => Math.log(p.per));
   const [lo, hi] = [Math.min(...logs), Math.max(...logs)];
   const priceDim = (p: PriceFact | null): DimScore | null =>
-    p ? { v: hi > lo ? -1.8 + (3.6 * (Math.log(p.per) - lo)) / (hi - lo) : 0, label: `每 ${p.unit} 約 ${p.per} 元`, why: `${p.price.toLocaleString()} 元／${p.size}ml，${p.source}${p.n > 1 ? `（${p.n} 筆取中間值）` : ''}` } : null;
+    p ? { v: hi > lo ? -1.8 + (3.6 * (Math.log(p.per) - lo)) / (hi - lo) : 0, label: `每 ${p.unit} 約 ${p.per} 元`, why: `${p.n} 件商品取中間值，例如 ${p.price.toLocaleString()} 元／${p.size}ml（${p.source}）` } : null;
 
-  // 通路：購物搜尋實際看得到幾個（有容量可比的消費品才有）
+  // 通路：購物搜尋實際看得到幾個
   const channels = names.map((n, i) => channelsOf(shops[i], n));
   const withCh = channels.filter((c): c is ChannelFact => !!c);
   const useChannel = usePrice && !!channels[0] && withCh.length >= 4;
@@ -135,12 +155,17 @@ export async function buildRivalMap(
   const [c0, c1] = [Math.min(...cs), Math.max(...cs)];
   const channelDim = (c: ChannelFact | null): DimScore | null => (c ? { v: c1 > c0 ? -1.8 + (3.6 * (c.n - c0)) / (c1 - c0) : 0, label: `${c.n} 個通路`, why: c.names.slice(0, 5).join('、') + (c.n > 5 ? '…' : '') } : null);
 
-  const x: MapAxis = { low: '單價低', high: '單價高', kind: 'price' };
+  // 定位軸：先挑好，問 AI 比較時請它照這個軸打分數
+  const pricedNames = names.filter((_, i) => prices[i]);
+  const texts = [...rv.questions.flatMap((q) => q.results.map((r) => ({ engine: r.engine, answer: r.answer ?? '' }))), ...extra];
+  const stanceAxis = usePrice ? await pickStanceAxis(plan.topic || plan.product, pricedNames, texts, apiKey).catch(() => null) : null;
+
+  const x: MapAxis = { low: '價位低', high: '價位高', kind: 'price' };
   const y: MapAxis = { low: '通路少', high: '通路多', kind: 'channel' };
   const dims = names.map((_, i) => [usePrice ? priceDim(prices[i]) : null, useChannel ? channelDim(channels[i]) : null]);
   const ok = usePrice && useChannel && !!dims[0][0] && !!dims[0][1];
   const on = ok ? names.map((_, i) => i).slice(1).filter((r) => dims[r][0] && dims[r][1]) : [];
-  return {
+  const map: RivalMap = {
     v: RIVAL_MAP_VERSION,
     x,
     y,
@@ -148,8 +173,10 @@ export async function buildRivalMap(
     points: on.map((r) => ({ name: names[r], x: dims[r][0]!.v, y: dims[r][1]!.v, type: '', quote: '', dims: dims[r] })),
     axes: [x, y],
     missing: names.slice(1).filter((_, i) => !on.includes(i + 1)),
-    ...(usePrice ? { product: plan.product } : {}),
+    ...(stanceAxis ? { stanceAxis, stanceSelf: me } : {}),
+    ...(usePrice ? { product: plan.topic || plan.product } : {}),
     topic: plan.topic,
     peers: names.slice(1),
   };
+  return applyStance(map, await findStanceHits(map, texts, apiKey).catch(() => null));
 }
