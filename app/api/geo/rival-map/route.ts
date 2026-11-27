@@ -29,7 +29,9 @@ export async function POST(req: NextRequest) {
   const rv = r?.data?.recommendVisibility;
   if (!r?.data?.url || !rv) return NextResponse.json({ error: '這份報告還沒問過 AI，沒有業者可以比' }, { status: 410 });
   const ready = rv.rivalMap?.v === RIVAL_MAP_VERSION && !!rv.rivalMap.topic;
-  if (compare && rv.aiCompare) return NextResponse.json({ rivalMap: rv.rivalMap, aiCompare: rv.aiCompare });
+  // 舊的比較沒問到圖上全部品牌（11-27 前只問 4～5 家）就重問一次，問全了才用存的
+  const coversMap = !!rv.aiCompare && ready && rv.rivalMap!.points.every((p) => rv.aiCompare!.brands.includes(p.name));
+  if (compare && rv.aiCompare && (coversMap || !ready)) return NextResponse.json({ rivalMap: rv.rivalMap, aiCompare: rv.aiCompare });
   if (!compare && ready && rv.rivalMap!.points.length >= 3) return NextResponse.json({ rivalMap: rv.rivalMap });
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey || !process.env.SERPER_API_KEY) return NextResponse.json({ error: '搜尋服務沒有設定' }, { status: 503 });
