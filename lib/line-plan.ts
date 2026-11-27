@@ -432,7 +432,8 @@ export async function runLinePlan(origin: string, brand: string, input: LinePlan
         const engine = e === 'Google' ? 'Google AI 摘要' : e;
         return { engine, state: a ? (a.namedSelf ? 'named' : 'not') : e === 'Google' && q?.google === 'absent' ? 'absent' : 'failed' };
       }),
-      verdict: r?.verdict ?? '',
+      // Google 排到的是現有文章：只說排到哪篇，不評那篇文章哪裡不好
+      verdict: r?.selfPage && isPost(r.selfPage.url) ? `Google 排到的是你的文章〈${r.selfPage.title || shortUrl(r.selfPage.url)}〉` : r?.verdict ?? '',
     };
   });
 
@@ -485,13 +486,16 @@ export async function runLinePlan(origin: string, brand: string, input: LinePlan
   ranks.forEach((r, i) => {
     if (!r) return;
     const p = input.picks[i];
-    const url = r.selfPage?.url ?? keywords[i].page;
+    const onPost = !!r.selfPage && isPost(r.selfPage.url);
+    // 排到的是文章：缺的內容不叫改那篇，改成建議之後補新文章，掛在這條線的商品頁
+    const cand = p.pages.map((u) => lean.find((x) => pathKey(x.url) === pathKey(u))).filter((x): x is PageRead => !!x?.readable);
+    const url = onPost ? (cand.length ? bestPage(cand, p.words).url : p.pages[0] ?? origin) : r.selfPage?.url ?? keywords[i].page;
     const own = todos.find((t) => t.keyword === p.keyword && t.category === '頁面文字' && pathKey(t.url) === pathKey(url));
     if (own && r.titleSuggestion) own.suggest = r.titleSuggestion;
-    const selfRead = okPages.find((x) => pathKey(x.url) === pathKey(url));
+    const selfRead = okPages.find((x) => pathKey(x.url) === pathKey(r.selfPage?.url ?? url));
     const now = selfRead?.text ?? '';
     r.todos.map((t) => ({ ...t, on: alreadyOn(t.what, now) })).filter((t) => t.basis && !OTHERS.test(t.what) && !t.on.all && !(selfRead?.hasFaq && FAQ_TODO.test(t.what))).slice(0, 2).forEach((t) =>
-      todos.push({ priority: r.selfRank && r.selfRank <= 10 ? '高' : '中', line: p.line, keyword: p.keyword, category: '內容缺口', url, now: r.selfRank ? `Google 第 ${r.selfRank} 名` : 'Google 第一頁沒有你', todo: t.on.found.length > 0 ? `${t.what}（這頁已出現：${t.on.found.join('、')}，補沒寫到的）` : t.what, suggest: own ? '' : r.titleSuggestion, basis: `${t.basis}（比對：${r.rivals.map((x) => hostnameOf(x.url)).join('、')}）`, effort: '中', role: '文案', accept: '段落上線' }),
+      todos.push({ priority: r.selfRank && r.selfRank <= 10 ? '高' : '中', line: p.line, keyword: p.keyword, category: '內容缺口', url, now: r.selfRank ? `Google 第 ${r.selfRank} 名` : 'Google 第一頁沒有你', todo: onPost ? `建議之後補一篇文章：${t.what.replace(/^(在網頁最上面)?加一段/, '')}` : t.on.found.length > 0 ? `${t.what}（這頁已出現：${t.on.found.join('、')}，補沒寫到的）` : t.what, suggest: own || onPost ? '' : r.titleSuggestion, basis: `${t.basis}（比對：${r.rivals.map((x) => hostnameOf(x.url)).join('、')}）`, effort: '中', role: '文案', accept: '段落上線' }),
     );
   });
   for (const m of analysis?.contentMatch ?? []) {
