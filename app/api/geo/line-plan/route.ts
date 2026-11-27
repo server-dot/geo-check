@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ACCESS_ERROR, loadAdminReport } from '@/lib/report-access';
 import { assertPublicUrl } from '@/lib/geo-url-guard';
-import { runLinePlan, suggestLines } from '@/lib/line-plan';
+import { cleanPlan, runLinePlan, suggestLines } from '@/lib/line-plan';
 import { buildPlanWorkbook } from '@/lib/line-plan-excel';
 import { MAX_LINE_KEYWORDS, MAX_NAMED_RIVALS, type LinePlan, type LinePlanInput } from '@/lib/line-plan-types';
 import { selfShortName } from '@/lib/geo-sentiment';
@@ -12,7 +12,7 @@ import { isSameSite, hostnameOf } from '@/lib/geo-brand-visibility';
 export const maxDuration = 300;
 
 // 畫面用不到 AI 回答全文，輪詢不帶
-const lite = (p?: LinePlan | null) => (p ? { ...p, analysis: null } : null);
+const lite = (p?: LinePlan | null) => (p ? { ...cleanPlan(p), analysis: null } : null);
 const running = new Map<string, { step: string; error?: string; plan?: LinePlan }>();
 const deny = (k: keyof typeof ACCESS_ERROR) => NextResponse.json({ error: ACCESS_ERROR[k][1] }, { status: ACCESS_ERROR[k][0] });
 
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
   }
   if (mode === 'xlsx') {
     if (!r.data.linePlan) return NextResponse.json({ error: '還沒有作戰清單' }, { status: 404 });
-    const buf = await buildPlanWorkbook(r.data.linePlan, r.data);
+    const buf = await buildPlanWorkbook(cleanPlan(r.data.linePlan), r.data);
     return new NextResponse(new Uint8Array(buf), {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

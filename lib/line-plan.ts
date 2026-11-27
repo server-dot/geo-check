@@ -319,7 +319,11 @@ async function findRivalSites(input: LinePlanInput, analysis: RecommendVisibilit
         const h = hostnameOf(o.link);
         return h && classifySource(h, false, []) === 'other' && new URL(o.link).pathname.split('/').filter(Boolean).length <= 1 && words.some((w) => o.title.toLowerCase().includes(w) || h.includes(w));
       });
+      // 官網常排在深層頁、標題又沒中文名（11-27 霓淨思：neogence.com.tw 兩筆都是 /en/… /fr/…）：前 6 筆裡同一個網站出現兩次以上也算
+      const hosts = (d?.organic ?? []).slice(0, 6).map((o) => hostnameOf(o.link)).filter((h): h is string => !!h && classifySource(h, false, []) === 'other');
+      const twice = hosts.find((h, i) => hosts.indexOf(h) !== i);
       if (hit) add({ name: n, url: new URL(hit.link).origin, from: 'AI 推薦的同業', readable: false });
+      else if (twice) add({ name: n, url: `https://${twice}`, from: 'AI 推薦的同業', readable: false });
       else missing.push(n);
     }
   if (missing.length > 0) notes.push(`這些同業沒找到官網，只列在「AI推薦名單」：${missing.join('、')}`);
@@ -342,6 +346,9 @@ const SHOP_PAGE = /^https?:\/\/(buy\.line\.me|([^/]+\.)?shopping\.)|\/(brands|pr
 const OTHERS = /市面上?|熱門(品牌|款|商品|產品)|主流|各家|其他(熱門|品牌)|別家|\d+\s*(款|家|個品牌)/;
 // 只有這頁連到的商品頁
 const productLinks = (p: PageRead, common: Set<string>) => [...new Set(p.links)].filter((u) => /\/products?\/[^/]+/i.test(u) && !common.has(pathKey(u)) && pathKey(u) !== pathKey(p.url));
+
+// 11-27 早一點跑的清單：Google 排到文章時把「那篇文章要改哪裡」誤包成「建議之後補一篇文章：在開頭加一段…」，讀出來時拿掉（新跑的不會再產生）
+export const cleanPlan = (p: LinePlan): LinePlan => ({ ...p, todos: p.todos.filter((t) => !(t.category === '內容缺口' && /^Google 第/.test(t.now) && t.todo.startsWith('建議之後補一篇文章：'))) });
 
 export async function runLinePlan(origin: string, brand: string, input: LinePlanInput, base: LinePlanBase, apiKey: string, onStep: (s: string) => void): Promise<LinePlan> {
   const notes: string[] = [];
@@ -486,16 +493,15 @@ export async function runLinePlan(origin: string, brand: string, input: LinePlan
   ranks.forEach((r, i) => {
     if (!r) return;
     const p = input.picks[i];
-    const onPost = !!r.selfPage && isPost(r.selfPage.url);
-    // 排到的是文章：缺的內容不叫改那篇，改成建議之後補新文章，掛在這條線的商品頁
-    const cand = p.pages.map((u) => lean.find((x) => pathKey(x.url) === pathKey(u))).filter((x): x is PageRead => !!x?.readable);
-    const url = onPost ? (cand.length ? bestPage(cand, p.words).url : p.pages[0] ?? origin) : r.selfPage?.url ?? keywords[i].page;
+    // Google 排到的是現有文章：比對出的缺口都是「那篇文章要改哪裡」，不出（不挑舊文章；要寫新文章的建議由「AI 沒推你」那段給）
+    if (r.selfPage && isPost(r.selfPage.url)) return;
+    const url = r.selfPage?.url ?? keywords[i].page;
     const own = todos.find((t) => t.keyword === p.keyword && t.category === '頁面文字' && pathKey(t.url) === pathKey(url));
     if (own && r.titleSuggestion) own.suggest = r.titleSuggestion;
-    const selfRead = okPages.find((x) => pathKey(x.url) === pathKey(r.selfPage?.url ?? url));
+    const selfRead = okPages.find((x) => pathKey(x.url) === pathKey(url));
     const now = selfRead?.text ?? '';
     r.todos.map((t) => ({ ...t, on: alreadyOn(t.what, now) })).filter((t) => t.basis && !OTHERS.test(t.what) && !t.on.all && !(selfRead?.hasFaq && FAQ_TODO.test(t.what))).slice(0, 2).forEach((t) =>
-      todos.push({ priority: r.selfRank && r.selfRank <= 10 ? '高' : '中', line: p.line, keyword: p.keyword, category: '內容缺口', url, now: r.selfRank ? `Google 第 ${r.selfRank} 名` : 'Google 第一頁沒有你', todo: onPost ? `建議之後補一篇文章：${t.what.replace(/^(在網頁最上面)?加一段/, '')}` : t.on.found.length > 0 ? `${t.what}（這頁已出現：${t.on.found.join('、')}，補沒寫到的）` : t.what, suggest: own || onPost ? '' : r.titleSuggestion, basis: `${t.basis}（比對：${r.rivals.map((x) => hostnameOf(x.url)).join('、')}）`, effort: '中', role: '文案', accept: '段落上線' }),
+      todos.push({ priority: r.selfRank && r.selfRank <= 10 ? '高' : '中', line: p.line, keyword: p.keyword, category: '內容缺口', url, now: r.selfRank ? `Google 第 ${r.selfRank} 名` : 'Google 第一頁沒有你', todo: t.on.found.length > 0 ? `${t.what}（這頁已出現：${t.on.found.join('、')}，補沒寫到的）` : t.what, suggest: own ? '' : r.titleSuggestion, basis: `${t.basis}（比對：${r.rivals.map((x) => hostnameOf(x.url)).join('、')}）`, effort: '中', role: '文案', accept: '段落上線' }),
     );
   });
   for (const m of analysis?.contentMatch ?? []) {

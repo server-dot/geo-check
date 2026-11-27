@@ -3,6 +3,7 @@ import { SESSION_COOKIE, STATE_COOKIE, encodeSession, exchangeCode, exchangeCode
 import { recordLogin } from '@/lib/quota';
 import { loadAdminReport } from '@/lib/report-access';
 import { buildPlanWorkbook } from '@/lib/line-plan-excel';
+import { cleanPlan } from '@/lib/line-plan';
 import { uploadAsSheet } from '@/lib/google-sheet';
 
 // Google 登入回來：核對 state → 用授權碼換 id_token → 設 session cookie → 回到原本的頁面
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
       if (typeof r === 'string' || !r.data.linePlan) return fail('找不到作戰清單');
       if (user.email !== r.user.email) return fail('請用目前登入的同一個 Google 帳號');
       if (!scope.includes('drive.file')) return fail('沒有勾選建立檔案的權限');
-      const plan = r.data.linePlan;
+      const plan = cleanPlan(r.data.linePlan);
       const link = await uploadAsSheet(accessToken, `${plan.brand}_待辦_${plan.checkedAt.slice(0, 10)}`, await buildPlanWorkbook(plan, r.data));
       const res = NextResponse.redirect(link);
       res.cookies.delete(STATE_COOKIE);
