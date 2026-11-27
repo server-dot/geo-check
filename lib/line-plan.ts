@@ -179,10 +179,9 @@ const shortUrl = (u: string) => {
 export function ruleTodos(args: {
   home: PageRead;
   pages: PageRead[];
-  posts: PageRead[];
   picks: LinePlanInput['picks'];
 }): PlanTodo[] {
-  const { home, pages, posts, picks } = args;
+  const { home, pages, picks } = args;
   const out: PlanTodo[] = [];
   const byUrl = new Map(pages.map((p) => [pathKey(p.url), p]));
   const lines = [...new Set(picks.map((p) => p.line))];
@@ -218,16 +217,7 @@ export function ruleTodos(args: {
   for (const p of pages) if (p.readable && p.description.length >= 24) heads.set(p.description.slice(0, 20), [...(heads.get(p.description.slice(0, 20)) ?? []), p]);
   for (const [h, ps] of heads)
     if (ps.length >= 3) out.push({ priority: '中', line: '全部', keyword: '—', category: '頁面文字', url: ps[0].url, now: `${ps.length} 頁簡介開頭都是同一句`, todo: '每頁簡介改成自己的：適合誰、解決什麼', suggest: '', basis: `共同開頭：「${h}…」`, effort: '中', role: '文案', accept: '各頁簡介不重複' });
-  // 兩篇文章標題開頭相同
-  const pt = new Map<string, PageRead[]>();
-  for (const p of posts) if (p.readable && p.title.length >= 10) pt.set(p.title.slice(0, 9), [...(pt.get(p.title.slice(0, 9)) ?? []), p]);
-  for (const ps of pt.values())
-    if (ps.length >= 2) out.push({ priority: '高', line: '全部', keyword: ps[0].title.slice(0, 12), category: '內容缺口', url: ps[0].url, now: `${ps.length} 篇文章標題開頭相同，可能搶同一個字`, todo: '選一篇當主文，其他改題目並連回主文', suggest: '', basis: ps.map((p) => p.title).join('／'), effort: '低', role: '文案', accept: '標題開頭不同' });
-  // 文章沒連到任何一個選定商品頁
-  const targets = new Set(pages.map((p) => pathKey(p.url)));
-  const noLink = posts.filter((p) => p.readable && !p.links.some((l) => targets.has(pathKey(l))));
-  if (noLink.length > 0)
-    out.push({ priority: '中', line: '全部', keyword: '—', category: '站內連結', url: noLink[0].url, now: `${noLink.length} 篇相關文章的正文沒連到這次檢查的商品頁`, todo: '每篇加一個連到對應商品的文字連結', suggest: '', basis: noLink.slice(0, 5).map((p) => p.title.slice(0, 24)).join('／') + '（跟選單文字一樣的連結會被當選單，改之前看一眼）', effort: '低', role: '文案', accept: '每篇至少一個商品連結' });
+  // 不針對現有文章挑毛病（標題開頭相同、沒連商品頁）：他們之後會補新文章，清單只講網站本身（11-27）
   const alt = pages.filter((p) => p.readable && p.imgTotal >= 5 && p.imgNoAlt * 2 >= p.imgTotal);
   if (alt.length > 0)
     out.push({ priority: '低', line: '全部', keyword: '—', category: '站內連結', url: alt[0].url, now: `${alt.length} 頁有一半以上圖片沒有文字說明`, todo: '先補商品說明圖的文字說明', suggest: '', basis: alt.slice(0, 5).map((p) => `${shortUrl(p.url)}（${p.imgNoAlt}/${p.imgTotal}）`).join('、'), effort: '中', role: '工程', accept: '說明圖都有文字' });
@@ -378,16 +368,19 @@ export async function runLinePlan(origin: string, brand: string, input: LinePlan
   const extra = (await pool([...owner.keys()].filter((u) => !urls.some((x) => pathKey(x) === pathKey(u))).slice(0, 20), 3, (u) => read(u, true, menu))).filter((p) => p.readable);
   const pages = [...listed, ...extra];
   input = { ...input, picks: input.picks.map((p) => ({ ...p, pages: [...p.pages, ...extra.filter((e) => owner.get(e.url)?.some((o) => p.pages.some((x) => pathKey(x) === pathKey(o)))).map((e) => e.url)] })) };
-  const sitemap = await fetchSitemapUrls(origin).catch(() => [] as string[]);
+  // 多語系站的網站地圖每種語言一份、各列全站（Relove 英文 650 筆排第一份），上限 500 會只讀到英文那份就停，誤報「全是外語版」（11-27）
+  const sitemap = await fetchSitemapUrls(origin, 5000).catch(() => [] as string[]);
   const words = [...new Set(input.picks.flatMap((p) => p.words))];
   const isPost = (u: string) => /\/(blog|posts?|articles?|news|column)\//i.test(u) && !/\/(blog)\/(posts|categories|tags)\/?$/i.test(u);
   // 網站地圖可能只列英文版網址（Relove 75 篇全是 /en/，內容卻是中文）：拿掉語言段，讀中文版
   const LANG = /^(https?:\/\/[^/]+)\/(en|ja|jp|ko|vi|th|id|zh-cn|zh-hans)\//i;
+  const ZH = /^(https?:\/\/[^/]+)\/(zh-hant|zh-tw)\//i; // 中文版的另一種寫法，跟沒語言段的是同一篇
   const postUrls = sitemap.filter(isPost);
   const onlyLang = postUrls.length > 0 && postUrls.every((u) => LANG.test(u));
-  const blogUrls = [...new Set(postUrls.map((u) => u.replace(LANG, '$1/')))].map((u) => ({ u, d: (() => { try { return decodeURIComponent(u); } catch { return u; } })() }));
+  const blogUrls = [...new Set(postUrls.map((u) => u.replace(LANG, '$1/').replace(ZH, '$1/')))].map((u) => ({ u, d: (() => { try { return decodeURIComponent(u); } catch { return u; } })() }));
   const named = blogUrls.filter((x) => words.some((w) => x.d.includes(w)));
-  const posts = (await pool([...new Set([...named, ...blogUrls].map((x) => x.u))].slice(0, 24), 3, (u) => read(u, true, menu))).filter((p) => !p.readable || input.picks.some((k) => k.words.every((w) => `${p.title} ${p.headings.join()}`.includes(w))));
+  // 文章網址常是英文代稱或只有前半句（〈如何讓臉澎潤？〉內文標題才寫抗老乳霜），網址比不出來：文章全讀、看標題（11-27 Relove 漏掉 75 篇的臉部文章）
+  const posts = (await pool([...new Set([...named, ...blogUrls].map((x) => x.u))].slice(0, 120), 3, (u) => read(u, true, menu))).filter((p) => !p.readable || input.picks.some((k) => k.words.every((w) => `${p.title} ${p.headings.join()}`.includes(w))));
   const failed = pages.filter((p) => !p.readable).length;
   if (failed > 0) notes.push(`你的網頁有 ${failed} 頁讀不到`);
   if (blogUrls.length === 0) notes.push('網站地圖裡沒找到文章，文章相關的檢查沒做');
@@ -395,10 +388,9 @@ export async function runLinePlan(origin: string, brand: string, input: LinePlan
   const lean = dropShared(pages); // 判斷「有沒有寫這個字」用
   onStep('查 Google 排名…');
   const ranks = await pool(input.picks, 2, (p) => {
-    // 由哪頁負責：這條線的頁和文章裡最貼近的那頁（讓程式自己猜會猜到首頁）
-    // 文章要標題就在講這個字才算；只在小標提到的（講怎麼卸防曬、順帶提洗面乳）不能負責（11-25 Relove 溫和洗面乳）
-    const topical = posts.filter((x) => p.words.every((w) => x.title.includes(w)));
-    const own = [...lean.filter((x) => p.pages.some((u) => pathKey(u) === pathKey(x.url))), ...topical].filter((x) => x.readable);
+    // 由哪頁負責：這條線的頁裡最貼近的那頁（讓程式自己猜會猜到首頁）
+    // 現有文章不當負責頁，不然待辦會變成「這篇文章要補什麼」＝說舊文章有問題（11-27 他說文章之後另外補）
+    const own = lean.filter((x) => p.pages.some((u) => pathKey(u) === pathKey(x.url))).filter((x) => x.readable);
     const page = own.length ? bestPage(own, p.words).url : undefined;
     return checkKeyword(p.keyword, origin, brand, apiKey, { page, rule: OWN_SITE_RULE }).catch(() => null);
   });
@@ -431,7 +423,8 @@ export async function runLinePlan(origin: string, brand: string, input: LinePlan
       line: p.line,
       keyword: p.keyword,
       words: p.words,
-      page: (cand.length ? bestPage(cand, p.words).url : r?.selfPage?.url) ?? p.pages[0] ?? origin,
+      // 跟 Google 排名比對用的是同一頁（可能是文章），畫面才不會顯示商品頁、評語卻在講文章
+      page: r?.selfPage?.url ?? (cand.length ? bestPage(cand, p.words).url : undefined) ?? p.pages[0] ?? origin,
       rank: r ? r.selfRank : 'failed',
       top: (r?.top ?? []).map(({ rank, domain, url, title, isSelf, isPlatform }) => ({ rank, domain, url, title, isSelf, isPlatform })),
       ai: ['Perplexity', 'ChatGPT', 'Google'].map((e) => {
@@ -485,7 +478,7 @@ export async function runLinePlan(origin: string, brand: string, input: LinePlan
   }
 
   onStep('整理待辦…');
-  const todos = ruleTodos({ home, pages: lean, posts, picks: input.picks });
+  const todos = ruleTodos({ home, pages: lean, picks: input.picks });
   if (onlyLang)
     todos.push({ priority: '中', line: '全部', keyword: '—', category: '站內連結', url: `${origin}/sitemap.xml`, now: `網站地圖裡 ${postUrls.length} 篇文章全是外語版網址`, todo: '網站地圖改列中文版文章網址，外語版沒翻譯就先拿掉', suggest: '', basis: `例：${shortUrl(postUrls[0])}`, effort: '中', role: '工程', accept: '網站地圖看得到中文版文章網址' });
   // 前 3 名比對出來的缺口：依據是哪幾名有寫
@@ -504,7 +497,9 @@ export async function runLinePlan(origin: string, brand: string, input: LinePlan
   for (const m of analysis?.contentMatch ?? []) {
     const k = keywords.find((x) => x.keyword === m.question);
     if (!k || m.verdict === 'yes' || !m.advice || k.ai.some((a) => a.state === 'named')) continue;
-    todos.push({ priority: '中', line: k.line, keyword: k.keyword, category: '內容缺口', url: m.pageUrl || k.page, now: m.verdict === 'no' ? 'AI 沒推你，這次讀到的頁沒有一頁在回答這題' : `AI 沒推你，最接近的頁：${m.pageTitle}${m.pageAbout ? `（${m.pageAbout}）` : ''}`, todo: m.advice, suggest: '', basis: m.peerPages.length ? `AI 這題引用的同業頁：${m.peerPages.map((p) => p.title).join('／')}` : '比對這次讀到的頁面內容', effort: '中', role: '文案', accept: '內容上線' });
+    // 最接近的是現有文章、或根本沒有頁：不說那篇文章哪裡不好，改成建議之後補一篇
+    const toPost = m.verdict === 'no' || (!!m.pageUrl && isPost(m.pageUrl));
+    todos.push({ priority: '中', line: k.line, keyword: k.keyword, category: '內容缺口', url: toPost ? k.page : m.pageUrl || k.page, now: toPost ? 'AI 沒推你，網站上還沒有專門回答這題的頁' : `AI 沒推你，最接近的頁：${m.pageTitle}${m.pageAbout ? `（${m.pageAbout}）` : ''}`, todo: toPost ? `建議之後補一篇文章：${m.advice.replace(/^(可以|建議)?(新增|寫|補)一(頁|篇)(文章)?/, '')}` : m.advice, suggest: '', basis: m.peerPages.length ? `AI 這題引用的同業頁：${m.peerPages.map((p) => p.title).join('／')}` : '比對這次讀到的頁面內容', effort: '中', role: '文案', accept: toPost ? '文章上線' : '內容上線' });
   }
   // 小標、問答前面已經逐頁列過；其他的指到「還沒有」的那一頁
   for (const row of rivals.filter((r) => r.action === '要追' && !/^(段落小標|常見問題)$/.test(r.item))) {
